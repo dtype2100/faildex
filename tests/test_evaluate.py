@@ -110,3 +110,32 @@ def test_a_recovery_of_one_command_does_not_make_another_command_warnable():
     db.execute("MATCH (s:Session), (d:Source {name: 'demo'}) MERGE (s)-[:FROM]->(d)")
     demo = evaluate(db)[0]
     assert (demo.later_failures, demo.recurring, demo.warnable) == (2, 2, 1)
+
+
+def _scored(records):
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    db.execute("CREATE (:Source {name: 'demo'})")
+    db.execute("MATCH (s:Session), (d:Source {name: 'demo'}) MERGE (s)-[:FROM]->(d)")
+    demo = evaluate(db)[0]
+    return demo.later_failures, demo.recurring, demo.warnable
+
+
+def test_a_success_that_arrived_before_the_failure_is_no_recovery():
+    from dataclasses import replace
+
+    failed = replace(_call("s1", 1, 0, ok=False, sig="rejected"), ts="2026-01-01T00:00:03Z")
+    earlier_success = replace(_call("s1", 1, 1), ts="2026-01-01T00:00:02Z")
+    records = [failed, earlier_success, *[_call(f"s{n}", n, 0) for n in range(2, 8)]]
+    records += [_call("s8", 8, 0, ok=False, sig="rejected"), _call("s9", 9, 0), _call("s10", 10, 0)]
+    assert _scored(records) == (1, 1, 0)
+
+
+def test_a_later_compound_failure_is_recurring_but_not_warnable():
+    from dataclasses import replace
+
+    records = [_call("s1", 1, 0, ok=False, sig="timed out"), _call("s1", 1, 1)]
+    records += [_call(f"s{n}", n, 0) for n in range(2, 8)]
+    records += [replace(_call("s8", 8, 0, ok=False, sig="timed out"), compound=True)]
+    records += [_call("s9", 9, 0, ok=False, sig="timed out"), _call("s10", 10, 0)]
+    assert _scored(records) == (2, 2, 1)

@@ -62,6 +62,8 @@ MODULES = frozenset(
 )
 # Words that only set up the real command.
 SKIP_PROGRAMS = frozenset(["cd", "export", "set", "source", "pushd", "popd", "true", "echo"])
+# Skipped programs that still decide the exit status of the line they are on.
+OUTPUT_ONLY = frozenset(["echo", "true"])
 WRAPPERS = frozenset(["sudo", "time", "env", "nohup", "command"])
 # Shell and script syntax that can open a line without being a program.
 KEYWORDS = frozenset(
@@ -127,7 +129,10 @@ _ERROR_WORDS = re.compile(
     re.IGNORECASE,
 )
 _MASKS = [
-    (re.compile(r"(['\"`]).{0,200}?\1"), "<s>"),
+    # A quoted string of any length, then one that never closes (the scan may
+    # have cut it). A quote right after a letter is an apostrophe, not a string.
+    (re.compile(r"(?<![A-Za-z0-9])(['\"`]).*?\1"), "<s>"),
+    (re.compile(r"(?<![A-Za-z0-9])['\"`].*$"), "<s>"),
     (re.compile(r"[A-Za-z]:\\[^\s'\"<>|]+"), "<path>"),
     (re.compile(r"[a-z][a-z0-9+.\-]*://\S+", re.IGNORECASE), "<url>"),
     (re.compile(r"(?:\.{0,2}\\)?[\w\-.@+*]+(?:\\[\w\-.@+*]+)+\\?|\.{0,2}\\[\w\-.@+*]+"), "<path>"),
@@ -191,10 +196,11 @@ def command_template(command: str) -> str | None:
 def is_compound(command: str) -> bool:
     """True when the command line runs more than one program in sequence.
 
-    The log then says only that the whole line failed, not which part, so a
-    later success of the first program is no proof that the failure was fixed.
+    The log then says only how the whole line ended, not which part failed or
+    succeeded. `a || b` and `a; echo done` can even end well while `a` failed.
     """
-    return len(_templates(command)[0]) > 1
+    found, fallback = _templates(command)
+    return len(found) > 1 or "||" in command or (bool(found) and fallback in OUTPUT_ONLY)
 
 
 def _subcommand(program: str, args: list[str]) -> str | None:
@@ -224,7 +230,9 @@ def _templates(command: str) -> tuple[list[str], str | None]:
         if script and not (_CMDLET.match(program) or program in SCRIPT_PROGRAMS):
             continue  # inside a script most lines are data
         if program in SKIP_PROGRAMS:
-            fallback = fallback or program
+            # An output-only program outranks pure setup, so is_compound can see it.
+            if fallback is None or (program in OUTPUT_ONLY and fallback not in OUTPUT_ONLY):
+                fallback = program if fallback != SCRIPT else fallback
             continue
         args = _positional(tokens[1:])
         if program in ("python", "python3", "py") and "-m" in tokens:

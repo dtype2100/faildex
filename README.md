@@ -14,7 +14,7 @@ works out why, and the next session hits it again. Each agent keeps its own log
 format, so nothing carries over between sessions or between agents.
 
 On the public session logs committed with this repository, **69% of the failures
-in the later sessions had already happened in an earlier session**, and for 64%
+in the later sessions had already happened in an earlier session**, and for 59%
 of those an earlier session also shows the same command succeeding a few calls
 later. That is knowledge the agent had on disk and could not reach.
 
@@ -26,7 +26,7 @@ faildex turns it into three things:
 | `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it adds what earlier sessions learned. For every other command it prints nothing. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. |
-| `faildex ingest` | Your own Claude Code and Codex logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
+| `faildex ingest` | Your own Claude Code and Codex CLI logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
 
 ## How it uses Relate
 
@@ -104,7 +104,7 @@ evaluation in the browser; it arrives at the same 83 of 121.
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
 ```bash
-uv run faildex ingest --claude ~/.claude/projects
+uv run faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions
 uv run faildex rules --store ~/.faildex/store
 ```
 
@@ -144,8 +144,8 @@ Use it from any MCP client:
 
 | | later failures | already seen earlier | of those, recovery on record |
 |---|---|---|---|
-| All failure keys | 121 | 83 (68.6%) | 53 (63.9%) |
-| Failure text only | 102 | 72 (70.6%) | 47 (65.3%) |
+| All failure keys | 121 | 83 (68.6%) | 49 (59.0%) |
+| Failure text only | 102 | 72 (70.6%) | 45 (62.5%) |
 
 What these numbers do and do not show is in [docs/evaluation.md](docs/evaluation.md).
 In short: they show that the knowledge was available, not that an agent given

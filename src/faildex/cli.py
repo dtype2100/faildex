@@ -95,18 +95,19 @@ def _ingest(args: argparse.Namespace) -> int:
     """Private by construction: the store stays on this machine and keeps local pointers."""
     import relate
 
-    from faildex.adapters import claude_code, codex
+    from faildex.adapters import claude_code, codex, codex_local
     from faildex.build import counts
     from faildex.schema import ingest
 
-    if not args.claude and not args.codex:
-        print("error: give --claude DIR or --codex FILE")
+    if not args.claude and not args.codex and not args.codex_sessions:
+        print("error: give --claude DIR, --codex-sessions DIR or --codex FILE")
         return 1
-    missing = [str(p) for p in [*args.claude, *args.codex] if not p.exists()]
+    missing = [str(p) for p in [*args.claude, *args.codex, *args.codex_sessions] if not p.exists()]
     if missing:
         print(f"error: not found: {', '.join(missing)}")
         return 1
     records = [r for root in args.claude for r in claude_code.read_dir(root)]
+    records += [r for root in args.codex_sessions for r in codex_local.read_dir(root)]
     records += list(codex.read_files(args.codex)) if args.codex else []
     args.store.parent.mkdir(parents=True, exist_ok=True)
     db = relate.connect(str(args.store))
@@ -198,6 +199,14 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         metavar="FILE",
         help="a Codex trajectories jsonl file",
+    )
+    ingest.add_argument(
+        "--codex-sessions",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="a directory of Codex CLI session files (~/.codex/sessions)",
     )
     ingest.add_argument("--store", type=Path, default=None, help="store directory")
     ingest.set_defaults(run=_ingest)

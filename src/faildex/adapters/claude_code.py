@@ -123,6 +123,8 @@ def read_session(path: str | Path) -> list[CallRecord]:
             name = block.get("name")
             tool = name if isinstance(name, str) and name else "unknown"
             ts = record.get("timestamp")
+            if block.get("id") in tools:
+                continue  # the same call logged twice is one call
             command, compound = _command(tool, block.get("input"))
             call = _Call(
                 seq=len(calls),
