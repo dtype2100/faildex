@@ -20,6 +20,11 @@ COMMANDS = [
     ("$i=0; $j", None),
     ("notes.md", None),
     ("npm --prefix /Users/alice/private run build", "npm run"),
+    ("npm --prefix customer-secret run build", "npm run"),
+    ("git customer-secret", "git"),
+    ("uv run customer-secret", "uv run"),
+    ("python -m customer_secret", "python -m"),
+    ("make customer-secret", "make"),
     ("git /Users/alice/private", "git"),
     ("uv run ./scripts/secret-name.py", "uv run"),
     ("python -m /Users/alice/x", "python -m"),
@@ -35,6 +40,11 @@ SIGNATURES = [
     ("Traceback (most recent call last):\nKeyError: 1\nMY_PRIVATE_DATA", "keyerror: <n>"),
     ("Traceback (most recent call last):\n  File x\nplain words", None),
     (
+        'Traceback (most recent call last):\n  File "/src/error.py", line 1\nException: boom\nordinary',
+        "exception: boom",
+    ),
+    ('Traceback (most recent call last):\n  File "/src/error.py", line 1\nordinary output', None),
+    (
         r"rg: src\app\Frame*.cs: The system cannot find the file",
         "rg: <path>: the system cannot find the file",
     ),
@@ -43,6 +53,7 @@ SIGNATURES = [
         "<path>:<n>:<n>: error: unknown type name <s>",
     ),
     ("src/app.cs:12: throw new InvalidOperationException(x);", None),
+    ('12: Console.Error.WriteLine("usage error: needs [start]', None),
     ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
     ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
     (
@@ -113,4 +124,4 @@ def test_compound_means_several_different_programs():
     assert is_compound("git status && python -c 'raise ValueError()'")
     assert not is_compound("cd repo && git status")
     assert not is_compound("git status | head -3")
-    assert not is_compound("git status; git status")
+    assert is_compound("python pass.py; python fail.py")

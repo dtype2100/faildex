@@ -77,3 +77,39 @@ def test_cli_build_store(data_dir, tmp_path, capsys):
     assert (
         main(["build-store", "--data", str(tmp_path / "none"), "--out", str(tmp_path / "s")]) == 1
     )
+
+
+def test_ingest_builds_a_private_store_that_grows_without_duplicates(tmp_path, capsys):
+    store = tmp_path / "private" / "store"
+    claude = ["--claude", str(FIXTURES / "claude_code")]
+    assert main(["ingest", *claude, "--store", str(store)]) == 0
+    first = capsys.readouterr().out
+    assert "ingested 6 calls" in first
+
+    codex_file = str(FIXTURES / "codex" / "trajectories.sample.jsonl")
+    assert main(["ingest", *claude, "--codex", codex_file, "--store", str(store)]) == 0
+    assert "calls 13" in capsys.readouterr().out
+
+    db = open_store(store)
+    agents = {r["a"] for r in db.execute("MATCH (s:Session) RETURN s.agent AS a")}
+    assert len(agents) == 2
+    db.close()
+    assert main(["rules", "--store", str(store)]) == 0
+
+
+def test_ingest_needs_an_existing_source(tmp_path, capsys):
+    assert main(["ingest", "--store", str(tmp_path / "s")]) == 1
+    assert main(["ingest", "--claude", str(tmp_path / "none"), "--store", str(tmp_path / "s")]) == 1
+
+
+def test_default_store_prefers_env_then_local_then_private(tmp_path, monkeypatch):
+    from faildex.store import PRIVATE_STORE, default_store
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FAILDEX_STORE", raising=False)
+    assert default_store() == PRIVATE_STORE.expanduser()
+    (tmp_path / "store").mkdir()
+    (tmp_path / "store" / "manifest.json").write_text("{}")
+    assert default_store().name == "store" and not default_store().is_absolute()
+    monkeypatch.setenv("FAILDEX_STORE", str(tmp_path / "elsewhere"))
+    assert default_store() == tmp_path / "elsewhere"

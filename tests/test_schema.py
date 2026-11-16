@@ -170,3 +170,23 @@ def test_a_shared_store_refuses_local_paths():
         with pytest.raises(ValueError, match="local path"):
             ingest(db, [bad])
     assert ingest(db, [local], local_paths=True) == 1
+
+
+def test_a_shared_store_refuses_windows_and_unc_paths():
+    import pytest
+    import relate
+
+    from faildex.schema import ingest
+
+    db = relate.connect(":memory:")
+    for path in (
+        "C:/Users/alice/log.jsonl",
+        r"C:\\Users\\alice\\log.jsonl",
+        r"..\\private\\log.jsonl",
+        r"\\\\server\\share\\log.jsonl",
+        "~/logs/x.jsonl",
+    ):
+        record = CallRecord("a", "s", 0, "Bash", True, source_path=path)
+        with pytest.raises(ValueError, match="local path"):
+            ingest(db, [record])
+    assert ingest(db, [CallRecord("a", "s", 0, "Bash", True, source_path="wisp/t/x.jsonl")]) == 1

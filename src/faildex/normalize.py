@@ -14,32 +14,51 @@ import re
 import shlex
 
 # Programs whose first non-flag argument is a subcommand worth keeping.
-SUBCOMMAND_TOOLS = frozenset(
+SUBCOMMANDS = {
+    "git": "add am apply bisect blame branch checkout cherry-pick clean clone commit config "
+    "describe diff fetch grep init lfs log ls-files ls-remote merge mv pull push rebase reflog "
+    "remote reset restore rev-parse revert rm show stash status submodule switch tag worktree",
+    "gh": "api auth gist issue pr release repo run search secret workflow",
+    "uv": "add build init lock pip publish python remove run sync tool venv",
+    "npm": "add audit build ci exec init install link publish remove run start test update",
+    "pnpm": "add audit build exec init install link publish remove run start test update",
+    "yarn": "add audit build exec init install link publish remove run start test upgrade",
+    "docker": "build compose exec images logs ps pull push rm rmi run start stop",
+    "cargo": "add bench build check clippy doc fmt install run test update",
+    "kubectl": "apply delete describe exec get logs rollout",
+    "brew": "info install list search uninstall update upgrade",
+    "pip": "download freeze install list show uninstall",
+    "pip3": "download freeze install list show uninstall",
+    "go": "build fmt get install mod run test vet",
+    "poetry": "add install lock run update",
+    "conda": "activate create env install list",
+    "dotnet": "add build new publish restore run test",
+    "apt": "install remove update upgrade",
+    "apt-get": "install remove update upgrade",
+    "systemctl": "daemon-reload disable enable is-active restart start status stop",
+    "hf": "auth download repo upload",
+}
+SUBCOMMANDS = {tool: frozenset(names.split()) for tool, names in SUBCOMMANDS.items()}
+# Programs worth a second word. Only a subcommand from the list above is kept:
+# any other argument could be a name or a path the user never meant to share.
+SUBCOMMAND_TOOLS = frozenset(SUBCOMMANDS)
+# What may follow `uv run` and `python -m` in a template, for the same reason.
+RUNNERS = frozenset(
     [
-        "git",
-        "gh",
-        "uv",
-        "npm",
-        "pnpm",
-        "yarn",
-        "docker",
-        "cargo",
-        "kubectl",
-        "brew",
-        "pip",
-        "pip3",
-        "go",
-        "make",
-        "npx",
-        "poetry",
-        "conda",
-        "dotnet",
-        "apt",
-        "apt-get",
-        "systemctl",
-        "hf",
-        "relate",
+        "pytest",
+        "ruff",
+        "python",
+        "python3",
+        "mypy",
+        "pyright",
+        "black",
+        "isort",
+        "pre-commit",
+        "faildex",
     ]
+)
+MODULES = frozenset(
+    ["pytest", "venv", "pip", "unittest", "http.server", "json.tool", "build", "ruff", "mypy"]
 )
 # Words that only set up the real command.
 SKIP_PROGRAMS = frozenset(["cd", "export", "set", "source", "pushd", "popd", "true", "echo"])
@@ -94,14 +113,14 @@ _SEGMENTS = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
 _HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\s*\2\b", re.DOTALL)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
 _PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
-_SUBCOMMAND = re.compile(r"^[a-z][a-z0-9:_\-]{0,30}$")
-_MODULE = re.compile(r"^[A-Za-z_][\w.]{0,60}$")
-_EXCEPTION = re.compile(r"^[A-Za-z_][\w.]*(Error|Exception|Exit|Interrupt|Warning)\b")
+_EXCEPTION = re.compile(r"^(?:[A-Za-z_][\w.]*)?(Error|Exception|Exit|Interrupt|Warning)\s*(:|$)")
 _CMDLET = re.compile(r"^[A-Z][a-z]+-[A-Za-z]+$")
 _REDIRECT = re.compile(r"[<>|]")
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _EXIT_LINE = re.compile(r"^(<error>)?\s*exit code:? -?\d+", re.IGNORECASE)
-_NOISE_LINE = re.compile(r"^(wall time:|output:|at line:\d+ char:\d+|\+ |~+$)", re.IGNORECASE)
+_NOISE_LINE = re.compile(
+    r"^(wall time:|output:|at line:\d+ char:\d+|\+ |~+$|file \".*\", line \d+)", re.IGNORECASE
+)
 _ERROR_WORDS = re.compile(
     r"(error|not found|no such|fatal|failed|denied|cannot|can't|invalid|exception|unknown|"
     r"refused|refusing|rejected|couldn't|timed? ?out|no matches|unexpected|not recognized|is not a |usage:)",
@@ -126,7 +145,7 @@ _MASKS = [
 _COMMAND_NAME = re.compile(r"^[A-Za-z_](?:[\w.\-]*[A-Za-z0-9_])?$")
 # "<file>:<line>:" opens a compiler message or a line of search output; only the
 # first is a failure, and it says so right after the position.
-_LOCATED = re.compile(r"^\S+?\.\w{1,6}[:\-]\d+[:\-](?:\d+[:\-])?\s*(.*)$")
+_LOCATED = re.compile(r"^(?:\S+?\.\w{1,6}[:\-])?\d+[:\-](?:\d+[:\-])?\s*(.*)$")
 _DIAGNOSTIC = re.compile(r"^(fatal |syntax )?(error|[A-Z]{1,4}\d{2,5})\b", re.IGNORECASE)
 _DATA_FILE = re.compile(
     r"\.(md|txt|json|ya?ml|toml|cs|cpp|c|h|js|ts|html|css|csv|log|xml)$", re.IGNORECASE
@@ -170,17 +189,18 @@ def command_template(command: str) -> str | None:
 
 
 def is_compound(command: str) -> bool:
-    """True when the command runs several different programs in sequence.
+    """True when the command line runs more than one program in sequence.
 
     The log then says only that the whole line failed, not which part, so a
     later success of the first program is no proof that the failure was fixed.
     """
-    return len(set(_templates(command)[0])) > 1
+    return len(_templates(command)[0]) > 1
 
 
-def _subcommand(args: list[str]) -> str | None:
-    """The first argument that reads like a subcommand; paths and values never do."""
-    return next((a for a in args if _SUBCOMMAND.match(a)), None)
+def _subcommand(program: str, args: list[str]) -> str | None:
+    """The first argument that is a known subcommand of the program."""
+    known = SUBCOMMANDS.get(program, frozenset())
+    return next((a for a in args if a in known), None)
 
 
 def _templates(command: str) -> tuple[list[str], str | None]:
@@ -210,13 +230,13 @@ def _templates(command: str) -> tuple[list[str], str | None]:
         if program in ("python", "python3", "py") and "-m" in tokens:
             index = tokens.index("-m")
             module = tokens[index + 1] if index + 1 < len(tokens) else ""
-            module = module if _MODULE.match(module) else ""
+            module = module if module in MODULES else ""
             found.append(f"{program} -m {module}".strip())
         elif program == "uv" and args[:1] == ["run"] and len(args) > 1:
             inner = _program(args[1])
-            found.append(f"uv run {inner}" if _SUBCOMMAND.match(inner) else "uv run")
-        elif program in SUBCOMMAND_TOOLS and _subcommand(args):
-            found.append(f"{program} {_subcommand(args)}")
+            found.append(f"uv run {inner}" if inner in RUNNERS else "uv run")
+        elif _subcommand(program, args):
+            found.append(f"{program} {_subcommand(program, args)}")
         else:
             found.append(program)
     return found, fallback
@@ -243,6 +263,8 @@ def error_signature(text: str) -> str | None:
     if any(line.startswith("Traceback") for line in lines):
         # The exception line, not whatever the program printed after it.
         picked = next((line for line in reversed(lines) if _EXCEPTION.match(line)), None)
+        if picked is None:
+            return None  # a stack with no exception line identifies nothing
     if picked is None:
         # Without an error word the line is ordinary output, which must not enter the graph.
         picked = next((line for line in lines if _is_failure_line(line)), None)

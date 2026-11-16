@@ -24,6 +24,7 @@ only a pointer (source_path, source_line) to where it came from.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
@@ -183,7 +184,15 @@ def utc(ts: str | None) -> str | None:
 
 
 def _check_pointer(path: str | None) -> None:
-    if path and (path.startswith(("/", "~")) or ":\\" in path or ".." in path.split("/")):
+    if not path:
+        return
+    local = (
+        path.startswith(("/", "~"))
+        or "\\" in path
+        or re.match(r"^[A-Za-z]:", path)
+        or ".." in path.split("/")
+    )
+    if local:
         raise ValueError(
             f"source_path {path!r} is a local path; a shared store takes pointers relative "
             "to a dataset. Pass local_paths=True only for a private store."

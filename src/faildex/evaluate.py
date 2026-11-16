@@ -53,7 +53,7 @@ _RECOVERED = f"""
 MATCH (s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $earlier AND f.ts < $cut AND coalesce(f.compound, false) = false
 MATCH (f)-[:RAN]->(k:Command)<-[:RAN]-(g:Call {{ok: true}})
-WHERE g.ts < $cut
+WHERE g.ts < $cut AND coalesce(g.compound, false) = false
 MATCH (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g)
 RETURN DISTINCT e.sig AS sig, k.template AS command
 """

@@ -41,6 +41,7 @@ class _Call(NamedTuple):
     error_sig: str | None
     exit_code: int | None = None
     compound: bool = False
+    call_id: str | None = None
 
 
 class _Row(NamedTuple):
@@ -109,7 +110,9 @@ def _calls(messages) -> list[_Call]:
                 command = command_template(raw)
                 compound = is_compound(raw)
                 error_sig = None if ok else error_signature(output)
-            calls.append(_Call(tool, ok, command, error_sig, None if ok else code, compound))
+            calls.append(
+                _Call(tool, ok, command, error_sig, None if ok else code, compound, tool_call["id"])
+            )
     return calls
 
 
@@ -149,8 +152,13 @@ def _records(numbered: Iterable[tuple[str, int, object]]) -> Iterator[CallRecord
 
     for session_id, rows in sessions.items():
         seq = 0
+        seen: set[str] = set()
         for row in sorted(rows, key=lambda r: r.order):
             for call in row.calls:
+                # The same event may be exported into two files; count it once.
+                if call.call_id in seen:
+                    continue
+                seen.add(call.call_id)
                 yield CallRecord(
                     agent=AGENT,
                     session_id=session_id,

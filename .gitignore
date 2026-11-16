@@ -12,3 +12,5 @@ dist/
 .cypherlite.writer
 wal/
 .claude/
+site/data.json
+site/vendor/
