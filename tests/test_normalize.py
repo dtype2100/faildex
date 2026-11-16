@@ -19,6 +19,23 @@ COMMANDS = [
     (r"$p='src\app\Program.cs'; Get-Content $p", "Get-Content"),
     ("$i=0; $j", None),
     ("notes.md", None),
+    ("echo 'creds in ~/x; ALL repos public' >> notes", "echo"),
+    ("# check the runner; look at what it does\ngit status", "git status"),
+    ('geo=$(hyprctl clients -j | jq .x) && grim -g "$geo" out.png', "grim"),
+    ("BASE=$(git rev-parse origin/main); git fetch -q origin", "git fetch"),
+    ("timeout 180 bin/hyprbench run --task x", "hyprbench"),
+    ("sudo -u customer-secret git status", "git status"),
+    ("env -C /Users/alice/private git status", "git status"),
+    ("ROOT=$(pwd) git status; pytest -q", "git status"),
+    ("CODE=$(cat /tmp/code | tr -d '-')\nnode run.mjs", "node"),
+    ("git status # TODO (slow\npytest -q", "git status"),
+    ("fill() { node cdp.mjs eval x; }\ngit status", "git status"),
+    ("setsid chromium --no-first-run >/dev/null 2>&1 &", "chromium"),
+    ('node -e "\nconst run = async () => {\n  also();\n};\n"', "node"),
+    (
+        "& {\n$roots = @(\n'M:\\b2t\\arch294_loading03',\n'M:\\b2t\\arch295_press'\n);\nforeach ($r in $roots) { Import-Csv $r }\n}",
+        None,
+    ),
     ("npm --prefix /Users/alice/private run build", "npm run"),
     ("npm --prefix customer-secret run build", "npm run"),
     ("git customer-secret", "git"),
@@ -132,5 +149,9 @@ def test_compound_means_several_different_programs():
     assert not is_compound("git status | head -3")
     assert is_compound("python pass.py; python fail.py")
     assert is_compound("git push || echo ignored")
+    assert is_compound("ROOT=$(pwd) git status; pytest -q")
+    assert is_compound("git status && (pytest -q; ruff check .)")
+    assert is_compound("git status # TODO (slow\npytest -q")
+    assert not is_compound("geo=$(hyprctl clients -j | jq .x)\ngrim out.png")
     assert is_compound("git push; echo done")
     assert not is_compound("echo hello")

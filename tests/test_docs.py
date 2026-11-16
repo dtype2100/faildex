@@ -32,6 +32,7 @@ def test_readme_table_matches_the_committed_store(results):
     assert f"| All failure keys {_row(both)}" in readme
     assert f"| Failure text only {_row(text_only)}" in readme
     assert f"{both.recurrence:.0%} of the failures" in readme
+    assert f"same {both.recurring} of {both.later_failures}" in readme
 
 
 def test_evaluation_doc_matches_the_committed_store(results):
@@ -39,6 +40,7 @@ def test_evaluation_doc_matches_the_committed_store(results):
     both, _ = results
     assert f"| All | {both.earlier_sessions} / {both.later_sessions} {_row(both)}" in doc
     assert f"{len(both.later_keys)} distinct failure keys" in doc
+    assert f"same {both.recurring} of {both.later_failures}" in doc
 
 
 def test_relate_webassembly_reaches_the_same_numbers(results, tmp_path):
