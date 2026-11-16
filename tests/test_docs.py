@@ -64,3 +64,13 @@ def test_relate_webassembly_reaches_the_same_numbers(results, tmp_path):
         both.recurring,
         both.warnable,
     )
+
+
+def test_every_test_named_in_the_evaluation_doc_exists():
+    import re
+
+    doc = (ROOT / "docs" / "evaluation.md").read_text()
+    named = re.findall(r"`(test_\w+\.py)::(test_\w+)`", doc)
+    assert len(named) >= 12
+    for file, function in named:
+        assert f"def {function}(" in (ROOT / "tests" / file).read_text(), f"{file}::{function}"
