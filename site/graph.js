@@ -3,6 +3,8 @@
 
 export const KEYS = { Session: "id", Call: "id", Command: "template", ErrorSig: "sig", Source: "name" };
 export const RECOVERY_HOPS = 5;
+// A failure must be at least this share of a command's runs to be worth a warning.
+export const MIN_RATE = 0.03;
 const BATCH = 2000;
 
 export const Q = {
@@ -28,13 +30,17 @@ ORDER BY times DESC LIMIT 10`,
   evidence: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)-[:FROM]->(d:Source)
 RETURN d.name AS dataset, s.agent AS agent, s.id AS session, f.source_path AS file, f.source_line AS line
 ORDER BY session LIMIT 12`,
-  preflight: `MATCH (k:Command {template: $command})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
-MATCH (f)<-[:HAS_CALL]-(s:Session)
-WITH e, count(DISTINCT s) AS sessions, count(f) AS calls
-WHERE sessions >= 2
-RETURN e.sig AS known_failure, sessions, calls ORDER BY sessions DESC LIMIT 5`,
-  commandsWithFailures: `MATCH (k:Command)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig), (f)<-[:HAS_CALL]-(s:Session)
-WITH k, e, count(DISTINCT s) AS sessions WHERE sessions >= 2
+  preflight: `MATCH (k:Command {template: $command})<-[:RAN]-(c:Call)
+WITH k, count(c) AS runs
+MATCH (k)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig), (f)<-[:HAS_CALL]-(s:Session)
+WITH e, runs, count(DISTINCT s) AS sessions, count(f) AS calls
+WHERE sessions >= 2 AND 1.0 * calls / runs >= ${MIN_RATE}
+RETURN e.sig AS known_failure, sessions, calls, runs ORDER BY sessions DESC LIMIT 5`,
+  commandsWithFailures: `MATCH (k:Command)<-[:RAN]-(c:Call)
+WITH k, count(c) AS runs
+MATCH (k)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig), (f)<-[:HAS_CALL]-(s:Session)
+WITH k, e, runs, count(DISTINCT s) AS sessions, count(f) AS calls
+WHERE sessions >= 2 AND 1.0 * calls / runs >= ${MIN_RATE}
 RETURN DISTINCT k.template AS command ORDER BY command`,
   sessionsOf: `MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)
 WHERE s.started_at IS NOT NULL

@@ -30,6 +30,7 @@ def _summary(item: Failure) -> dict:
         "agents": sorted(item.agents),
         "recoveries": item.recovered,
         "usual_fix": item.fix,
+        "share_of_runs": round(item.calls / item.runs, 3) if item.runs else None,
         "rule": item.rule(),
         "evidence": item.evidence,
     }

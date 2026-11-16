@@ -176,3 +176,14 @@ def test_a_compound_success_is_not_a_recovery():
         ],
     )
     assert proposals(db)[0].recovered == 0
+
+
+def test_a_rare_failure_of_a_common_command_gives_no_warning():
+    db = relate.connect(":memory:")
+    records = [_call(f"ok{n}", 0, command="ls") for n in range(98)]
+    records += [_call(s, 0, ok=False, command="ls", sig="no such file") for s in ("a", "b")]
+    ingest(db, records)
+    assert warnings_for(db, "ls") == []  # 2 of 100 runs
+    (kept,) = warnings_for(db, "ls", min_rate=0.01)
+    assert kept.runs == 100
+    assert "2% of this command's 100 runs" in kept.rule()
