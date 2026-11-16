@@ -18,22 +18,25 @@ from dataclasses import dataclass, field
 RECOVERY_HOPS = 5
 RETRY = "retry"
 
-# Narrows every query to the failure keys one command has produced.
+# With a command, every count, recovery and rule is about that command alone.
+_ALL = """
+MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)
+OPTIONAL MATCH (f)-[:RAN]->(k:Command)
+"""
 _FOR_COMMAND = """
-MATCH (:Command {template: $command})<-[:RAN]-(:Call)-[:FAILED_WITH]->(e:ErrorSig)
-WITH DISTINCT e
+MATCH (k:Command {template: $command})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 """
 
 _FAILURES = """
-MATCH (e)<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)
-OPTIONAL MATCH (f)-[:RAN]->(k:Command)
+MATCH (f)<-[:HAS_CALL]-(s:Session)
 RETURN e.sig AS sig, e.kind AS kind, s.id AS session, s.agent AS agent,
        k.template AS command, f.tool AS tool, f.id AS call, f.source_path AS path, f.source_line AS line
 ORDER BY call
 """
 
+# A compound command line does not say which part failed, so it proves no recovery.
 _RECOVERIES = f"""
-MATCH (e)<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)
+WITH e, f, k WHERE k IS NOT NULL AND coalesce(f.compound, false) = false
 MATCH p = (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g:Call {{ok: true}}), (g)-[:RAN]->(k)
 WITH e, f, k, min(length(p)) AS hops
 MATCH q = (f)-[:NEXT*1..{RECOVERY_HOPS}]->(:Call {{ok: true}})
@@ -100,19 +103,22 @@ class Failure:
 
 def failures(db, command: str | None = None) -> dict[str, Failure]:
     """Failure keys with their recoveries: all of them, or those of one command."""
-    scope = _FOR_COMMAND if command else "MATCH (e:ErrorSig)\n"
+    scope = _FOR_COMMAND if command else _ALL
     params = {"command": command} if command else {}
     found: dict[str, Failure] = {}
     for row in db.execute(scope + _FAILURES, params):
         item = found.setdefault(row["sig"], Failure(row["sig"], row["kind"] or "text"))
         item.calls += 1
+        fresh = row["session"] not in item.sessions
         item.sessions.add(row["session"])
         item.agents.add(row["agent"])
         item.tools[row["tool"]] += 1
         if row["command"]:
             item.commands[row["command"]] += 1
-        if row["path"] and len(item.evidence) < 3:
-            item.evidence.append(f"{row['path']}:{row['line']}")
+        pointer = f"{row['path']}:{row['line']}"
+        # One pointer per session, so the evidence shows the failure really spread.
+        if row["path"] and fresh and len(item.evidence) < 3 and pointer not in item.evidence:
+            item.evidence.append(pointer)
     for row in db.execute(scope + _RECOVERIES, params):
         item = found.get(row["sig"])
         if item is None:
@@ -132,7 +138,7 @@ def proposals(db, min_sessions: int = 2, command: str | None = None) -> list[Fai
 
 def warnings_for(db, command: str, min_sessions: int = 2) -> list[Failure]:
     """Known recurring failures of one command template, best first."""
-    return [f for f in proposals(db, min_sessions, command) if command in f.commands]
+    return proposals(db, min_sessions, command)
 
 
 def render(items: list[Failure]) -> str:

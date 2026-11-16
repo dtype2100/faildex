@@ -80,14 +80,17 @@ _COUNTS = {
 def read_source(source: Source, data_dir: Path) -> Iterator[CallRecord]:
     """Records of one dataset, with pointers rewritten relative to the dataset."""
     root = data_dir / source.name
-    for rel in source.paths:
-        path = root / rel
+    paths = [root / rel for rel in source.paths]
+    for path in paths:
         if not path.exists():
             raise FileNotFoundError(f"{path} is missing; run `make data` first")
-        records = claude_code.read_dir(path) if path.is_dir() else codex.read_file(path)
-        for record in records:
-            inside = Path(record.source_path).resolve().relative_to(root.resolve())
-            yield replace(record, source_path=f"{source.name}/{inside.as_posix()}")
+    if source.agent == "codex":
+        records = codex.read_files(paths)  # one numbering across the dataset's files
+    else:
+        records = (record for path in paths for record in claude_code.read_dir(path))
+    for record in records:
+        inside = Path(record.source_path).resolve().relative_to(root.resolve())
+        yield replace(record, source_path=f"{source.name}/{inside.as_posix()}")
 
 
 def counts(db) -> dict[str, int]:

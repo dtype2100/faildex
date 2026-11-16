@@ -75,7 +75,7 @@ def test_failed_call_gets_command_and_error_signature():
 def test_records_ingest_into_relate():
     recs = records()
     db = relate.connect(":memory:")
-    assert ingest(db, recs) == len(recs) == 7
+    assert ingest(db, recs, local_paths=True) == len(recs) == 7
 
     def count(query):
         return next(iter(db.execute(query)))["n"]
@@ -139,3 +139,47 @@ def test_tool_without_exit_code_is_ok_unless_it_reports_one():
     assert ok("Wall time: 0.1 seconds\nOutput:\nTraceback") == (True, None)
     assert ok("Exit code: 0\nOutput:\n") == (True, None)
     assert ok("Exit code: 2\nOutput:\nboom") == (False, None)
+
+
+def _turn(session, ts, segment, command, call_id):
+    return {
+        "session_id": session,
+        "timestamp": ts,
+        "segment": segment,
+        "messages": [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": call_id,
+                        "function": {"name": "shell_command", "arguments": {"command": command}},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": call_id, "content": "Exit code: 0"},
+        ],
+    }
+
+
+def test_a_session_spread_over_files_is_numbered_once(tmp_path):
+    import json
+
+    from faildex.adapters.codex import read_files
+
+    first, second = tmp_path / "train.jsonl", tmp_path / "eval.jsonl"
+    first.write_text(json.dumps(_turn("s", "2026-01-01T00:00:00Z", 1, "git push", "a")))
+    second.write_text(json.dumps(_turn("s", "2026-01-01T00:01:00Z", 1, "npm test", "b")))
+    records = list(read_files([first, second]))
+    assert [(r.seq, r.command) for r in records] == [(0, "git push"), (1, "npm test")]
+    assert len({r.call_key for r in records}) == 2
+    assert records[1].source_path.endswith("eval.jsonl")
+
+
+def test_equal_instants_keep_segment_order_whatever_the_spelling():
+    from faildex.adapters.codex import read_rows
+
+    rows = [
+        _turn("s", "2026-01-01T00:00:00Z", 1, "git status", "a"),
+        _turn("s", "2026-01-01T00:00:00+00:00", 2, "npm test", "b"),
+    ]
+    assert [r.command for r in read_rows(rows, "demo/log.jsonl")] == ["git status", "npm test"]

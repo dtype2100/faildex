@@ -23,4 +23,11 @@ eval:
 	@uv run faildex eval
 
 demo:
-	@echo "not implemented" && exit 1
+	@echo "== 1. Failures that recurred across sessions, with the recovery on record"
+	@uv run faildex rules --top 5
+	@echo
+	@echo "== 2. Asking before running a command (what the hook and the MCP tool return)"
+	@uv run faildex check "git status"
+	@echo
+	@echo "== 3. How often the later sessions repeated a failure the graph already held"
+	@uv run faildex eval

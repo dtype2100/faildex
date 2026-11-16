@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from os import PathLike
 from typing import NamedTuple
 
-from faildex.normalize import command_template, error_signature
+from faildex.normalize import command_template, error_signature, is_compound
 from faildex.schema import CallRecord
 
 AGENT = "codex"
@@ -40,6 +40,7 @@ class _Call(NamedTuple):
     command: str | None
     error_sig: str | None
     exit_code: int | None = None
+    compound: bool = False
 
 
 class _Row(NamedTuple):
@@ -47,6 +48,7 @@ class _Row(NamedTuple):
     ts: str | None
     line: int
     calls: list[_Call]
+    source_path: str = ""
 
 
 def _text(content) -> str:
@@ -99,13 +101,15 @@ def _calls(messages) -> list[_Call]:
             code = _exit_code(output)
             ok = not code
             command = error_sig = None
+            compound = False
             if tool == SHELL_TOOL:
                 raw = _shell_command(function.get("arguments"))
                 if raw is None:
                     continue
                 command = command_template(raw)
+                compound = is_compound(raw)
                 error_sig = None if ok else error_signature(output)
-            calls.append(_Call(tool, ok, command, error_sig, None if ok else code))
+            calls.append(_Call(tool, ok, command, error_sig, None if ok else code, compound))
     return calls
 
 
@@ -120,16 +124,16 @@ def _order(timestamp, segment, line: int) -> tuple:
         try:
             moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except ValueError:
-            return (1, 0.0, timestamp, segment, line)
+            return (1, 0.0, segment, line)
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
-        return (0, moment.timestamp(), timestamp, segment, line)
-    return (2, 0.0, "", segment, line)
+        return (0, moment.timestamp(), segment, line)
+    return (2, 0.0, segment, line)
 
 
-def _records(numbered: Iterable[tuple[int, object]], source_path: str) -> Iterator[CallRecord]:
+def _records(numbered: Iterable[tuple[str, int, object]]) -> Iterator[CallRecord]:
     sessions: dict[str, list[_Row]] = {}
-    for line, row in numbered:
+    for source_path, line, row in numbered:
         if not isinstance(row, dict):
             continue
         session_id = row.get("session_id")
@@ -141,7 +145,7 @@ def _records(numbered: Iterable[tuple[int, object]], source_path: str) -> Iterat
         timestamp = row.get("timestamp")
         ts = timestamp if isinstance(timestamp, str) else None
         order = _order(timestamp, row.get("segment"), line)
-        sessions.setdefault(session_id, []).append(_Row(order, ts, line, calls))
+        sessions.setdefault(session_id, []).append(_Row(order, ts, line, calls, source_path))
 
     for session_id, rows in sessions.items():
         seq = 0
@@ -156,16 +160,18 @@ def _records(numbered: Iterable[tuple[int, object]], source_path: str) -> Iterat
                     ts=row.ts,
                     command=call.command,
                     error_sig=call.error_sig,
-                    source_path=source_path,
+                    source_path=row.source_path,
                     source_line=row.line,
                     exit_code=call.exit_code,
+                    compound=call.compound,
                 )
                 seq += 1
 
 
 def read_rows(rows: Iterable[object], source_path: str | PathLike[str]) -> Iterator[CallRecord]:
     """Yield records for already-parsed rows; row N of `rows` is reported as line N."""
-    return _records(enumerate(rows, start=1), str(source_path))
+    path = str(source_path)
+    return _records((path, line, row) for line, row in enumerate(rows, start=1))
 
 
 def _parsed_lines(path: str | PathLike[str]) -> Iterator[tuple[int, object]]:
@@ -181,4 +187,13 @@ def _parsed_lines(path: str | PathLike[str]) -> Iterator[tuple[int, object]]:
 
 def read_file(path: str | PathLike[str]) -> Iterator[CallRecord]:
     """Stream a trajectories jsonl file as records, skipping lines that do not parse."""
-    return _records(_parsed_lines(path), str(path))
+    return read_files([path])
+
+
+def read_files(paths: Iterable[str | PathLike[str]]) -> Iterator[CallRecord]:
+    """Read several files as one log.
+
+    A session may be spread over files, so its calls are numbered once across
+    all of them; numbering each file alone would give two calls the same key.
+    """
+    return _records((str(path), line, row) for path in paths for line, row in _parsed_lines(path))
