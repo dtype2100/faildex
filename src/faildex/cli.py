@@ -32,6 +32,58 @@ def _eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _open(args: argparse.Namespace):
+    from faildex.store import open_store
+
+    try:
+        return open_store(args.store)
+    except FileNotFoundError as err:
+        print(f"error: {err}")
+        return None
+
+
+def _rules(args: argparse.Namespace) -> int:
+    from faildex.insight import approve, proposals, render
+
+    db = _open(args)
+    if db is None:
+        return 1
+    items = proposals(db, args.min_sessions)[: args.top]
+    db.close()
+    if args.approve:
+        added = approve(items, args.approve, args.to)
+        print(f"added {len(added)} rule(s) to {args.to}")
+        return 0
+    print(render(items))
+    return 0
+
+
+def _check(args: argparse.Namespace) -> int:
+    from faildex.insight import warnings_for
+    from faildex.normalize import command_template
+
+    db = _open(args)
+    if db is None:
+        return 1
+    template = command_template(args.command_line)
+    found = warnings_for(db, template, args.min_sessions) if template else []
+    db.close()
+    for item in found[: args.top]:
+        print(item.rule())
+    return 0
+
+
+def _hook(args: argparse.Namespace) -> int:
+    import sys
+
+    from faildex.hook import respond
+
+    out = respond(sys.stdin.read(), args.store, args.min_sessions)
+    if out:
+        print(out)
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -53,6 +105,23 @@ def main(argv: list[str] | None = None) -> int:
     evaluate = commands.add_parser("eval", help="recurrence of failures in the store")
     evaluate.add_argument("--store", type=Path, default=Path("store"), help="store directory")
     evaluate.set_defaults(run=_eval)
+
+    rules = commands.add_parser("rules", help="propose rules from recurring failures")
+    rules.add_argument("--approve", type=int, nargs="+", metavar="N", help="write these proposals")
+    rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help="rules file")
+    rules.set_defaults(run=_rules)
+
+    check = commands.add_parser("check", help="what is known to go wrong with a command")
+    check.add_argument("command_line", help="the command about to run, quoted")
+    check.set_defaults(run=_check)
+
+    hook = commands.add_parser("hook", help="Claude Code PreToolUse hook (JSON on stdin)")
+    hook.set_defaults(run=_hook)
+
+    for sub, top in ((rules, 10), (check, 3), (hook, 2)):
+        sub.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+        sub.add_argument("--min-sessions", type=int, default=2, help="sessions a failure must span")
+        sub.add_argument("--top", type=int, default=top, help="how many to show")
 
     sources = commands.add_parser("sources", help="list the pinned public datasets")
     sources.set_defaults(run=_sources)
