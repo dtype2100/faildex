@@ -3,15 +3,18 @@
 Sessions of each public dataset are ordered by start time and split once: the
 first 70% are the earlier period (what faildex would have learned from) and the
 last 30% are the later period (what it is scored on). No session is in both.
-The cut is the start time of the first later session, and an earlier session
-that was still running at the cut contributes only what happened before it,
-so nothing from the scored period leaks into what was "already known".
+Sessions are ordered by (start time, id), so the split is exact even when
+sessions start together. The cut is the start time of the first later session,
+and an earlier session that was still running at the cut contributes only what
+happened before it, so nothing from the scored period leaks into what was
+"already known".
 
     recurrence   share of later-period failures whose failure key was already
                  seen in an earlier-period session
     warnable     share of those where an earlier session also shows the way
-                 out: the same command succeeding within a few calls after
-                 the failure
+                 out for the same command and the same failure: that command
+                 succeeding within a few calls after it failed. Command lines
+                 that chain several programs prove no recovery and are skipped
 
 Every number comes from Cypher over the committed store, so `make eval` gives
 the same table on any machine.
@@ -24,34 +27,35 @@ from dataclasses import dataclass
 EARLIER_SHARE = 0.7
 RECOVERY_HOPS = 5
 
-_STARTS = """
+_SESSIONS = """
 MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)
 WHERE s.started_at IS NOT NULL
-RETURN s.started_at AS started ORDER BY started
+RETURN s.id AS id, s.started_at AS started ORDER BY started, id
 """
 
-# One row per later-period failure, with whether its key was seen earlier.
+# One row per later-period failure.
 _LATER = """
-MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
-WHERE s.started_at >= $cut
-RETURN c.id AS call, e.sig AS sig, e.kind AS kind
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
+WHERE s.id IN $later
+OPTIONAL MATCH (c)-[:RAN]->(k:Command)
+RETURN c.id AS call, e.sig AS sig, e.kind AS kind, k.template AS command
 """
 
 _EARLIER_KEYS = """
-MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
-WHERE s.started_at < $cut AND c.ts < $cut
-RETURN e.sig AS sig, count(DISTINCT s) AS sessions
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
+WHERE s.id IN $earlier AND c.ts < $cut
+RETURN DISTINCT e.sig AS sig
 """
 
-# Earlier-period keys with a recorded recovery: failure, then within a few
-# calls of the same session the same command succeeds.
-_RECOVERED_KEYS = f"""
-MATCH (d:Source {{name: $source}})<-[:FROM]-(s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
-WHERE s.started_at < $cut
+# Earlier-period (failure key, command) pairs with a recorded recovery: the
+# command fails, then within a few calls of the same session it succeeds.
+_RECOVERED = f"""
+MATCH (s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
+WHERE s.id IN $earlier AND f.ts < $cut AND coalesce(f.compound, false) = false
 MATCH (f)-[:RAN]->(k:Command)<-[:RAN]-(g:Call {{ok: true}})
 WHERE g.ts < $cut
 MATCH (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g)
-RETURN DISTINCT e.sig AS sig
+RETURN DISTINCT e.sig AS sig, k.template AS command
 """
 
 _SHARED = """
@@ -72,8 +76,9 @@ class Result:
     later_failures: int
     recurring: int
     warnable: int
-    later_keys: int
-    recurring_keys: int
+    later_keys: frozenset[str] = frozenset()
+    recurring_keys: frozenset[str] = frozenset()
+    by_key: tuple[tuple[str, int], ...] = ()
 
     @property
     def recurrence(self) -> float:
@@ -84,31 +89,39 @@ class Result:
         return self.warnable / self.recurring if self.recurring else 0.0
 
 
-def cutoff(starts: list[str]) -> str | None:
-    """Start time of the first later-period session."""
-    index = int(len(starts) * EARLIER_SHARE)
-    return starts[index] if 0 < index < len(starts) else None
+def split(sessions: list[tuple[str, str]]) -> tuple[list[str], list[str], str] | None:
+    """(earlier ids, later ids, cut) for sessions given as (id, start) in start order."""
+    index = int(len(sessions) * EARLIER_SHARE)
+    if not 0 < index < len(sessions):
+        return None
+    ids = [session for session, _ in sessions]
+    return ids[:index], ids[index:], sessions[index][1]
 
 
 def evaluate_source(db, source: str, kinds: tuple[str, ...] = ("text", "exit")) -> Result | None:
-    starts = [row["started"] for row in db.execute(_STARTS, {"source": source})]
-    cut = cutoff(starts)
-    if cut is None:
+    rows = db.execute(_SESSIONS, {"source": source})
+    parts = split([(row["id"], row["started"]) for row in rows])
+    if parts is None:
         return None
-    params = {"source": source, "cut": cut}
+    earlier_ids, later_ids, cut = parts
+    params = {"earlier": earlier_ids, "cut": cut}
     earlier = {row["sig"] for row in db.execute(_EARLIER_KEYS, params)}
-    recovered = {row["sig"] for row in db.execute(_RECOVERED_KEYS, params)}
-    later = [row for row in db.execute(_LATER, params) if row["kind"] in kinds]
+    recovered = {(row["sig"], row["command"]) for row in db.execute(_RECOVERED, params)}
+    later = [r for r in db.execute(_LATER, {"later": later_ids}) if r["kind"] in kinds]
     recurring = [row for row in later if row["sig"] in earlier]
+    tally: dict[str, int] = {}
+    for row in recurring:
+        tally[row["sig"]] = tally.get(row["sig"], 0) + 1
     return Result(
         source=source,
-        earlier_sessions=sum(1 for s in starts if s < cut),
-        later_sessions=sum(1 for s in starts if s >= cut),
+        earlier_sessions=len(earlier_ids),
+        later_sessions=len(later_ids),
         later_failures=len(later),
         recurring=len(recurring),
-        warnable=sum(1 for row in recurring if row["sig"] in recovered),
-        later_keys=len({row["sig"] for row in later}),
-        recurring_keys=len({row["sig"] for row in recurring}),
+        warnable=sum(1 for row in recurring if (row["sig"], row["command"]) in recovered),
+        later_keys=frozenset(row["sig"] for row in later),
+        recurring_keys=frozenset(row["sig"] for row in recurring),
+        by_key=tuple(sorted(tally.items())),
     )
 
 
@@ -116,20 +129,20 @@ def total(results: list[Result]) -> Result:
     def add(name: str) -> int:
         return sum(getattr(r, name) for r in results)
 
+    tally: dict[str, int] = {}
+    for result in results:
+        for sig, count in result.by_key:
+            tally[sig] = tally.get(sig, 0) + count
     return Result(
         "all",
-        *(
-            add(n)
-            for n in (
-                "earlier_sessions",
-                "later_sessions",
-                "later_failures",
-                "recurring",
-                "warnable",
-                "later_keys",
-                "recurring_keys",
-            )
-        ),
+        add("earlier_sessions"),
+        add("later_sessions"),
+        add("later_failures"),
+        add("recurring"),
+        add("warnable"),
+        frozenset().union(*(r.later_keys for r in results)),
+        frozenset().union(*(r.recurring_keys for r in results)),
+        tuple(sorted(tally.items())),
     )
 
 
@@ -139,20 +152,9 @@ def evaluate(db, kinds: tuple[str, ...] = ("text", "exit")) -> list[Result]:
     return [*results, total(results)] if results else []
 
 
-def top_recurring(db, limit: int = 8) -> list[tuple[str, int]]:
+def top_recurring(result: Result, limit: int = 8) -> list[tuple[str, int]]:
     """The failure keys that account for most recurring later-period failures."""
-    tally: dict[str, int] = {}
-    for name in [row["name"] for row in db.execute(_SOURCES)]:
-        starts = [row["started"] for row in db.execute(_STARTS, {"source": name})]
-        cut = cutoff(starts)
-        if cut is None:
-            continue
-        params = {"source": name, "cut": cut}
-        earlier = {row["sig"] for row in db.execute(_EARLIER_KEYS, params)}
-        for row in db.execute(_LATER, params):
-            if row["sig"] in earlier:
-                tally[row["sig"]] = tally.get(row["sig"], 0) + 1
-    return sorted(tally.items(), key=lambda item: (-item[1], item[0]))[:limit]
+    return sorted(result.by_key, key=lambda item: (-item[1], item[0]))[:limit]
 
 
 def shared_keys(db) -> list[str]:
@@ -196,11 +198,11 @@ def report(db) -> str:
         lines += [
             "",
             (
-                f"Distinct later-period failure keys: {keys.later_keys}, "
-                f"already seen earlier: {keys.recurring_keys}"
+                f"Distinct later-period failure keys: {len(keys.later_keys)}, "
+                f"already seen earlier: {len(keys.recurring_keys)}"
             ),
         ]
-    top = top_recurring(db)
+    top = top_recurring(both[-1]) if both else []
     if top:
         lines += ["", "Recurring later-period failures by key"]
         lines += [f"  {count:>4}  {sig}" for sig, count in top]

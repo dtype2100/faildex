@@ -69,6 +69,7 @@ class CallRecord:
     source_path: str | None = None
     source_line: int | None = None
     exit_code: int | None = None
+    compound: bool = False
 
     @property
     def session_key(self) -> str:
@@ -112,7 +113,7 @@ MERGE (s:Session {id: row.session_key})
         WHEN s.started_at IS NULL OR row.started_at < s.started_at THEN row.started_at
         ELSE s.started_at END
 MERGE (c:Call {id: row.call_key})
-  SET c.seq = row.seq, c.tool = row.tool, c.ok = row.ok, c.ts = row.ts, c.exit_code = row.exit_code,
+  SET c.seq = row.seq, c.tool = row.tool, c.ok = row.ok, c.ts = row.ts, c.exit_code = row.exit_code, c.compound = row.compound,
       c.source_path = row.source_path, c.source_line = row.source_line
 MERGE (s)-[:HAS_CALL]->(c)
 """
@@ -181,8 +182,19 @@ def utc(ts: str | None) -> str | None:
     return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def ingest(db, records: Iterable[CallRecord]) -> int:
+def _check_pointer(path: str | None) -> None:
+    if path and (path.startswith(("/", "~")) or ":\\" in path or ".." in path.split("/")):
+        raise ValueError(
+            f"source_path {path!r} is a local path; a shared store takes pointers relative "
+            "to a dataset. Pass local_paths=True only for a private store."
+        )
+
+
+def ingest(db, records: Iterable[CallRecord], local_paths: bool = False) -> int:
     """Write records into the graph. Returns the number of calls written.
+
+    Pointers must be relative to a dataset unless `local_paths` is set, which
+    is meant for a private store that never leaves the machine.
 
     A call that is ingested again replaces what was known about it, and the
     NEXT chain of every touched session is rebuilt from the calls the graph
@@ -191,6 +203,9 @@ def ingest(db, records: Iterable[CallRecord]) -> int:
     ensure_schema(db)
     unique = {r.call_key: replace(r, ts=utc(r.ts)) for r in records}
     recs = sorted(unique.values(), key=lambda r: (r.session_key, r.seq))
+    if not local_paths:
+        for path in {r.source_path for r in recs}:
+            _check_pointer(path)
     started: dict[str, str] = {}
     for r in recs:
         if r.ts and r.ts < started.get(r.session_key, "~"):

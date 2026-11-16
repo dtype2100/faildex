@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from faildex.normalize import command_template, error_signature
+from faildex.normalize import command_template, error_signature, is_compound
 from faildex.schema import CallRecord
 
 AGENT = "claude-code"
@@ -31,6 +31,7 @@ class _Call:
     tool_use_id: object
     tool: str
     command: str | None
+    compound: bool
     ts: str | None
     line: int
 
@@ -86,11 +87,14 @@ def _session_id(record: dict) -> str | None:
     return session_id
 
 
-def _command(tool: str, tool_input: object) -> str | None:
+def _command(tool: str, tool_input: object) -> tuple[str | None, bool]:
+    """(template, compound) of a shell call; (None, False) for other tools."""
     if tool != SHELL_TOOL or not isinstance(tool_input, dict):
-        return None
+        return None, False
     command = tool_input.get("command")
-    return command_template(command) if isinstance(command, str) else None
+    if not isinstance(command, str):
+        return None, False
+    return command_template(command), is_compound(command)
 
 
 def count_tool_uses(path: str | Path) -> int:
@@ -118,11 +122,13 @@ def read_session(path: str | Path) -> list[CallRecord]:
             name = block.get("name")
             tool = name if isinstance(name, str) and name else "unknown"
             ts = record.get("timestamp")
+            command, compound = _command(tool, block.get("input"))
             call = _Call(
                 seq=len(calls),
                 tool_use_id=block.get("id"),
                 tool=tool,
-                command=_command(tool, block.get("input")),
+                command=command,
+                compound=compound,
                 ts=ts if isinstance(ts, str) else None,
                 line=number,
             )
@@ -161,6 +167,7 @@ def read_session(path: str | Path) -> list[CallRecord]:
                 source_path=str(path),
                 source_line=call.line,
                 exit_code=code,
+                compound=call.compound,
             )
         )
     return out

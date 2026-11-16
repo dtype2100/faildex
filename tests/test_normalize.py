@@ -19,6 +19,10 @@ COMMANDS = [
     (r"$p='src\app\Program.cs'; Get-Content $p", "Get-Content"),
     ("$i=0; $j", None),
     ("notes.md", None),
+    ("npm --prefix /Users/alice/private run build", "npm run"),
+    ("git /Users/alice/private", "git"),
+    ("uv run ./scripts/secret-name.py", "uv run"),
+    ("python -m /Users/alice/x", "python -m"),
     ("if [ -f a ]; then\n  git status\nfi", "git status"),
     ("cat <<'EOF' > notes\nplain words here\nEOF\ngit add notes", "cat"),
     ("gh 2>/dev/null", "gh"),
@@ -28,6 +32,8 @@ COMMANDS = [
 ]
 
 SIGNATURES = [
+    ("Traceback (most recent call last):\nKeyError: 1\nMY_PRIVATE_DATA", "keyerror: <n>"),
+    ("Traceback (most recent call last):\n  File x\nplain words", None),
     (
         r"rg: src\app\Frame*.cs: The system cannot find the file",
         "rg: <path>: the system cannot find the file",
@@ -99,3 +105,12 @@ def test_empty_output_has_no_signature():
 
 def test_plain_output_is_not_a_signature():
     assert error_signature("sites/findings.md:12: - it is a mere backend selector") is None
+
+
+def test_compound_means_several_different_programs():
+    from faildex.normalize import is_compound
+
+    assert is_compound("git status && python -c 'raise ValueError()'")
+    assert not is_compound("cd repo && git status")
+    assert not is_compound("git status | head -3")
+    assert not is_compound("git status; git status")

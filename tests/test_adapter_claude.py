@@ -96,7 +96,7 @@ def test_read_dir_walks_jsonl_files_and_accepts_str(tmp_path):
 def test_records_ingest_into_relate():
     records = list(read_dir(FIXTURES))
     db = relate.connect(":memory:")
-    assert ingest(db, records) == len(records) == 6
+    assert ingest(db, records, local_paths=True) == len(records) == 6
 
     def count(query):
         return next(iter(db.execute(query)))["n"]

@@ -149,3 +149,24 @@ def test_timestamps_are_stored_in_utc_so_text_order_is_time_order():
     assert _rows(db, "MATCH (s:Session) RETURN s.started_at AS t") == [
         {"t": "2026-01-01T00:00:00.000000Z"}
     ]
+
+
+def test_a_shared_store_refuses_local_paths():
+    import pytest
+    import relate
+
+    from faildex.schema import ingest
+
+    local = CallRecord(
+        agent="a",
+        session_id="s",
+        seq=0,
+        tool="Bash",
+        ok=True,
+        source_path="/Users/alice/private/session.jsonl",
+    )
+    db = relate.connect(":memory:")
+    for bad in (local, CallRecord("a", "s", 1, "Bash", True, source_path="../up/x.jsonl")):
+        with pytest.raises(ValueError, match="local path"):
+            ingest(db, [bad])
+    assert ingest(db, [local], local_paths=True) == 1

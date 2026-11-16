@@ -94,6 +94,9 @@ _SEGMENTS = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
 _HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\s*\2\b", re.DOTALL)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
 _PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
+_SUBCOMMAND = re.compile(r"^[a-z][a-z0-9:_\-]{0,30}$")
+_MODULE = re.compile(r"^[A-Za-z_][\w.]{0,60}$")
+_EXCEPTION = re.compile(r"^[A-Za-z_][\w.]*(Error|Exception|Exit|Interrupt|Warning)\b")
 _CMDLET = re.compile(r"^[A-Z][a-z]+-[A-Za-z]+$")
 _REDIRECT = re.compile(r"[<>|]")
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -162,6 +165,26 @@ def _program(token: str) -> str:
 
 def command_template(command: str) -> str | None:
     """Return "<program>" or "<program> <subcommand>" for the first real command."""
+    found, fallback = _templates(command)
+    return found[0] if found else fallback
+
+
+def is_compound(command: str) -> bool:
+    """True when the command runs several different programs in sequence.
+
+    The log then says only that the whole line failed, not which part, so a
+    later success of the first program is no proof that the failure was fixed.
+    """
+    return len(set(_templates(command)[0])) > 1
+
+
+def _subcommand(args: list[str]) -> str | None:
+    """The first argument that reads like a subcommand; paths and values never do."""
+    return next((a for a in args if _SUBCOMMAND.match(a)), None)
+
+
+def _templates(command: str) -> tuple[list[str], str | None]:
+    found: list[str] = []
     fallback = None
     script = bool(_PS_SCRIPT.match(command))
     if script and "\n" in command.strip():
@@ -187,13 +210,16 @@ def command_template(command: str) -> str | None:
         if program in ("python", "python3", "py") and "-m" in tokens:
             index = tokens.index("-m")
             module = tokens[index + 1] if index + 1 < len(tokens) else ""
-            return f"{program} -m {module}".strip()
-        if program == "uv" and args[:1] == ["run"] and len(args) > 1:
-            return f"uv run {_program(args[1])}"
-        if program in SUBCOMMAND_TOOLS and args:
-            return f"{program} {args[0]}"
-        return program
-    return fallback
+            module = module if _MODULE.match(module) else ""
+            found.append(f"{program} -m {module}".strip())
+        elif program == "uv" and args[:1] == ["run"] and len(args) > 1:
+            inner = _program(args[1])
+            found.append(f"uv run {inner}" if _SUBCOMMAND.match(inner) else "uv run")
+        elif program in SUBCOMMAND_TOOLS and _subcommand(args):
+            found.append(f"{program} {_subcommand(args)}")
+        else:
+            found.append(program)
+    return found, fallback
 
 
 def _is_failure_line(line: str) -> bool:
@@ -213,13 +239,15 @@ def error_signature(text: str) -> str | None:
     ]
     if not lines:
         return None
+    picked = None
     if any(line.startswith("Traceback") for line in lines):
-        picked = lines[-1]
-    else:
+        # The exception line, not whatever the program printed after it.
+        picked = next((line for line in reversed(lines) if _EXCEPTION.match(line)), None)
+    if picked is None:
         # Without an error word the line is ordinary output, which must not enter the graph.
         picked = next((line for line in lines if _is_failure_line(line)), None)
-        if picked is None:
-            return None
+    if picked is None:
+        return None
     picked = re.sub(r"<[^>]{1,40}>", "", picked)
     for pattern, mask in _MASKS:
         picked = pattern.sub(mask, picked)

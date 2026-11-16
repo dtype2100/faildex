@@ -135,3 +135,29 @@ def test_hook_is_silent_for_unknown_commands_other_tools_and_bad_input(tmp_path)
     assert respond(_payload("git push", tool="Edit"), store) == ""
     assert respond("not json", store) == ""
     assert respond(_payload("git push"), tmp_path / "missing") == ""
+
+
+def test_warnings_for_a_command_count_only_that_command():
+    db = relate.connect(":memory:")
+    records = [
+        _call("p1", 0, ok=False, sig="permission denied"),
+        _call("p1", 1),
+        _call("p2", 0, ok=False, sig="permission denied"),
+        _call("p2", 1),
+        _call("r1", 0, ok=False, command="rm", sig="permission denied"),
+        _call("r2", 0, ok=False, command="rm", sig="permission denied"),
+    ]
+    ingest(db, records)
+    (warning,) = warnings_for(db, "rm")
+    assert warning.command == "rm"
+    assert (len(warning.sessions), warning.calls, warning.recovered) == (2, 2, 0)
+    assert "no recovery on record" in warning.rule()
+
+
+def test_a_compound_command_line_proves_no_recovery():
+    from dataclasses import replace
+
+    db = relate.connect(":memory:")
+    failed = replace(_call("s1", 0, ok=False, sig="valueerror"), compound=True)
+    ingest(db, [failed, _call("s1", 1), replace(failed, session_id="s2")])
+    assert proposals(db)[0].recovered == 0

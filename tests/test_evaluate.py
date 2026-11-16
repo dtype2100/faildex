@@ -1,6 +1,6 @@
 import relate
 
-from faildex.evaluate import cutoff, evaluate, report, shared_keys
+from faildex.evaluate import evaluate, report, shared_keys, split
 from faildex.schema import CallRecord, ingest
 
 
@@ -40,11 +40,12 @@ def _graph():
     return db
 
 
-def test_cutoff_puts_the_last_thirty_percent_later():
-    starts = [f"d{n:02d}" for n in range(10)]
-    assert cutoff(starts) == "d07"
-    assert cutoff(["only"]) is None
-    assert cutoff([]) is None
+def test_split_is_exact_even_when_sessions_start_together():
+    sessions = [(f"s{n}", "same") for n in range(10)]
+    earlier, later, cut = split(sessions)
+    assert (len(earlier), len(later), cut) == (7, 3, "same")
+    assert split([("only", "t")]) is None
+    assert split([]) is None
 
 
 def test_recurrence_and_warnable_on_a_known_graph():
@@ -61,8 +62,8 @@ def test_recurrence_and_warnable_on_a_known_graph():
 def test_a_failure_first_seen_later_is_not_recurring():
     db = _graph()
     later_only = next(r for r in evaluate(db) if r.source == "demo")
-    assert later_only.later_keys == 3
-    assert later_only.recurring_keys == 2
+    assert len(later_only.later_keys) == 3
+    assert len(later_only.recurring_keys) == 2
 
 
 def test_shared_keys_need_two_agents():
@@ -93,3 +94,19 @@ def test_what_an_earlier_session_did_after_the_cut_is_not_known_earlier():
     demo = evaluate(db)[0]
     assert demo.later_failures == 2
     assert demo.recurring == 0
+
+
+def test_a_recovery_of_one_command_does_not_make_another_command_warnable():
+    records = [
+        _call("s1", 1, 0, ok=False, sig="permission denied"),
+        _call("s1", 1, 1),
+    ]
+    records += [_call(f"s{n}", n, 0) for n in range(2, 8)]
+    records += [_call("s8", 8, 0, ok=False, command="rm", sig="permission denied")]
+    records += [_call("s9", 9, 0, ok=False, sig="permission denied"), _call("s10", 10, 0)]
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    db.execute("CREATE (:Source {name: 'demo'})")
+    db.execute("MATCH (s:Session), (d:Source {name: 'demo'}) MERGE (s)-[:FROM]->(d)")
+    demo = evaluate(db)[0]
+    assert (demo.later_failures, demo.recurring, demo.warnable) == (2, 2, 1)
