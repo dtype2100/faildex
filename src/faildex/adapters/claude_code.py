@@ -12,6 +12,7 @@ signature. Raw command text and raw output are never put into a record.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from faildex.schema import CallRecord
 
 AGENT = "claude-code"
 SHELL_TOOL = "Bash"
+_EXIT_CODE = re.compile(r"(?:<error>)?\s*Exit code:? (-?\d+)")
 
 
 @dataclass
@@ -106,8 +108,8 @@ def read_session(path: str | Path) -> list[CallRecord]:
     """
     session_id = None
     calls: list[_Call] = []
-    # tool_use_id -> (failed, error signature); the first result of an id wins.
-    results: dict[object, tuple[bool, str | None]] = {}
+    # tool_use_id -> (failed, error signature, exit code); the first result of an id wins.
+    results: dict[object, tuple[bool, str | None, int | None]] = {}
     tools: dict[object, str] = {}
 
     for number, record in _records(Path(path)):
@@ -132,17 +134,20 @@ def read_session(path: str | Path) -> list[CallRecord]:
             if not isinstance(tool_use_id, str) or tool_use_id in results:
                 continue
             failed = bool(block.get("is_error"))
-            sig = None
-            if failed and tools.get(tool_use_id) == SHELL_TOOL:
-                sig = error_signature(_text(block.get("content")))
-            results[tool_use_id] = (failed, sig)
+            sig = code = None
+            if failed:
+                text = _text(block.get("content"))
+                sig = error_signature(text)
+                found = _EXIT_CODE.match(text) if tools.get(tool_use_id) == SHELL_TOOL else None
+                code = int(found.group(1)) if found else None
+            results[tool_use_id] = (failed, sig, code)
 
     session_id = session_id or Path(path).stem
     out = []
     for call in calls:
         if not isinstance(call.tool_use_id, str) or call.tool_use_id not in results:
             continue
-        failed, sig = results[call.tool_use_id]
+        failed, sig, code = results[call.tool_use_id]
         out.append(
             CallRecord(
                 agent=AGENT,
@@ -155,6 +160,7 @@ def read_session(path: str | Path) -> list[CallRecord]:
                 error_sig=sig,
                 source_path=str(path),
                 source_line=call.line,
+                exit_code=code,
             )
         )
     return out

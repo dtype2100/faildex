@@ -20,7 +20,7 @@ build-store:
 	uv run faildex build-store
 
 eval:
-	@echo "not implemented" && exit 1
+	@uv run faildex eval
 
 demo:
 	@echo "not implemented" && exit 1

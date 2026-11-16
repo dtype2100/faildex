@@ -39,6 +39,7 @@ class _Call(NamedTuple):
     ok: bool
     command: str | None
     error_sig: str | None
+    exit_code: int | None = None
 
 
 class _Row(NamedTuple):
@@ -58,9 +59,9 @@ def _text(content) -> str:
     return ""
 
 
-def _failed(output: str) -> bool:
+def _exit_code(output: str) -> int | None:
     match = _EXIT_CODE.match(output)
-    return bool(match) and int(match.group(1)) != 0
+    return int(match.group(1)) if match else None
 
 
 def _shell_command(arguments) -> str | None:
@@ -95,7 +96,8 @@ def _calls(messages) -> list[_Call]:
             output = outputs.get(tool_call.get("id")) if tool_call.get("id") else None
             if not isinstance(tool, str) or not tool or output is None:
                 continue
-            ok = not _failed(output)
+            code = _exit_code(output)
+            ok = not code
             command = error_sig = None
             if tool == SHELL_TOOL:
                 raw = _shell_command(function.get("arguments"))
@@ -103,7 +105,7 @@ def _calls(messages) -> list[_Call]:
                     continue
                 command = command_template(raw)
                 error_sig = None if ok else error_signature(output)
-            calls.append(_Call(tool, ok, command, error_sig))
+            calls.append(_Call(tool, ok, command, error_sig, None if ok else code))
     return calls
 
 
@@ -156,6 +158,7 @@ def _records(numbered: Iterable[tuple[int, object]], source_path: str) -> Iterat
                     error_sig=call.error_sig,
                     source_path=source_path,
                     source_line=row.line,
+                    exit_code=call.exit_code,
                 )
                 seq += 1
 

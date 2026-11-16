@@ -18,6 +18,20 @@ def _build_store(args: argparse.Namespace) -> int:
     return 0
 
 
+def _eval(args: argparse.Namespace) -> int:
+    from faildex.evaluate import report
+    from faildex.store import open_store
+
+    try:
+        db = open_store(args.store)
+    except FileNotFoundError as err:
+        print(f"error: {err}")
+        return 1
+    print(report(db))
+    db.close()
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -35,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--data", type=Path, default=Path(".tmp/data"), help="downloaded datasets")
     build.add_argument("--out", type=Path, default=Path("store"), help="store directory")
     build.set_defaults(run=_build_store)
+
+    evaluate = commands.add_parser("eval", help="recurrence of failures in the store")
+    evaluate.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+    evaluate.set_defaults(run=_eval)
 
     sources = commands.add_parser("sources", help="list the pinned public datasets")
     sources.set_defaults(run=_sources)
