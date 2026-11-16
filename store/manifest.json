@@ -1,0 +1,197 @@
+{
+  "format_version": 5,
+  "next_node_id": 15009,
+  "next_rel_id": 38336,
+  "checkpoint_lsn": 33,
+  "commit_ts": 38,
+  "node_parts": [
+    {
+      "path": "nodes/0-262144-493fa426a31883637090c55e5c282edf.parquet",
+      "id_lo": 0,
+      "id_hi": 262144,
+      "rows": 15009,
+      "bytes": 324188
+    }
+  ],
+  "rel_parts": [
+    {
+      "path": "relationships/0-262144-bf9b6bde2e69971467ea67e24592369a.parquet",
+      "id_lo": 0,
+      "id_hi": 262144,
+      "rows": 38336,
+      "bytes": 510498
+    }
+  ],
+  "bytes_per_node": 21.599573589179826,
+  "bytes_per_rel": 13.316412771285476,
+  "codec": "parquet",
+  "indexes": [
+    {
+      "name": "call_id",
+      "label": "Call",
+      "property": "id#RANGE#call_id"
+    },
+    {
+      "name": "command_template",
+      "label": "Command",
+      "property": "template#RANGE#command_template"
+    },
+    {
+      "name": "errorsig_sig",
+      "label": "ErrorSig",
+      "property": "sig#RANGE#errorsig_sig"
+    },
+    {
+      "name": "session_id",
+      "label": "Session",
+      "property": "id#RANGE#session_id"
+    },
+    {
+      "name": "source_name",
+      "label": "Source",
+      "property": "name#RANGE#source_name"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "call_id",
+      "relationship": false,
+      "label": "Call",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "command_template",
+      "relationship": false,
+      "label": "Command",
+      "properties": [
+        "template"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "errorsig_sig",
+      "relationship": false,
+      "label": "ErrorSig",
+      "properties": [
+        "sig"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "session_id",
+      "relationship": false,
+      "label": "Session",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "source_name",
+      "relationship": false,
+      "label": "Source",
+      "properties": [
+        "name"
+      ],
+      "kind": "unique",
+      "property_type": null
+    }
+  ],
+  "theater": {
+    "databases": {
+      "neo4j": [
+        25,
+        false
+      ],
+      "system": [
+        25,
+        false
+      ],
+      "system_ontologies": [
+        25,
+        false
+      ]
+    },
+    "index_details": {
+      "call_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Call"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "command_template": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Command"
+        ],
+        "properties": [
+          "template"
+        ],
+        "with_properties": []
+      },
+      "errorsig_sig": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "ErrorSig"
+        ],
+        "properties": [
+          "sig"
+        ],
+        "with_properties": []
+      },
+      "session_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Session"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "source_name": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Source"
+        ],
+        "properties": [
+          "name"
+        ],
+        "with_properties": []
+      }
+    },
+    "index_options": {
+      "call_id": {},
+      "command_template": {},
+      "errorsig_sig": {},
+      "session_id": {},
+      "source_name": {}
+    },
+    "graph_types": {},
+    "current_graph_type": {
+      "node_types": [],
+      "edge_types": [],
+      "constraints": [],
+      "drop_constraint_names": []
+    },
+    "derived_constraints": {}
+  },
+  "query_engine": "in-memory",
+  "write_engine": "local"
+}
