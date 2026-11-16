@@ -43,6 +43,18 @@ SIGNATURES = [
     ),
     ("command timed out after 120000 milliseconds", "command timed out after <n> milliseconds"),
     ("ModuleNotFoundError: No module named 'relate'", "modulenotfounderror: no module named <s>"),
+    (
+        "ERROR: file or directory not found: tests/test_billing.py",
+        "error: file or directory not found: <path>",
+    ),
+    (
+        "fatal: Could not resolve host: git.acme-internal.example",
+        "fatal: could not resolve host: <host>",
+    ),
+    (
+        "fatal: unable to access 'https://github.com/a/b.git/': timeout",
+        "fatal: unable to access <s>: timeout",
+    ),
 ]
 
 
