@@ -16,7 +16,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 RECOVERY_HOPS = 5
-RETRY = "retry with changed arguments"
+RETRY = "retry"
 
 # Narrows every query to the failure keys one command has produced.
 _FOR_COMMAND = """
@@ -90,7 +90,7 @@ class Failure:
         if not self.fix:
             return f"{head} ({seen}): no recovery on record yet; stop and check before retrying."
         how = (
-            "the same command worked after its arguments were changed"
+            "the same command succeeded on a later try in the same session"
             if self.fix == RETRY
             else f"earlier sessions got past it by running `{self.fix}` first"
         )

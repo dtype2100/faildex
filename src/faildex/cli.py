@@ -84,6 +84,13 @@ def _hook(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mcp(args: argparse.Namespace) -> int:
+    from faildex.mcp_server import serve
+
+    serve(args.store)
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -117,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
 
     hook = commands.add_parser("hook", help="Claude Code PreToolUse hook (JSON on stdin)")
     hook.set_defaults(run=_hook)
+
+    mcp = commands.add_parser("mcp", help="serve preflight, evidence and recurring over MCP")
+    mcp.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+    mcp.set_defaults(run=_mcp)
 
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
         sub.add_argument("--store", type=Path, default=Path("store"), help="store directory")

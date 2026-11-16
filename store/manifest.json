@@ -3,26 +3,26 @@
   "next_node_id": 15045,
   "next_rel_id": 38448,
   "checkpoint_lsn": 33,
-  "commit_ts": 38,
+  "commit_ts": 49,
   "node_parts": [
     {
-      "path": "nodes/0-262144-8e6d927e84f92a127022dfdbe3aaf916.parquet",
+      "path": "nodes/0-262144-a3ae02e44e1c9def9090163fc7d15a9a.parquet",
       "id_lo": 0,
       "id_hi": 262144,
       "rows": 15045,
-      "bytes": 333545
+      "bytes": 334305
     }
   ],
   "rel_parts": [
     {
-      "path": "relationships/0-262144-cee00265056c58616be47b30db032a59.parquet",
+      "path": "relationships/0-262144-a10bc33e37668d8fdac5e5751d71cb80.parquet",
       "id_lo": 0,
       "id_hi": 262144,
       "rows": 38448,
       "bytes": 511754
     }
   ],
-  "bytes_per_node": 22.16982386174809,
+  "bytes_per_node": 22.220338983050848,
   "bytes_per_rel": 13.310289221806073,
   "codec": "parquet",
   "indexes": [

@@ -3,6 +3,9 @@
 Sessions of each public dataset are ordered by start time and split once: the
 first 70% are the earlier period (what faildex would have learned from) and the
 last 30% are the later period (what it is scored on). No session is in both.
+The cut is the start time of the first later session, and an earlier session
+that was still running at the cut contributes only what happened before it,
+so nothing from the scored period leaks into what was "already known".
 
     recurrence   share of later-period failures whose failure key was already
                  seen in an earlier-period session
@@ -35,8 +38,8 @@ RETURN c.id AS call, e.sig AS sig, e.kind AS kind
 """
 
 _EARLIER_KEYS = """
-MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)-[:HAS_CALL]->(:Call)-[:FAILED_WITH]->(e:ErrorSig)
-WHERE s.started_at < $cut
+MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
+WHERE s.started_at < $cut AND c.ts < $cut
 RETURN e.sig AS sig, count(DISTINCT s) AS sessions
 """
 
@@ -46,6 +49,7 @@ _RECOVERED_KEYS = f"""
 MATCH (d:Source {{name: $source}})<-[:FROM]-(s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.started_at < $cut
 MATCH (f)-[:RAN]->(k:Command)<-[:RAN]-(g:Call {{ok: true}})
+WHERE g.ts < $cut
 MATCH (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g)
 RETURN DISTINCT e.sig AS sig
 """

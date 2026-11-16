@@ -92,3 +92,60 @@ def test_failure_key_skips_no_match_exits_and_unknown_commands():
     assert _failed(command="<script>", exit_code=1).failure is None
     assert _failed(exit_code=1).failure is None
     assert CallRecord(agent="a", session_id="s", seq=0, tool="Bash", ok=True).failure is None
+
+
+def _c(seq, ok=True, command="git push", sig=None, ts=None, session="s"):
+    return CallRecord(
+        agent="a",
+        session_id=session,
+        seq=seq,
+        tool="Bash",
+        ok=ok,
+        command=command,
+        error_sig=sig,
+        ts=ts,
+    )
+
+
+def _rows(db, query):
+    return [dict(r) for r in db.execute(query)]
+
+
+def test_reingesting_a_changed_call_replaces_its_links():
+    import relate
+
+    from faildex.schema import ingest
+
+    db = relate.connect(":memory:")
+    ingest(db, [_c(0, ok=False, sig="first failure")])
+    ingest(db, [_c(0, ok=True, command="npm run")])
+    assert _rows(db, "MATCH (:Call)-[:FAILED_WITH]->(e) RETURN e.sig AS sig") == []
+    assert _rows(db, "MATCH (:Call)-[:RAN]->(k) RETURN k.template AS t") == [{"t": "npm run"}]
+
+
+def test_duplicate_and_partial_loads_keep_one_next_chain():
+    import relate
+
+    from faildex.schema import ingest
+
+    db = relate.connect(":memory:")
+    ingest(db, [_c(0), _c(1), _c(0), _c(1)])
+    ingest(db, [_c(3)])
+    ingest(db, [_c(2)])
+    chain = _rows(db, "MATCH (a:Call)-[:NEXT]->(b:Call) RETURN a.seq AS a, b.seq AS b ORDER BY a")
+    assert chain == [{"a": 0, "b": 1}, {"a": 1, "b": 2}, {"a": 2, "b": 3}]
+
+
+def test_timestamps_are_stored_in_utc_so_text_order_is_time_order():
+    import relate
+
+    from faildex.schema import ingest, utc
+
+    assert utc("2026-01-01T01:00:00-08:00") == "2026-01-01T09:00:00.000000Z"
+    assert utc("2026-01-01T00:30:00Z") < utc("2026-01-01T01:00:00-08:00")
+    assert utc("not a time") is None
+    db = relate.connect(":memory:")
+    ingest(db, [_c(0, ts="2026-01-01T09:00:00+09:00"), _c(1, ts="2026-01-01T00:00:01Z")])
+    assert _rows(db, "MATCH (s:Session) RETURN s.started_at AS t") == [
+        {"t": "2026-01-01T00:00:00.000000Z"}
+    ]
