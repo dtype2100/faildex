@@ -38,7 +38,8 @@ _LATER = """
 MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $later
 OPTIONAL MATCH (c)-[:RAN]->(k:Command)
-RETURN c.id AS call, e.sig AS sig, e.kind AS kind, k.template AS command
+RETURN c.id AS call, e.sig AS sig, e.kind AS kind, k.template AS command,
+       coalesce(c.compound, false) AS compound
 """
 
 _EARLIER_KEYS = """
@@ -53,7 +54,7 @@ _RECOVERED = f"""
 MATCH (s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $earlier AND f.ts < $cut AND coalesce(f.compound, false) = false
 MATCH (f)-[:RAN]->(k:Command)<-[:RAN]-(g:Call {{ok: true}})
-WHERE g.ts < $cut AND coalesce(g.compound, false) = false
+WHERE g.ts < $cut AND g.ts >= f.ts AND coalesce(g.compound, false) = false
 MATCH (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g)
 RETURN DISTINCT e.sig AS sig, k.template AS command
 """
@@ -118,7 +119,11 @@ def evaluate_source(db, source: str, kinds: tuple[str, ...] = ("text", "exit")) 
         later_sessions=len(later_ids),
         later_failures=len(later),
         recurring=len(recurring),
-        warnable=sum(1 for row in recurring if (row["sig"], row["command"]) in recovered),
+        warnable=sum(
+            1
+            for row in recurring
+            if not row["compound"] and (row["sig"], row["command"]) in recovered
+        ),
         later_keys=frozenset(row["sig"] for row in later),
         recurring_keys=frozenset(row["sig"] for row in recurring),
         by_key=tuple(sorted(tally.items())),

@@ -24,17 +24,18 @@ and did that session also record a way out?
    same command failing with that key and then succeeding within five calls of
    the same session. Command lines that chain several programs are skipped on
    both sides, because the log does not say which part failed or succeeded.
-   A call is dated by when its result arrived.
+   A call is dated by when its result arrived, and a success counts only if it
+   arrived after the failure.
 
 ## Result
 
 | Dataset | Sessions earlier / later | Later failures | Recurring | Warnable (of recurring) |
 |---|---|---|---|---|
-| codex-trajectories | 233 / 101 | 119 | 81 (68.1%) | 53 (65.4%) |
+| codex-trajectories | 233 / 101 | 119 | 81 (68.1%) | 49 (60.5%) |
 | wisp (Claude Code) | 61 / 27 | 2 | 2 | 0 |
-| All | 294 / 128 | 121 | 83 (68.6%) | 53 (63.9%) |
+| All | 294 / 128 | 121 | 83 (68.6%) | 49 (59.0%) |
 
-With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 47 warnable.
+With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 45 warnable.
 
 38 distinct failure keys appear in the later period; 17 of them were seen earlier.
 

@@ -37,6 +37,12 @@ COMMANDS = [
 ]
 
 SIGNATURES = [
+    ('error: "customer-secret-' + "x" * 210 + '"', "error: <s>"),
+    ('error: cannot open "customer-secret-never-closed', "error: cannot open <s>"),
+    (
+        "the user doesn't want this; it can't proceed: error",
+        "the user doesn't want this; it can't proceed: error",
+    ),
     ("Traceback (most recent call last):\nKeyError: 1\nMY_PRIVATE_DATA", "keyerror: <n>"),
     ("Traceback (most recent call last):\n  File x\nplain words", None),
     (
@@ -125,3 +131,6 @@ def test_compound_means_several_different_programs():
     assert not is_compound("cd repo && git status")
     assert not is_compound("git status | head -3")
     assert is_compound("python pass.py; python fail.py")
+    assert is_compound("git push || echo ignored")
+    assert is_compound("git push; echo done")
+    assert not is_compound("echo hello")

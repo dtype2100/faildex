@@ -17,7 +17,7 @@ ORDER BY sessions DESC, calls DESC LIMIT 15`,
   recovery: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)
 WHERE coalesce(f.compound, false) = false
 MATCH p = (f)-[:NEXT*1..${RECOVERY_HOPS}]->(g:Call {ok: true}), (g)-[:RAN]->(k)
-WHERE coalesce(g.compound, false) = false
+WHERE coalesce(g.compound, false) = false AND (f.ts IS NULL OR g.ts IS NULL OR g.ts >= f.ts)
 WITH f, k, min(length(p)) AS hops
 MATCH q = (f)-[:NEXT*1..${RECOVERY_HOPS}]->(:Call {ok: true}) WHERE length(q) = hops
 WITH f, k, hops, nodes(q)[1] AS step
@@ -42,14 +42,14 @@ RETURN s.id AS id, s.started_at AS started ORDER BY started, id`,
   later: `MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $later
 OPTIONAL MATCH (c)-[:RAN]->(k:Command)
-RETURN c.id AS call, e.sig AS sig, k.template AS command`,
+RETURN c.id AS call, e.sig AS sig, k.template AS command, coalesce(c.compound, false) AS compound`,
   earlierKeys: `MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $earlier AND c.ts < $cut
 RETURN DISTINCT e.sig AS sig`,
   recovered: `MATCH (s:Session)-[:HAS_CALL]->(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WHERE s.id IN $earlier AND f.ts < $cut AND coalesce(f.compound, false) = false
 MATCH (f)-[:RAN]->(k:Command)<-[:RAN]-(g:Call {ok: true})
-WHERE g.ts < $cut AND coalesce(g.compound, false) = false
+WHERE g.ts < $cut AND g.ts >= f.ts AND coalesce(g.compound, false) = false
 MATCH (f)-[:NEXT*1..${RECOVERY_HOPS}]->(g)
 RETURN DISTINCT e.sig AS sig, k.template AS command`,
 };
@@ -129,7 +129,7 @@ export function evaluate(db, sources) {
     out.push({
       dataset: name, earlier: earlier.length, later: later.length, failures: failures.length,
       recurring: recurring.length,
-      warnable: recurring.filter((f) => fixed.has(`${f.sig}\u0000${f.command}`)).length,
+      warnable: recurring.filter((f) => !f.compound && fixed.has(`${f.sig}\u0000${f.command}`)).length,
     });
   }
   const sum = (key) => out.reduce((n, r) => n + r[key], 0);

@@ -7,7 +7,6 @@ dist/
 .tmp/
 .DS_Store
 # Relate store: per-machine files
-*.lock
 .cypherlite.lock
 .cypherlite.writer
 wal/

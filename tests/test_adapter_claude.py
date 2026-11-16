@@ -156,3 +156,38 @@ def test_a_call_is_dated_by_when_its_result_arrived(tmp_path):
     path.write_text("\n".join(json.dumps(line) for line in lines))
     (record,) = read_session(path)
     assert record.ts == "2026-01-09T00:00:00Z"
+
+
+def test_a_call_logged_twice_is_one_call(tmp_path):
+    import json
+
+    from faildex.adapters.claude_code import read_session
+
+    use = {
+        "type": "assistant",
+        "sessionId": "dup",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "message": {
+            "content": [
+                {"type": "tool_use", "id": "dup", "name": "Bash", "input": {"command": "git push"}}
+            ]
+        },
+    }
+    result = {
+        "type": "user",
+        "sessionId": "dup",
+        "timestamp": "2026-01-01T00:00:01Z",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "dup",
+                    "is_error": True,
+                    "content": "error: failed to push",
+                }
+            ]
+        },
+    }
+    path = tmp_path / "dup.jsonl"
+    path.write_text("\n".join(json.dumps(line) for line in (use, use, result)))
+    assert len(read_session(path)) == 1
