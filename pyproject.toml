@@ -1,0 +1,27 @@
+[project]
+name = "faildex"
+version = "0.1.0"
+description = "A failure index for coding agents: recurring failures and their fixes, in an embedded Relate graph."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["relate-db==1.0.1"]
+
+[project.scripts]
+faildex = "faildex.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/faildex"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
