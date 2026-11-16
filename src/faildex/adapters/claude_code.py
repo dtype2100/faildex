@@ -112,8 +112,9 @@ def read_session(path: str | Path) -> list[CallRecord]:
     """
     session_id = None
     calls: list[_Call] = []
-    # tool_use_id -> (failed, error signature, exit code); the first result of an id wins.
-    results: dict[object, tuple[bool, str | None, int | None]] = {}
+    # tool_use_id -> (failed, error signature, exit code, time the result arrived);
+    # the first result of an id wins.
+    results: dict[object, tuple[bool, str | None, int | None, str | None]] = {}
     tools: dict[object, str] = {}
 
     for number, record in _records(Path(path)):
@@ -146,14 +147,20 @@ def read_session(path: str | Path) -> list[CallRecord]:
                 sig = error_signature(text)
                 found = _EXIT_CODE.match(text) if tools.get(tool_use_id) == SHELL_TOOL else None
                 code = int(found.group(1)) if found else None
-            results[tool_use_id] = (failed, sig, code)
+            arrived = record.get("timestamp")
+            results[tool_use_id] = (
+                failed,
+                sig,
+                code,
+                arrived if isinstance(arrived, str) else None,
+            )
 
     session_id = session_id or Path(path).stem
     out = []
     for call in calls:
         if not isinstance(call.tool_use_id, str) or call.tool_use_id not in results:
             continue
-        failed, sig, code = results[call.tool_use_id]
+        failed, sig, code, arrived = results[call.tool_use_id]
         out.append(
             CallRecord(
                 agent=AGENT,
@@ -161,7 +168,8 @@ def read_session(path: str | Path) -> list[CallRecord]:
                 seq=call.seq,
                 tool=call.tool,
                 ok=not failed,
-                ts=call.ts,
+                # When the outcome became known: a call may return long after it was made.
+                ts=arrived or call.ts,
                 command=call.command,
                 error_sig=sig,
                 source_path=str(path),

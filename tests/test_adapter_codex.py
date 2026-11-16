@@ -183,3 +183,15 @@ def test_equal_instants_keep_segment_order_whatever_the_spelling():
         _turn("s", "2026-01-01T00:00:00+00:00", 2, "npm test", "b"),
     ]
     assert [r.command for r in read_rows(rows, "demo/log.jsonl")] == ["git status", "npm test"]
+
+
+def test_an_event_exported_into_two_files_is_counted_once(tmp_path):
+    import json
+
+    from faildex.adapters.codex import read_files
+
+    first, second = tmp_path / "train.jsonl", tmp_path / "eval.jsonl"
+    turn = json.dumps(_turn("s", "2026-01-01T00:00:00Z", 1, "git push", "same-call"))
+    first.write_text(turn)
+    second.write_text(turn)
+    assert [r.seq for r in read_files([first, second])] == [0]

@@ -161,3 +161,18 @@ def test_a_compound_command_line_proves_no_recovery():
     failed = replace(_call("s1", 0, ok=False, sig="valueerror"), compound=True)
     ingest(db, [failed, _call("s1", 1), replace(failed, session_id="s2")])
     assert proposals(db)[0].recovered == 0
+
+
+def test_a_compound_success_is_not_a_recovery():
+    from dataclasses import replace
+
+    db = relate.connect(":memory:")
+    ingest(
+        db,
+        [
+            _call("s1", 0, ok=False, sig="rejected"),
+            replace(_call("s1", 1), compound=True),
+            _call("s2", 0, ok=False, sig="rejected"),
+        ],
+    )
+    assert proposals(db)[0].recovered == 0

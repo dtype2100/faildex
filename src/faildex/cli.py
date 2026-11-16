@@ -91,6 +91,52 @@ def _mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ingest(args: argparse.Namespace) -> int:
+    """Private by construction: the store stays on this machine and keeps local pointers."""
+    import relate
+
+    from faildex.adapters import claude_code, codex
+    from faildex.build import counts
+    from faildex.schema import ingest
+
+    if not args.claude and not args.codex:
+        print("error: give --claude DIR or --codex FILE")
+        return 1
+    missing = [str(p) for p in [*args.claude, *args.codex] if not p.exists()]
+    if missing:
+        print(f"error: not found: {', '.join(missing)}")
+        return 1
+    records = [r for root in args.claude for r in claude_code.read_dir(root)]
+    records += list(codex.read_files(args.codex)) if args.codex else []
+    args.store.parent.mkdir(parents=True, exist_ok=True)
+    db = relate.connect(str(args.store))
+    try:
+        written = ingest(db, records, local_paths=True)
+        db.commit()
+        db.flush()
+        found = counts(db)
+    finally:
+        db.close()
+    print(f"ingested {written:,} calls into {args.store}")
+    print(
+        f"  sessions {found['Session']:,}  calls {found['Call']:,}  "
+        f"failed {found['failed calls']:,}  failure keys {found['ErrorSig']:,}"
+    )
+    return 0
+
+
+def _export_web(args: argparse.Namespace) -> int:
+    from faildex.export import write
+
+    db = _open(args)
+    if db is None:
+        return 1
+    size = write(db, args.out)
+    db.close()
+    print(f"wrote {args.out} ({size / 1e6:.2f} MB)")
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -110,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     build.set_defaults(run=_build_store)
 
     evaluate = commands.add_parser("eval", help="recurrence of failures in the store")
-    evaluate.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+    evaluate.add_argument("--store", type=Path, default=None, help="store directory")
     evaluate.set_defaults(run=_eval)
 
     rules = commands.add_parser("rules", help="propose rules from recurring failures")
@@ -126,13 +172,40 @@ def main(argv: list[str] | None = None) -> int:
     hook.set_defaults(run=_hook)
 
     mcp = commands.add_parser("mcp", help="serve preflight, evidence and recurring over MCP")
-    mcp.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+    mcp.add_argument("--store", type=Path, default=None, help="store directory")
     mcp.set_defaults(run=_mcp)
 
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
-        sub.add_argument("--store", type=Path, default=Path("store"), help="store directory")
+        sub.add_argument("--store", type=Path, default=None, help="store directory")
         sub.add_argument("--min-sessions", type=int, default=2, help="sessions a failure must span")
         sub.add_argument("--top", type=int, default=top, help="how many to show")
+
+    ingest = commands.add_parser(
+        "ingest", help="read your own agent logs into a private store on this machine"
+    )
+    ingest.add_argument(
+        "--claude",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="a directory of Claude Code transcripts (*.jsonl), searched recursively",
+    )
+    ingest.add_argument(
+        "--codex",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="FILE",
+        help="a Codex trajectories jsonl file",
+    )
+    ingest.add_argument("--store", type=Path, default=None, help="store directory")
+    ingest.set_defaults(run=_ingest)
+
+    web = commands.add_parser("export-web", help="write the store as JSON for the browser demo")
+    web.add_argument("--out", type=Path, default=Path("site/data.json"), help="output file")
+    web.add_argument("--store", type=Path, default=None, help="store directory")
+    web.set_defaults(run=_export_web)
 
     sources = commands.add_parser("sources", help="list the pinned public datasets")
     sources.set_defaults(run=_sources)
@@ -141,6 +214,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.command:
         parser.print_help()
         return 0
+    if getattr(args, "store", "set") is None:
+        from faildex.store import PRIVATE_STORE, default_store
+
+        args.store = PRIVATE_STORE.expanduser() if args.command == "ingest" else default_store()
     return args.run(args)
 
 

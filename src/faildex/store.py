@@ -9,9 +9,12 @@ without touching the data, and then reopens read-only.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import relate
+
+PRIVATE_STORE = Path("~/.faildex/store")
 
 
 def open_store(path: str | Path, read_only: bool = True):
@@ -26,3 +29,17 @@ def open_store(path: str | Path, read_only: bool = True):
     except relate.OperationalError:
         relate.connect(str(path)).close()
         return relate.connect(str(path), read_only=True)
+
+
+def default_store() -> Path:
+    """Where commands look when no store is named.
+
+    `FAILDEX_STORE` if set; otherwise the store of the current directory (the
+    committed public one, inside this repository); otherwise the private store
+    in the home directory that `faildex ingest` writes.
+    """
+    named = os.environ.get("FAILDEX_STORE")
+    if named:
+        return Path(named).expanduser()
+    local = Path("store")
+    return local if (local / "manifest.json").is_file() else PRIVATE_STORE.expanduser()

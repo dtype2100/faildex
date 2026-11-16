@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>faildex: the failures coding agents repeat</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #fffdf8; --ink: #1d1b16; --muted: #6b6558; --line: #ddd6c6;
+    --accent: #b3401f; --ok: #2f6b3c; --code: #efeadd;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171613; --panel: #1f1e1a; --ink: #ece7da; --muted: #a39c8b; --line: #37342c;
+            --accent: #f08a66; --ok: #86c995; --code: #2a2822; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 Georgia, "Iowan Old Style", "Times New Roman", serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h1 em { color: var(--accent); font-style: normal; }
+  h2 { font-size: 22px; margin: 44px 0 6px; }
+  p { margin: 8px 0; max-width: 68ch; }
+  .muted { color: var(--muted); }
+  .mono, code, pre, td.k, th, button, select, textarea, input { font-family: var(--mono); font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 22px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .stat b { display: block; font: 600 26px/1.1 var(--mono); }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .stat.hot b { color: var(--accent); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--line); padding: 7px 10px 7px 0; vertical-align: top; font-size: 14px; }
+  td.k { word-break: break-word; }
+  td.n { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  tr.pick { cursor: pointer; }
+  tr.pick:hover td, tr.on td { background: var(--code); }
+  pre { background: var(--code); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 10px 0; white-space: pre; }
+  details summary { cursor: pointer; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  button, select { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); max-width: 100%; }
+  textarea { width: 100%; min-height: 108px; background: var(--code); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .warn { border-left: 4px solid var(--accent); padding: 8px 12px; margin: 8px 0; background: var(--code); border-radius: 0 6px 6px 0; }
+  .quiet { border-left: 4px solid var(--ok); padding: 8px 12px; background: var(--code); border-radius: 0 6px 6px 0; }
+  #status { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .err { color: var(--accent); font-family: var(--mono); font-size: 13px; }
+  a { color: var(--accent); }
+  .cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 860px) { .cols { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <p class="mono muted">faildex · Relate by Neo4j Hackathon</p>
+  <h1>Coding agents fail the <em>same way twice</em>.<br>The graph remembers.</h1>
+  <p>This page runs <a href="https://github.com/relatedb/relate">Relate</a> in your browser (WebAssembly).
+     It rebuilds the graph of 422 public Claude Code and Codex sessions and runs every query below live.
+     Nothing is sent to a server.</p>
+  <p id="status">Loading Relate…</p>
+
+  <div class="stats" id="stats"></div>
+
+  <h2>1. How much of what went wrong was already known</h2>
+  <p class="muted">Sessions of each dataset are split by start time: the first 70% are "earlier", the rest "later".
+     A later failure is <b>recurring</b> if an earlier session already hit it, and <b>warnable</b> if an earlier
+     session also shows the same command succeeding within five calls.</p>
+  <div class="panel scroll" id="eval"><span class="muted">Waiting for the graph…</span></div>
+
+  <h2>2. Failures that came back across sessions</h2>
+  <p class="muted">Select a row to follow the graph from the failure to how sessions got past it and to the log lines.</p>
+  <div class="panel scroll" id="recurring"></div>
+  <details><summary>Cypher</summary><pre id="q-recurring"></pre></details>
+
+  <div class="cols">
+    <div>
+      <h2>Recovery path</h2>
+      <p class="muted">Failed call, then <code>NEXT</code> hops to the same command succeeding.</p>
+      <div class="panel scroll" id="recovery"><span class="muted">Select a failure above.</span></div>
+      <details><summary>Cypher</summary><pre id="q-recovery"></pre></details>
+    </div>
+    <div>
+      <h2>Evidence</h2>
+      <p class="muted">Pointers into the public datasets. The graph stores no raw text.</p>
+      <div class="panel scroll" id="evidence"><span class="muted">Select a failure above.</span></div>
+      <details><summary>Cypher</summary><pre id="q-evidence"></pre></details>
+    </div>
+  </div>
+
+  <h2>3. Ask before you run</h2>
+  <p class="muted">What the Claude Code hook and the MCP <code>preflight</code> tool answer. Unknown commands get silence.</p>
+  <div class="panel">
+    <div class="row"><label for="command" class="mono">command</label><select id="command"></select></div>
+    <div id="preflight"></div>
+  </div>
+  <details><summary>Cypher</summary><pre id="q-preflight"></pre></details>
+
+  <h2>4. Your own Cypher</h2>
+  <div class="panel">
+    <textarea id="cypher" spellcheck="false">MATCH (s:Session)-[:HAS_CALL]->(c:Call {ok: false})-[:RAN]->(k:Command)
+RETURN s.agent AS agent, k.template AS command, count(c) AS failed_calls
+ORDER BY failed_calls DESC LIMIT 10</textarea>
+    <div class="row"><button id="go">Run</button><span class="muted mono" id="took"></span></div>
+    <div class="scroll" id="result"></div>
+  </div>
+
+  <p class="muted" style="margin-top:40px">Data: <span id="sources"></span>.
+     Source and the reproducible evaluation: <a href="https://github.com/dtype2100/faildex">github.com/dtype2100/faildex</a>.</p>
+</main>
+
+<script type="module">
+import init, { RelateDb } from "./vendor/relate.js";
+import { load, run, evaluate, Q } from "./graph.js";
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}%` : "n/a");
+const cell = (v) => (Array.isArray(v) ? v.join(", ") : v);
+
+function table(rows, { pick } = {}) {
+  if (!rows.length) return `<span class="muted">No rows.</span>`;
+  const cols = Object.keys(rows[0]);
+  const head = cols.map((c) => `<th>${esc(c)}</th>`).join("");
+  const body = rows.map((r, i) => `<tr ${pick ? `class="pick" data-i="${i}"` : ""}>` +
+    cols.map((c) => `<td class="${typeof r[c] === "number" ? "n" : "k"}">${esc(cell(r[c]))}</td>`).join("") + "</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+const paint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+async function main() {
+  await init();
+  $("status").textContent = "Downloading the graph…";
+  const data = await (await fetch("./data.json")).json();
+  $("status").textContent = "Building the graph in Relate…";
+  await paint();
+  const db = new RelateDb();
+  const t0 = performance.now();
+  const calls = load(db, data);
+  const built = Math.round(performance.now() - t0);
+
+  const counts = Object.fromEntries(run(db, Q.counts).map((r) => [r.label, r.n]));
+  const rels = run(db, Q.relationships).reduce((n, r) => n + r.n, 0);
+  $("status").textContent = `Graph built in ${built} ms inside your browser: ${calls.toLocaleString()} calls, ${rels.toLocaleString()} relationships.`;
+  $("sources").innerHTML = data.sources.map((s) => `<a href="${esc(s.url)}">${esc(s.repo)}</a> (${esc(s.license)})`).join(", ");
+
+  await paint();
+  const scores = evaluate(db, data.sources);
+  const all = scores[scores.length - 1];
+  const stat = (n, label, hot) => `<div class="stat ${hot ? "hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
+  $("stats").innerHTML =
+    stat(counts.Session.toLocaleString(), "sessions") + stat(counts.Call.toLocaleString(), "tool calls") +
+    stat(counts.ErrorSig, "failure keys") +
+    stat(pct(all.recurring, all.failures), "of later failures were already in the graph", true) +
+    stat(pct(all.warnable, all.recurring), "of those had a recovery on record", true);
+  $("eval").innerHTML = table(scores.map((r) => ({
+    dataset: r.dataset, "sessions earlier / later": `${r.earlier} / ${r.later}`, "later failures": r.failures,
+    recurring: r.recurring, recurrence: pct(r.recurring, r.failures), warnable: r.warnable,
+    "of recurring": pct(r.warnable, r.recurring) })));
+
+  for (const [id, q] of [["q-recurring", Q.recurring], ["q-recovery", Q.recovery], ["q-evidence", Q.evidence], ["q-preflight", Q.preflight]]) $(id).textContent = q;
+
+  const recurring = run(db, Q.recurring);
+  $("recurring").innerHTML = table(recurring, { pick: true });
+  const show = (i) => {
+    document.querySelectorAll("#recurring tr.pick").forEach((tr) => tr.classList.toggle("on", Number(tr.dataset.i) === i));
+    const failure = recurring[i].failure;
+    const path = run(db, Q.recovery, { failure });
+    $("recovery").innerHTML = path.length ? table(path) : `<span class="muted">No recovery on record: no session shows the command working again within five calls.</span>`;
+    $("evidence").innerHTML = table(run(db, Q.evidence, { failure }).map((r) => ({ dataset: r.dataset, agent: r.agent, pointer: `${r.file}:${r.line}` })));
+  };
+  $("recurring").addEventListener("click", (e) => { const tr = e.target.closest("tr.pick"); if (tr) show(Number(tr.dataset.i)); });
+  show(0);
+
+  const known = run(db, Q.commandsWithFailures).map((r) => r.command);
+  $("command").innerHTML = [...known, "ls", "npm test"].map((c) => `<option>${esc(c)}</option>`).join("");
+  const ask = () => {
+    const command = $("command").value;
+    const rows = run(db, Q.preflight, { command });
+    $("preflight").innerHTML = rows.length
+      ? rows.map((r) => `<div class="warn"><span class="mono">${esc(command)}</span> has failed with <b class="mono">${esc(r.known_failure)}</b> in ${r.sessions} sessions (${r.calls} calls).</div>`).join("")
+      : `<div class="quiet">Nothing known about <span class="mono">${esc(command)}</span>. The hook stays silent.</div>`;
+  };
+  $("command").addEventListener("change", ask);
+  $("command").value = known.includes("git status") ? "git status" : known[0];
+  ask();
+
+  const query = () => {
+    const t = performance.now();
+    try {
+      const rows = run(db, $("cypher").value);
+      $("result").innerHTML = table(rows.slice(0, 200));
+      $("took").textContent = `${rows.length} rows in ${Math.round(performance.now() - t)} ms`;
+    } catch (err) {
+      $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      $("took").textContent = "";
+    }
+  };
+  $("go").addEventListener("click", query);
+  query();
+}
+
+main().catch((err) => { $("status").innerHTML = `<span class="err">Could not start: ${esc(err.message)}</span>`; });
+</script>
+</body>
+</html>

@@ -38,6 +38,7 @@ ORDER BY call
 _RECOVERIES = f"""
 WITH e, f, k WHERE k IS NOT NULL AND coalesce(f.compound, false) = false
 MATCH p = (f)-[:NEXT*1..{RECOVERY_HOPS}]->(g:Call {{ok: true}}), (g)-[:RAN]->(k)
+WHERE coalesce(g.compound, false) = false
 WITH e, f, k, min(length(p)) AS hops
 MATCH q = (f)-[:NEXT*1..{RECOVERY_HOPS}]->(:Call {{ok: true}})
 WHERE length(q) = hops

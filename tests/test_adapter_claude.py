@@ -46,7 +46,7 @@ def test_fields_of_a_successful_bash_call():
         "git push",
         None,
     )
-    assert first.ts == "2026-01-05T09:00:02.000Z"
+    assert first.ts == "2026-01-05T09:00:04.000Z"
     assert (first.source_path, first.source_line) == (str(ALPHA), 3)
 
 
@@ -113,3 +113,46 @@ def test_no_raw_command_text_or_output_in_records():
         values = [str(v) for v in astuple(record) if v != record.source_path]
         for word in RAW_WORDS:
             assert not any(word in value for value in values), (word, record)
+
+
+def test_a_call_is_dated_by_when_its_result_arrived(tmp_path):
+    import json
+
+    from faildex.adapters.claude_code import read_session
+
+    lines = [
+        {
+            "type": "assistant",
+            "sessionId": "late",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "Bash",
+                        "input": {"command": "git push"},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "sessionId": "late",
+            "timestamp": "2026-01-09T00:00:00Z",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "t1",
+                        "is_error": True,
+                        "content": "Exit code 1\nerror: failed to push",
+                    }
+                ]
+            },
+        },
+    ]
+    path = tmp_path / "late.jsonl"
+    path.write_text("\n".join(json.dumps(line) for line in lines))
+    (record,) = read_session(path)
+    assert record.ts == "2026-01-09T00:00:00Z"
