@@ -1,0 +1,10 @@
+["a", "json", "array", "is", "not", "a", "record"]
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-01-06T14:00:00.000Z"}
+{"type":"assistant","uuid":"b-001","timestamp":"2026-01-06T14:00:01.000Z","message":{"role":"assistant","content":"plain string content, no blocks"}}
+{"type":"assistant","uuid":"b-002","timestamp":"2026-01-06T14:00:02.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"look for the notes"},{"type":"tool_use","id":"toolu_b1","name":"Grep","input":{"pattern":"axolotl","path":"/work/zeta"}}]}}
+{"type":"user","uuid":"b-003","timestamp":"2026-01-06T14:00:03.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_b1","content":[{"type":"text","text":"No files found"}]}]}}
+{"type":"assistant","uuid":"b-004","timestamp":"2026-01-06T14:00:04.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_b2","name":"Bash","input":{"command":"cd /work/zeta && cat /srv/zeta/ocelot-plan.md"}},{"type":"tool_use","id":"toolu_b3","name":"Edit","input":{"file_path":"/work/zeta/capybara.py","old_string":"x","new_string":"y"}}]}}
+{"type":"user","uuid":"b-005","timestamp":"2026-01-06T14:00:05.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_b2","is_error":true,"content":"Exit code 1\ncat: /srv/zeta/ocelot-plan.md: No such file or directory"},{"type":"tool_result","tool_use_id":"toolu_b3","is_error":true,"content":"File has not been read yet. Read it first before writing to it."}]}}
+not json at all {{{
+{"type":"user","uuid":"b-006","timestamp":"2026-01-06T14:00:06.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_orphan","content":"a result whose call is not in this file"}]}}
+{"type":"assistant","uuid":"b-007","timestamp":"2026-01-06T14:00:07.000Z","message":null}
