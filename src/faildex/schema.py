@@ -13,7 +13,9 @@ Relationships
     (Call)-[:FAILED_WITH]->(ErrorSig)
 
 Every write is a MERGE on the key, so ingesting the same records twice
-leaves the graph unchanged. Raw text never enters the graph: a Call keeps
+leaves the graph unchanged. Each key has a uniqueness constraint, which also
+gives MERGE and MATCH an index: without one, loading 4,000 calls takes a minute
+instead of half a second. Raw text never enters the graph: a Call keeps
 only a pointer (source_path, source_line) to where it came from.
 """
 
@@ -48,6 +50,18 @@ class CallRecord:
     @property
     def call_key(self) -> str:
         return f"{self.session_key}:{self.seq}"
+
+
+KEYS = {"Session": "id", "Call": "id", "Command": "template", "ErrorSig": "sig"}
+
+
+def ensure_schema(db) -> None:
+    """Create the key constraints. Safe to call on a store that already has them."""
+    for label, key in KEYS.items():
+        db.execute(
+            f"CREATE CONSTRAINT {label.lower()}_{key} IF NOT EXISTS "
+            f"FOR (n:{label}) REQUIRE n.{key} IS UNIQUE"
+        )
 
 
 _CALLS = """
@@ -93,6 +107,7 @@ def _run(db, query: str, rows: list[dict]) -> None:
 
 def ingest(db, records: Iterable[CallRecord]) -> int:
     """Write records into the graph. Returns the number of records written."""
+    ensure_schema(db)
     recs = sorted(records, key=lambda r: (r.session_key, r.seq))
     rows = [{**asdict(r), "session_key": r.session_key, "call_key": r.call_key} for r in recs]
     _run(db, _CALLS, rows)

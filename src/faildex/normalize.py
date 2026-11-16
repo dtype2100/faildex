@@ -44,6 +44,45 @@ SUBCOMMAND_TOOLS = frozenset(
 # Words that only set up the real command.
 SKIP_PROGRAMS = frozenset(["cd", "export", "set", "source", "pushd", "popd", "true", "echo"])
 WRAPPERS = frozenset(["sudo", "time", "env", "nohup", "command"])
+# Shell and script syntax that can open a line without being a program.
+KEYWORDS = frozenset(
+    [
+        "if",
+        "then",
+        "else",
+        "elif",
+        "fi",
+        "for",
+        "while",
+        "do",
+        "done",
+        "case",
+        "esac",
+        "function",
+        "foreach",
+        "try",
+        "catch",
+        "finally",
+        "break",
+        "continue",
+        "return",
+        "declare",
+        "local",
+        "read",
+        "mapfile",
+        "exit",
+        "false",
+        "import",
+        "from",
+        "param",
+        "switch",
+    ]
+)
+# Programs accepted inside an inline PowerShell script, where most lines are data.
+SCRIPT_PROGRAMS = SUBCOMMAND_TOOLS | frozenset(
+    ["rg", "python", "python3", "py", "node", "ffmpeg", "curl", "powershell", "pwsh", "cmd"]
+)
+SCRIPT = "<script>"
 # Flags that consume the next token, so it is not mistaken for a subcommand.
 VALUE_FLAGS = frozenset(
     ["-C", "-c", "-n", "-H", "--namespace", "--context", "--git-dir", "--work-tree"]
@@ -51,6 +90,12 @@ VALUE_FLAGS = frozenset(
 _WINDOWS_PATH = re.compile(r"[A-Za-z]:\\")
 
 _SEGMENTS = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
+# A here-document or PowerShell here-string body is data, not commands.
+_HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\s*\2\b", re.DOTALL)
+_HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
+_PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
+_CMDLET = re.compile(r"^[A-Z][a-z]+-[A-Za-z]+$")
+_REDIRECT = re.compile(r"[<>|]")
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _EXIT_LINE = re.compile(r"^(<error>)?\s*exit code:? -?\d+", re.IGNORECASE)
 _NOISE_LINE = re.compile(r"^(wall time:|output:|at line:\d+ char:\d+|\+ |~+$)", re.IGNORECASE)
@@ -63,6 +108,7 @@ _MASKS = [
     (re.compile(r"(['\"`]).{0,200}?\1"), "<s>"),
     (re.compile(r"[A-Za-z]:\\[^\s'\"<>|]+"), "<path>"),
     (re.compile(r"[a-z][a-z0-9+.\-]*://\S+", re.IGNORECASE), "<url>"),
+    (re.compile(r"(?:\.{0,2}\\)?[\w\-.@+*]+(?:\\[\w\-.@+*]+)+\\?|\.{0,2}\\[\w\-.@+*]+"), "<path>"),
     (re.compile(r"(?:~|\.{1,2}|[\w\-.@+]+)?/[\w\-.@+~/%]+"), "<path>"),
     (
         re.compile(
@@ -74,7 +120,11 @@ _MASKS = [
     (re.compile(r"\b[0-9a-f]{7,}\b"), "<hex>"),
     (re.compile(r"\d+"), "<n>"),
 ]
-_COMMAND_NAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
+_COMMAND_NAME = re.compile(r"^[A-Za-z_](?:[\w.\-]*[A-Za-z0-9_])?$")
+# "<file>:<line>:" opens a compiler message or a line of search output; only the
+# first is a failure, and it says so right after the position.
+_LOCATED = re.compile(r"^\S+?\.\w{1,6}[:\-]\d+[:\-](?:\d+[:\-])?\s*(.*)$")
+_DIAGNOSTIC = re.compile(r"^(fatal |syntax )?(error|[A-Z]{1,4}\d{2,5})\b", re.IGNORECASE)
 _DATA_FILE = re.compile(
     r"\.(md|txt|json|ya?ml|toml|cs|cpp|c|h|js|ts|html|css|csv|log|xml)$", re.IGNORECASE
 )
@@ -100,7 +150,7 @@ def _positional(tokens: list[str]) -> list[str]:
             skip = False
         elif token in VALUE_FLAGS:
             skip = True
-        elif not token.startswith("-"):
+        elif not token.startswith("-") and not _REDIRECT.search(token):
             out.append(token)
     return out
 
@@ -113,6 +163,10 @@ def _program(token: str) -> str:
 def command_template(command: str) -> str | None:
     """Return "<program>" or "<program> <subcommand>" for the first real command."""
     fallback = None
+    script = bool(_PS_SCRIPT.match(command))
+    if script and "\n" in command.strip():
+        fallback = SCRIPT
+    command = _HERE_STRING.sub("", _HEREDOC.sub(r"\1", command))
     for segment in _SEGMENTS.split(command.strip()):
         tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
         while tokens and _program(tokens[0]) in WRAPPERS:
@@ -122,6 +176,10 @@ def command_template(command: str) -> str | None:
         program = _program(tokens[0])
         if not _COMMAND_NAME.match(program) or _DATA_FILE.search(program):
             continue  # a file name or expression, not a command
+        if program in KEYWORDS:
+            continue
+        if script and not (_CMDLET.match(program) or program in SCRIPT_PROGRAMS):
+            continue  # inside a script most lines are data
         if program in SKIP_PROGRAMS:
             fallback = fallback or program
             continue
@@ -138,6 +196,13 @@ def command_template(command: str) -> str | None:
     return fallback
 
 
+def _is_failure_line(line: str) -> bool:
+    if not _ERROR_WORDS.search(line):
+        return False
+    located = _LOCATED.match(line)
+    return not located or bool(_DIAGNOSTIC.match(located.group(1)))
+
+
 def error_signature(text: str) -> str | None:
     """Return a masked one-line signature for failure output, or None if empty."""
     lines = [line.strip() for line in text[:SCAN_CHARS].splitlines()]
@@ -152,7 +217,7 @@ def error_signature(text: str) -> str | None:
         picked = lines[-1]
     else:
         # Without an error word the line is ordinary output, which must not enter the graph.
-        picked = next((line for line in lines if _ERROR_WORDS.search(line)), None)
+        picked = next((line for line in lines if _is_failure_line(line)), None)
         if picked is None:
             return None
     picked = re.sub(r"<[^>]{1,40}>", "", picked)

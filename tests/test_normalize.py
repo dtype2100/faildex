@@ -19,9 +19,24 @@ COMMANDS = [
     (r"$p='src\app\Program.cs'; Get-Content $p", "Get-Content"),
     ("$i=0; $j", None),
     ("notes.md", None),
+    ("if [ -f a ]; then\n  git status\nfi", "git status"),
+    ("cat <<'EOF' > notes\nplain words here\nEOF\ngit add notes", "cat"),
+    ("gh 2>/dev/null", "gh"),
+    ("$roots = @(\n'arch294_loading03',\n'arch295_press'\n)\nGet-Item $roots", "Get-Item"),
+    ("$rows = @{\n  diamond = 'a'\n}\n$rows.diamond", "<script>"),
+    ("$text = @'\nimport math\nprint(1)\n'@\n$text | python -", "<script>"),
 ]
 
 SIGNATURES = [
+    (
+        r"rg: src\app\Frame*.cs: The system cannot find the file",
+        "rg: <path>: the system cannot find the file",
+    ),
+    (
+        "src/a.c:10:5: error: unknown type name 'foo'",
+        "<path>:<n>:<n>: error: unknown type name <s>",
+    ),
+    ("src/app.cs:12: throw new InvalidOperationException(x);", None),
     ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
     ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
     (
