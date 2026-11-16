@@ -16,6 +16,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 RECOVERY_HOPS = 5
+# A warning must be worth the interruption: the failure has to account for at
+# least this share of the command's runs. Otherwise every `ls` would carry one.
+MIN_RATE = 0.03
+
+_RUNS = "MATCH (:Command {template: $command})<-[:RAN]-(c:Call) RETURN count(c) AS n"
 RETRY = "retry"
 
 # With a command, every count, recovery and rule is about that command alone.
@@ -63,6 +68,7 @@ class Failure:
     fixes: Counter = field(default_factory=Counter)
     recovered: int = 0
     evidence: list[str] = field(default_factory=list)
+    runs: int = 0  # all runs of the command, set when the failure is looked up for one command
 
     @property
     def command(self) -> str | None:
@@ -91,6 +97,8 @@ class Failure:
             f"{self.sig.rsplit(' ', 1)[-1]} and prints nothing useful"
         )
         seen = f"seen in {len(self.sessions)} sessions, {self.calls} calls"
+        if self.runs:
+            seen += f", {self.calls / self.runs:.0%} of this command's {self.runs} runs"
         if not self.fix:
             return f"{head} ({seen}): no recovery on record yet; stop and check before retrying."
         how = (
@@ -137,9 +145,15 @@ def proposals(db, min_sessions: int = 2, command: str | None = None) -> list[Fai
     return sorted(keep, key=lambda f: (-f.score, -f.calls, f.sig))
 
 
-def warnings_for(db, command: str, min_sessions: int = 2) -> list[Failure]:
-    """Known recurring failures of one command template, best first."""
-    return proposals(db, min_sessions, command)
+def warnings_for(
+    db, command: str, min_sessions: int = 2, min_rate: float = MIN_RATE
+) -> list[Failure]:
+    """Recurring failures of one command that are frequent enough to warn about."""
+    runs = next(iter(db.execute(_RUNS, {"command": command})))["n"]
+    found = proposals(db, min_sessions, command)
+    for item in found:
+        item.runs = runs
+    return [item for item in found if runs and item.calls / runs >= min_rate]
 
 
 def render(items: list[Failure]) -> str:

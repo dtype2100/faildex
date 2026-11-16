@@ -176,12 +176,12 @@ async function main() {
   show(0);
 
   const known = run(db, Q.commandsWithFailures).map((r) => r.command);
-  $("command").innerHTML = [...known, "ls", "npm test"].map((c) => `<option>${esc(c)}</option>`).join("");
+  $("command").innerHTML = [...known, "rg", "ls", "npm test"].map((c) => `<option>${esc(c)}</option>`).join("");
   const ask = () => {
     const command = $("command").value;
     const rows = run(db, Q.preflight, { command });
     $("preflight").innerHTML = rows.length
-      ? rows.map((r) => `<div class="warn"><span class="mono">${esc(command)}</span> has failed with <b class="mono">${esc(r.known_failure)}</b> in ${r.sessions} sessions (${r.calls} calls).</div>`).join("")
+      ? rows.map((r) => `<div class="warn"><span class="mono">${esc(command)}</span> has failed with <b class="mono">${esc(r.known_failure)}</b> in ${r.sessions} sessions (${r.calls} of its ${r.runs} runs).</div>`).join("")
       : `<div class="quiet">Nothing known about <span class="mono">${esc(command)}</span>. The hook stays silent.</div>`;
   };
   $("command").addEventListener("change", ask);
