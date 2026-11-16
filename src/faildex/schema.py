@@ -25,8 +25,9 @@ only a pointer (source_path, source_line) to where it came from.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
-from itertools import groupby, pairwise
+from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timezone
+from itertools import pairwise
 
 from faildex.normalize import SCRIPT
 
@@ -107,7 +108,9 @@ _CALLS = """
 UNWIND $rows AS row
 MERGE (s:Session {id: row.session_key})
   ON CREATE SET s.agent = row.agent, s.session_id = row.session_id
-  SET s.started_at = row.started_at
+  SET s.started_at = CASE
+        WHEN s.started_at IS NULL OR row.started_at < s.started_at THEN row.started_at
+        ELSE s.started_at END
 MERGE (c:Call {id: row.call_key})
   SET c.seq = row.seq, c.tool = row.tool, c.ok = row.ok, c.ts = row.ts, c.exit_code = row.exit_code,
       c.source_path = row.source_path, c.source_line = row.source_line
@@ -146,10 +149,48 @@ def _run(db, query: str, rows: list[dict]) -> None:
         db.execute(query, {"rows": batch})
 
 
+_CLEAR = """
+UNWIND $rows AS row
+MATCH (c:Call {id: row.call_key})-[r:RAN|FAILED_WITH]->()
+DELETE r
+"""
+
+_SESSION_CALLS = """
+UNWIND $rows AS row
+MATCH (s:Session {id: row.session_key})-[:HAS_CALL]->(c:Call)
+RETURN s.id AS session, c.id AS call, c.seq AS seq
+"""
+
+_UNLINK = """
+UNWIND $rows AS row
+MATCH (s:Session {id: row.session_key})-[:HAS_CALL]->(:Call)-[r:NEXT]->()
+DELETE r
+"""
+
+
+def utc(ts: str | None) -> str | None:
+    """One spelling per instant, so that string order is time order."""
+    if not ts:
+        return None
+    try:
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
 def ingest(db, records: Iterable[CallRecord]) -> int:
-    """Write records into the graph. Returns the number of records written."""
+    """Write records into the graph. Returns the number of calls written.
+
+    A call that is ingested again replaces what was known about it, and the
+    NEXT chain of every touched session is rebuilt from the calls the graph
+    holds, so partial and repeated loads end in the same graph as one load.
+    """
     ensure_schema(db)
-    recs = sorted(records, key=lambda r: (r.session_key, r.seq))
+    unique = {r.call_key: replace(r, ts=utc(r.ts)) for r in records}
+    recs = sorted(unique.values(), key=lambda r: (r.session_key, r.seq))
     started: dict[str, str] = {}
     for r in recs:
         if r.ts and r.ts < started.get(r.session_key, "~"):
@@ -168,12 +209,18 @@ def ingest(db, records: Iterable[CallRecord]) -> int:
             }
         )
     _run(db, _CALLS, rows)
+    _run(db, _CLEAR, rows)
     _run(db, _COMMANDS, [r for r in rows if r["command"]])
     _run(db, _ERRORS, [r for r in rows if r["failure"]])
 
+    sessions = [{"session_key": key} for key in sorted({r.session_key for r in recs})]
+    held: dict[str, list[tuple[int, str]]] = {}
+    for batch in _batches(sessions):
+        for row in db.execute(_SESSION_CALLS, {"rows": batch}):
+            held.setdefault(row["session"], []).append((row["seq"], row["call"]))
+    _run(db, _UNLINK, sessions)
     links = []
-    for _, group in groupby(recs, key=lambda r: r.session_key):
-        calls = list(group)
-        links += [{"prev": a.call_key, "next": b.call_key} for a, b in pairwise(calls)]
+    for calls in held.values():
+        links += [{"prev": a[1], "next": b[1]} for a, b in pairwise(sorted(calls))]
     _run(db, _NEXT, links)
     return len(rows)

@@ -77,3 +77,19 @@ def test_report_prints_both_tables():
     assert "recurrence" in text
     assert "Failure text only" in text
     assert "66.7%" in text
+
+
+def test_what_an_earlier_session_did_after_the_cut_is_not_known_earlier():
+    records = [_call(f"s{n}", n, 0) for n in range(1, 8)]
+    # s1 starts first but only fails on day 9, after the later period began.
+    late = _call("s1", 9, 1, ok=False, sig="disk full")
+    records.append(late)
+    records += [_call(f"s{n}", n, 0, ok=False, sig="disk full") for n in (8, 10)]
+    records.append(_call("s9", 9, 0))
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    db.execute("CREATE (:Source {name: 'demo'})")
+    db.execute("MATCH (s:Session), (d:Source {name: 'demo'}) MERGE (s)-[:FROM]->(d)")
+    demo = evaluate(db)[0]
+    assert demo.later_failures == 2
+    assert demo.recurring == 0

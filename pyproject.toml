@@ -5,7 +5,10 @@ description = "A failure index for coding agents: recurring failures and their f
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-dependencies = ["relate-db==1.0.1"]
+dependencies = [
+    "mcp>=1.2",
+    "relate-db==1.0.1",
+]
 
 [project.scripts]
 faildex = "faildex.cli:main"
