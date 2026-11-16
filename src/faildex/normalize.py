@@ -69,7 +69,32 @@ WRAPPERS = frozenset(
 )
 # Wrapper options that take a value: the next word is a user, a directory, a signal.
 WRAPPER_VALUE_FLAGS = frozenset(
-    ["-u", "-g", "-C", "-n", "-k", "-s", "-p", "-h", "-r", "-t", "-T", "-i", "-o", "-e", "-D", "-U", "--user", "--group", "--chdir", "--signal", "--kill-after", "--host", "--role", "--type"]
+    [
+        "-u",
+        "-g",
+        "-C",
+        "-n",
+        "-k",
+        "-s",
+        "-p",
+        "-h",
+        "-r",
+        "-t",
+        "-T",
+        "-i",
+        "-o",
+        "-e",
+        "-D",
+        "-U",
+        "--user",
+        "--group",
+        "--chdir",
+        "--signal",
+        "--kill-after",
+        "--host",
+        "--role",
+        "--type",
+    ]
 )
 # Shell and script syntax that can open a line without being a program.
 KEYWORDS = frozenset(

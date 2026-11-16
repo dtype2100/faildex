@@ -78,7 +78,7 @@ def _hook(args: argparse.Namespace) -> int:
 
     from faildex.hook import respond
 
-    out = respond(sys.stdin.read(), args.store, args.min_sessions)
+    out = respond(sys.stdin.read(), args.store, args.min_sessions, args.log)
     if out:
         print(out)
     return 0
@@ -143,6 +143,17 @@ def _export_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report(args: argparse.Namespace) -> int:
+    from faildex.report import render
+
+    db = _open(args)
+    if db is None:
+        return 1
+    print(render(db, args.split, args.key, args.hook_log))
+    db.close()
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -175,7 +186,17 @@ def main(argv: list[str] | None = None) -> int:
     check.set_defaults(run=_check)
 
     hook = commands.add_parser("hook", help="Claude Code PreToolUse hook (JSON on stdin)")
+    hook.add_argument("--log", type=Path, default=None, help="append one line per warning given")
     hook.set_defaults(run=_hook)
+
+    report = commands.add_parser(
+        "report", help="counts before and after a date, for your own store"
+    )
+    report.add_argument("--store", type=Path, default=None, help="store directory")
+    report.add_argument("--split", metavar="YYYY-MM-DD", help="compare before and from this day")
+    report.add_argument("--key", help="count failures whose key contains this text")
+    report.add_argument("--hook-log", type=Path, default=None, help="the file given to hook --log")
+    report.set_defaults(run=_report)
 
     mcp = commands.add_parser("mcp", help="serve preflight, evidence and recurring over MCP")
     mcp.add_argument("--store", type=Path, default=None, help="store directory")

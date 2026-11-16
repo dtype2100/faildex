@@ -27,6 +27,7 @@ faildex turns it into three things:
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. |
 | `faildex ingest` | Your own Claude Code, Codex CLI and Cursor agent logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
+| `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and warnings the hook gave. |
 
 ## How it uses Relate
 
@@ -161,7 +162,7 @@ it the recurrence is 57%.
 | Criterion | Where to look |
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer |
-| Functionality | `make demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
+| Functionality | `make demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
 | Usefulness | 68% of later failures were already in the graph; the hook warns only for those and is silent otherwise |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md`; every number comes from `make eval` on the committed store |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |

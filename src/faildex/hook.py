@@ -16,6 +16,7 @@ Register it in `.claude/settings.json`:
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from faildex.normalize import command_template
@@ -43,7 +44,20 @@ def context_for(db, payload: object, min_sessions: int = 2) -> str | None:
     return "\n".join(lines)
 
 
-def respond(raw: str, store: Path, min_sessions: int = 2) -> str:
+def _log(path: Path, payload: dict, context: str) -> None:
+    """Note that a warning was given: when and for which command template, nothing more."""
+    command = payload.get("tool_input", {}).get("command")
+    entry = {
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "command": command_template(command) if isinstance(command, str) else None,
+        "warnings": context.count("\n- "),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as out:
+        out.write(json.dumps(entry) + "\n")
+
+
+def respond(raw: str, store: Path, min_sessions: int = 2, log: Path | None = None) -> str:
     """Hook stdout for one stdin payload; empty when there is nothing to say."""
     try:
         from faildex.store import open_store
@@ -54,6 +68,8 @@ def respond(raw: str, store: Path, min_sessions: int = 2) -> str:
             context = context_for(db, payload, min_sessions)
         finally:
             db.close()
+        if context and log:
+            _log(log, payload, context)
     except Exception:  # noqa: BLE001 - see module docstring
         return ""
     if not context:
