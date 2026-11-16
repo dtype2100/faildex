@@ -39,6 +39,27 @@ With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 45 warn
 
 36 distinct failure keys appear in the later period; 16 of them were seen earlier.
 
+## What guards each rule
+
+Each rule of the method has a test that fails if the rule is broken. The names
+are test functions under `tests/`.
+
+| Rule | Test |
+|---|---|
+| The split is by session and exact, even when sessions start together | `test_evaluate.py::test_split_is_exact_even_when_sessions_start_together` |
+| Nothing after the cut counts as known earlier | `test_evaluate.py::test_what_an_earlier_session_did_after_the_cut_is_not_known_earlier` |
+| A call is dated by when its result arrived | `test_adapter_claude.py::test_a_call_is_dated_by_when_its_result_arrived` |
+| Timestamps compare as instants | `test_schema.py::test_timestamps_are_stored_in_utc_so_text_order_is_time_order` |
+| A failure first seen later is not recurring | `test_evaluate.py::test_a_failure_first_seen_later_is_not_recurring` |
+| Warnable needs the same command, not only the same failure | `test_evaluate.py::test_a_recovery_of_one_command_does_not_make_another_command_warnable` |
+| A success that arrived before the failure is no recovery | `test_evaluate.py::test_a_success_that_arrived_before_the_failure_is_no_recovery` |
+| A chained command line is neither a recovery nor warnable | `test_evaluate.py::test_a_later_compound_failure_is_recurring_but_not_warnable`, `test_insight.py::test_a_compound_success_is_not_a_recovery` |
+| The same call is never counted twice | `test_adapter_claude.py::test_a_call_logged_twice_is_one_call`, `test_adapter_codex.py::test_an_event_exported_into_two_files_is_counted_once`, `test_schema.py::test_duplicate_and_partial_loads_keep_one_next_chain` |
+| No-match exits of search tools are not failures | `test_schema.py::test_failure_key_skips_no_match_exits_and_unknown_commands` |
+| No raw text or local path reaches the graph | `test_adapter_claude.py::test_no_raw_command_text_or_output_in_records`, `test_schema.py::test_a_shared_store_refuses_local_paths`, `test_normalize.py` |
+| The documents show what `make eval` prints | `test_docs.py::test_readme_table_matches_the_committed_store` |
+| A second engine build reaches the same numbers | `test_docs.py::test_relate_webassembly_reaches_the_same_numbers` |
+
 ## Limits
 
 - **Availability, not effect.** The numbers show that the graph already held the
