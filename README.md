@@ -1,7 +1,7 @@
 # faildex
 
-A failure index for coding agents. faildex reads the session logs of Claude Code
-and Codex into one embedded [Relate](https://github.com/relatedb/relate) graph,
+A failure index for coding agents. faildex reads the session logs of Claude Code,
+Codex and Cursor into one embedded [Relate](https://github.com/relatedb/relate) graph,
 finds the failures that keep coming back across sessions, reads the way out off
 the graph, and tells the agent before it runs the same command again.
 
@@ -26,7 +26,7 @@ faildex turns it into three things:
 | `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it adds what earlier sessions learned. For every other command it prints nothing. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. |
-| `faildex ingest` | Your own Claude Code and Codex CLI logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
+| `faildex ingest` | Your own Claude Code, Codex CLI and Cursor agent logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
 
 ## How it uses Relate
 
@@ -104,7 +104,7 @@ evaluation in the browser; it arrives at the same 80 of 117.
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
 ```bash
-uv run faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions
+uv run faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions --cursor ~/.cursor/chats
 uv run faildex rules --store ~/.faildex/store
 ```
 
