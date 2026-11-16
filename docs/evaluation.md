@@ -3,7 +3,7 @@
 Run `make eval`. It reads the committed store and prints the tables below. The
 code is [`src/faildex/evaluate.py`](../src/faildex/evaluate.py); an independent
 recount inside Relate WebAssembly (the browser demo, `site/graph.js`) gives the
-same 83 of 121.
+same 80 of 117.
 
 ## Question
 
@@ -31,13 +31,13 @@ and did that session also record a way out?
 
 | Dataset | Sessions earlier / later | Later failures | Recurring | Warnable (of recurring) |
 |---|---|---|---|---|
-| codex-trajectories | 233 / 101 | 119 | 81 (68.1%) | 49 (60.5%) |
+| codex-trajectories | 233 / 101 | 115 | 78 (67.8%) | 48 (61.5%) |
 | wisp (Claude Code) | 61 / 27 | 2 | 2 | 0 |
-| All | 294 / 128 | 121 | 83 (68.6%) | 49 (59.0%) |
+| All | 294 / 128 | 117 | 80 (68.4%) | 48 (60.0%) |
 
 With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 45 warnable.
 
-38 distinct failure keys appear in the later period; 17 of them were seen earlier.
+36 distinct failure keys appear in the later period; 16 of them were seen earlier.
 
 ## Limits
 
@@ -47,18 +47,18 @@ With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 45 warn
   evaluation does not include.
 - **One project dominates.** The Codex dataset is one developer working on one
   Windows project, so failures recur within a project more than they would
-  across unrelated work. `command timed out` alone is 31 of the 83 recurring
-  failures; without it the recurrence is 52 of 90 (57.8%).
+  across unrelated work. `command timed out` alone is 31 of the 80 recurring
+  failures; without it the recurrence is 49 of 86 (57.0%).
 - **The Claude Code sample is small.** Its later period has two keyed failures.
   The wisp dataset contributes sessions and schema coverage more than statistics.
 - **No cross-agent overlap in this data.** No failure key appears under both
   agents here: one dataset is PowerShell on Windows, the other bash on Linux.
   The graph supports the cross-agent case, and the tests cover it, but the
   public data does not demonstrate it.
-- **Keys are heuristic.** 388 of 627 failed calls get a key; the rest printed nothing usable, were
+- **Keys are heuristic.** 382 of 627 failed calls get a key; the rest printed nothing usable, were
   no-match exits of search tools, or came from inline scripts. Normalization masks
-  paths, numbers, quoted strings, URLs and hosts; a few command templates in the
-  public store are still words from inline scripts rather than programs.
+  paths, numbers, quoted strings, URLs and hosts; inline scripts whose program cannot be told apart from data share the
+  template `<script>`.
 - **A recovery is "the same command worked again soon".** Most recorded
   recoveries are a retry of the same command; the graph cannot tell what changed
   in the arguments, because raw commands are not stored.

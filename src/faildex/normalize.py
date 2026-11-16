@@ -64,7 +64,9 @@ MODULES = frozenset(
 SKIP_PROGRAMS = frozenset(["cd", "export", "set", "source", "pushd", "popd", "true", "echo"])
 # Skipped programs that still decide the exit status of the line they are on.
 OUTPUT_ONLY = frozenset(["echo", "true"])
-WRAPPERS = frozenset(["sudo", "time", "env", "nohup", "command"])
+WRAPPERS = frozenset(
+    ["sudo", "time", "env", "nohup", "command", "timeout", "setsid", "nice", "stdbuf"]
+)
 # Shell and script syntax that can open a line without being a program.
 KEYWORDS = frozenset(
     [
@@ -110,7 +112,10 @@ VALUE_FLAGS = frozenset(
 )
 _WINDOWS_PATH = re.compile(r"[A-Za-z]:\\")
 
-_SEGMENTS = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
+_COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
+_SUBSTITUTION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*(\$\(|`)", re.DOTALL)
+_FUNCTION_DEF = re.compile(r"^[A-Za-z_][\w\-]*\s*\(\)")
+_WRAPPER_ARG = re.compile(r"^(-.*|\d+(\.\d+)?[smhd]?)$")
 # A here-document or PowerShell here-string body is data, not commands.
 _HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\s*\2\b", re.DOTALL)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
@@ -209,6 +214,41 @@ def _subcommand(program: str, args: list[str]) -> str | None:
     return next((a for a in args if a in known), None)
 
 
+def _segments(command: str) -> list[str]:
+    """Split a command line at `;`, `&&`, `||` and newlines that are really separators.
+
+    A separator inside quotes, a `$( )` substitution, parentheses or braces
+    belongs to an argument or a block, not to the sequence of commands: text
+    in an `echo '...; ...'` or the rows of a PowerShell array are not programs.
+    """
+    parts, start, depth, quote, i = [], 0, 0, None, 0
+    while i < len(command):
+        char = command[i]
+        if quote:
+            if char == "\\" and quote == '"':
+                i += 1
+            elif char == quote:
+                quote = None
+        elif char in "'\"`":
+            # A quote right after a letter is an apostrophe in prose, not a string.
+            if not (char == "'" and i and command[i - 1].isalnum()):
+                quote = char
+        elif char in "({":
+            depth += 1
+        elif char in ")}":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            width = 2 if command[i : i + 2] in ("&&", "||") else 1 if char in ";\n" else 0
+            if width:
+                parts.append(command[start:i])
+                start = i + width
+                i += width
+                continue
+        i += 1
+    parts.append(command[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
 def _templates(command: str) -> tuple[list[str], str | None]:
     found: list[str] = []
     fallback = None
@@ -216,10 +256,15 @@ def _templates(command: str) -> tuple[list[str], str | None]:
     if script and "\n" in command.strip():
         fallback = SCRIPT
     command = _HERE_STRING.sub("", _HEREDOC.sub(r"\1", command))
-    for segment in _SEGMENTS.split(command.strip()):
+    command = _COMMENT_LINE.sub("", command)
+    for segment in _segments(command):
+        if _SUBSTITUTION.match(segment) or _FUNCTION_DEF.match(segment):
+            continue  # `name=$(...)` stores a value and `name() {...}` defines one: neither runs a program
         tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
         while tokens and _program(tokens[0]) in WRAPPERS:
             tokens = tokens[1:]
+            while tokens and _WRAPPER_ARG.match(tokens[0]):
+                tokens = tokens[1:]
         if not tokens or tokens[0].startswith(("#", "$")):
             continue  # comment, or a PowerShell variable assignment / invocation
         program = _program(tokens[0])
