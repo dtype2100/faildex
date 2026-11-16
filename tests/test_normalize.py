@@ -16,6 +16,9 @@ COMMANDS = [
     ("cd /tmp; export A=1", "cd"),
     (r"C:\tools\dotnet.exe build app.sln", "dotnet build"),
     ("Get-ChildItem -Recurse src", "Get-ChildItem"),
+    (r"$p='src\app\Program.cs'; Get-Content $p", "Get-Content"),
+    ("$i=0; $j", None),
+    ("notes.md", None),
 ]
 
 SIGNATURES = [
@@ -77,3 +80,7 @@ def test_same_failure_in_two_sessions_gets_one_signature():
 def test_empty_output_has_no_signature():
     assert error_signature("Exit code 1\n\n") is None
     assert command_template("   ") is None
+
+
+def test_plain_output_is_not_a_signature():
+    assert error_signature("sites/findings.md:12: - it is a mere backend selector") is None

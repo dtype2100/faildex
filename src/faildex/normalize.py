@@ -74,6 +74,10 @@ _MASKS = [
     (re.compile(r"\b[0-9a-f]{7,}\b"), "<hex>"),
     (re.compile(r"\d+"), "<n>"),
 ]
+_COMMAND_NAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
+_DATA_FILE = re.compile(
+    r"\.(md|txt|json|ya?ml|toml|cs|cpp|c|h|js|ts|html|css|csv|log|xml)$", re.IGNORECASE
+)
 MAX_SIG = 90
 SCAN_CHARS = 2000
 
@@ -113,9 +117,11 @@ def command_template(command: str) -> str | None:
         tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
         while tokens and _program(tokens[0]) in WRAPPERS:
             tokens = tokens[1:]
-        if not tokens or tokens[0].startswith("#"):
-            continue
+        if not tokens or tokens[0].startswith(("#", "$")):
+            continue  # comment, or a PowerShell variable assignment / invocation
         program = _program(tokens[0])
+        if not _COMMAND_NAME.match(program) or _DATA_FILE.search(program):
+            continue  # a file name or expression, not a command
         if program in SKIP_PROGRAMS:
             fallback = fallback or program
             continue
@@ -145,7 +151,10 @@ def error_signature(text: str) -> str | None:
     if any(line.startswith("Traceback") for line in lines):
         picked = lines[-1]
     else:
-        picked = next((line for line in lines if _ERROR_WORDS.search(line)), lines[0])
+        # Without an error word the line is ordinary output, which must not enter the graph.
+        picked = next((line for line in lines if _ERROR_WORDS.search(line)), None)
+        if picked is None:
+            return None
     picked = re.sub(r"<[^>]{1,40}>", "", picked)
     for pattern, mask in _MASKS:
         picked = pattern.sub(mask, picked)
