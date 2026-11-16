@@ -10,7 +10,7 @@
 | Relationship | Meaning |
 |---|---|
 | `(Session)-[:HAS_CALL]->(Call)` | the call belongs to the session |
-| `(Call)-[:NEXT]->(Call)` | the next call of the same session, in file order |
+| `(Call)-[:NEXT]->(Call)` | the next call of the same session, in the order the calls happened |
 | `(Call)-[:RAN]->(Command)` | the normalized command the call ran |
 | `(Call)-[:FAILED_WITH]->(ErrorSig)` | the normalized failure the call ended with |
 
