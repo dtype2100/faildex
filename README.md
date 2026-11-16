@@ -129,7 +129,7 @@ An agent skill that tells the agent when to call these is in
 ## Where the data lives
 
 - **`store/`** is the persisted Relate store: 422 sessions, 14,328 tool calls,
-  627 failed calls, 38,252 relationships, 0.85 MB. `faildex.store.open_store`
+  627 failed calls, 38,424 relationships, 0.85 MB. `faildex.store.open_store`
   opens it, including the first time after a fresh clone.
 - It is built from two public datasets only, both MIT licensed, pinned by revision
   in [`build.py`](src/faildex/build.py):

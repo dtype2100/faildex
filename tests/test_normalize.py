@@ -24,6 +24,11 @@ COMMANDS = [
     ('geo=$(hyprctl clients -j | jq .x) && grim -g "$geo" out.png', "grim"),
     ("BASE=$(git rev-parse origin/main); git fetch -q origin", "git fetch"),
     ("timeout 180 bin/hyprbench run --task x", "hyprbench"),
+    ("sudo -u customer-secret git status", "git status"),
+    ("env -C /Users/alice/private git status", "git status"),
+    ("ROOT=$(pwd) git status; pytest -q", "git status"),
+    ("CODE=$(cat /tmp/code | tr -d '-')\nnode run.mjs", "node"),
+    ("git status # TODO (slow\npytest -q", "git status"),
     ("fill() { node cdp.mjs eval x; }\ngit status", "git status"),
     ("setsid chromium --no-first-run >/dev/null 2>&1 &", "chromium"),
     ('node -e "\nconst run = async () => {\n  also();\n};\n"', "node"),
@@ -144,5 +149,9 @@ def test_compound_means_several_different_programs():
     assert not is_compound("git status | head -3")
     assert is_compound("python pass.py; python fail.py")
     assert is_compound("git push || echo ignored")
+    assert is_compound("ROOT=$(pwd) git status; pytest -q")
+    assert is_compound("git status && (pytest -q; ruff check .)")
+    assert is_compound("git status # TODO (slow\npytest -q")
+    assert not is_compound("geo=$(hyprctl clients -j | jq .x)\ngrim out.png")
     assert is_compound("git push; echo done")
     assert not is_compound("echo hello")

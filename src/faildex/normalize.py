@@ -67,6 +67,10 @@ OUTPUT_ONLY = frozenset(["echo", "true"])
 WRAPPERS = frozenset(
     ["sudo", "time", "env", "nohup", "command", "timeout", "setsid", "nice", "stdbuf"]
 )
+# Wrapper options that take a value: the next word is a user, a directory, a signal.
+WRAPPER_VALUE_FLAGS = frozenset(
+    ["-u", "-g", "-C", "-n", "-k", "-s", "-p", "-h", "-r", "-t", "-T", "-i", "-o", "-e", "-D", "-U", "--user", "--group", "--chdir", "--signal", "--kill-after", "--host", "--role", "--type"]
+)
 # Shell and script syntax that can open a line without being a program.
 KEYWORDS = frozenset(
     [
@@ -113,7 +117,6 @@ VALUE_FLAGS = frozenset(
 _WINDOWS_PATH = re.compile(r"[A-Za-z]:\\")
 
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
-_SUBSTITUTION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*(\$\(|`)", re.DOTALL)
 _FUNCTION_DEF = re.compile(r"^[A-Za-z_][\w\-]*\s*\(\)")
 _WRAPPER_ARG = re.compile(r"^(-.*|\d+(\.\d+)?[smhd]?)$")
 # A here-document or PowerShell here-string body is data, not commands.
@@ -233,6 +236,13 @@ def _segments(command: str) -> list[str]:
             # A quote right after a letter is an apostrophe in prose, not a string.
             if not (char == "'" and i and command[i - 1].isalnum()):
                 quote = char
+        elif char == "#" and (i == 0 or command[i - 1].isspace()):
+            # A comment runs to the end of its line; blank it so its text is never read.
+            end = command.find("\n", i)
+            end = len(command) if end < 0 else end
+            command = command[:i] + " " * (end - i) + command[end:]
+            i = end
+            continue
         elif char in "({":
             depth += 1
         elif char in ")}":
@@ -249,6 +259,39 @@ def _segments(command: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+def _strip_assignments(segment: str) -> str:
+    """Drop leading `NAME=value` words, where a value may be quoted or a `$( )`."""
+    while True:
+        match = _ASSIGNMENT.match(segment)
+        if not match:
+            return segment
+        i, depth, quote = match.end(), 0, None
+        while i < len(segment):
+            char = segment[i]
+            if quote:
+                quote = None if char == quote else quote
+            elif char in "'\"`":
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(0, depth - 1)
+            elif char.isspace() and depth == 0:
+                break
+            i += 1
+        segment = segment[i:].lstrip()
+
+
+def _commands(command: str) -> list[str]:
+    """The command lines of a script, with `( ... )` and `{ ...; }` groups opened up."""
+    out = []
+    for segment in _segments(command):
+        segment = _strip_assignments(segment)
+        grouped = (segment[:1], segment[-1:]) in (("(", ")"), ("{", "}"))
+        out += _commands(segment[1:-1]) if grouped else [segment] if segment else []
+    return out
+
+
 def _templates(command: str) -> tuple[list[str], str | None]:
     found: list[str] = []
     fallback = None
@@ -257,14 +300,20 @@ def _templates(command: str) -> tuple[list[str], str | None]:
         fallback = SCRIPT
     command = _HERE_STRING.sub("", _HEREDOC.sub(r"\1", command))
     command = _COMMENT_LINE.sub("", command)
-    for segment in _segments(command):
-        if _SUBSTITUTION.match(segment) or _FUNCTION_DEF.match(segment):
-            continue  # `name=$(...)` stores a value and `name() {...}` defines one: neither runs a program
+    for segment in _commands(command):
+        if _FUNCTION_DEF.match(segment):
+            continue  # `name() {...}` defines a function; it runs nothing
         tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
         while tokens and _program(tokens[0]) in WRAPPERS:
             tokens = tokens[1:]
-            while tokens and _WRAPPER_ARG.match(tokens[0]):
-                tokens = tokens[1:]
+            # Options of the wrapper, with their values, are not the program.
+            while tokens:
+                if tokens[0] in WRAPPER_VALUE_FLAGS:
+                    tokens = tokens[2:]
+                elif _WRAPPER_ARG.match(tokens[0]) or _ASSIGNMENT.match(tokens[0]):
+                    tokens = tokens[1:]
+                else:
+                    break
         if not tokens or tokens[0].startswith(("#", "$")):
             continue  # comment, or a PowerShell variable assignment / invocation
         program = _program(tokens[0])
