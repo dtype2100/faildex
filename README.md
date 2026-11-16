@@ -123,6 +123,9 @@ Use it from any MCP client:
   "args": ["run", "--project", "/path/to/faildex", "faildex", "mcp", "--store", "/path/to/faildex/store"]}}}
 ```
 
+An agent skill that tells the agent when to call these is in
+[`skills/faildex/SKILL.md`](skills/faildex/SKILL.md); copy it into `.claude/skills/faildex/`.
+
 ## Where the data lives
 
 - **`store/`** is the persisted Relate store: 422 sessions, 14,328 tool calls,
