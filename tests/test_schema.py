@@ -72,3 +72,23 @@ def test_recovery_path_is_found():
         )
     )
     assert [(r["fix"], r["line"]) for r in rows] == [("claude-code:s1:2", 9)]
+
+
+def _failed(**fields):
+    return CallRecord(agent="a", session_id="s", seq=0, tool="Bash", ok=False, **fields)
+
+
+def test_failure_key_prefers_text_then_exit_code():
+    assert _failed(command="npm run", error_sig="missing script", exit_code=1).failure == (
+        "missing script",
+        "text",
+    )
+    assert _failed(command="npm run", exit_code=2).failure == ("npm run exited 2", "exit")
+
+
+def test_failure_key_skips_no_match_exits_and_unknown_commands():
+    assert _failed(command="rg", exit_code=1).failure is None  # nothing matched
+    assert _failed(command="rg", exit_code=2).failure == ("rg exited 2", "exit")
+    assert _failed(command="<script>", exit_code=1).failure is None
+    assert _failed(exit_code=1).failure is None
+    assert CallRecord(agent="a", session_id="s", seq=0, tool="Bash", ok=True).failure is None

@@ -2,10 +2,10 @@
 
 | Node | Key | Other properties |
 |---|---|---|
-| `Session` | `id` = `<agent>:<session_id>` | `agent`, `session_id` |
-| `Call` | `id` = `<agent>:<session_id>:<seq>` | `seq`, `tool`, `ok`, `ts`, `source_path`, `source_line` |
+| `Session` | `id` = `<agent>:<session_id>` | `agent`, `session_id`, `started_at` |
+| `Call` | `id` = `<agent>:<session_id>:<seq>` | `seq`, `tool`, `ok`, `ts`, `exit_code`, `source_path`, `source_line` |
 | `Command` | `template` | — |
-| `ErrorSig` | `sig` | — |
+| `ErrorSig` | `sig` | `kind`: `text` (normalized failure text) or `exit` (`<command> exited <code>`, used when the failure printed nothing usable) |
 | `Source` | `name` | `repo`, `revision`, `license`, `url` (public datasets only) |
 
 | Relationship | Meaning |

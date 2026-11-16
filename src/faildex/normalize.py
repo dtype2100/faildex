@@ -101,7 +101,7 @@ _EXIT_LINE = re.compile(r"^(<error>)?\s*exit code:? -?\d+", re.IGNORECASE)
 _NOISE_LINE = re.compile(r"^(wall time:|output:|at line:\d+ char:\d+|\+ |~+$)", re.IGNORECASE)
 _ERROR_WORDS = re.compile(
     r"(error|not found|no such|fatal|failed|denied|cannot|can't|invalid|exception|unknown|"
-    r"refused|timed? ?out|no matches|unexpected|not recognized|is not a |usage:)",
+    r"refused|refusing|rejected|couldn't|timed? ?out|no matches|unexpected|not recognized|is not a |usage:)",
     re.IGNORECASE,
 )
 _MASKS = [
