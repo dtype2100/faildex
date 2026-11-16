@@ -62,7 +62,15 @@ _ERROR_WORDS = re.compile(
 _MASKS = [
     (re.compile(r"(['\"`]).{0,200}?\1"), "<s>"),
     (re.compile(r"[A-Za-z]:\\[^\s'\"<>|]+"), "<path>"),
-    (re.compile(r"(?:~|\.{1,2})?/[\w\-.@+~/%]+"), "<path>"),
+    (re.compile(r"[a-z][a-z0-9+.\-]*://\S+", re.IGNORECASE), "<url>"),
+    (re.compile(r"(?:~|\.{1,2}|[\w\-.@+]+)?/[\w\-.@+~/%]+"), "<path>"),
+    (
+        re.compile(
+            r"\b(?:[a-z0-9\-]+\.)+(?:com|org|net|io|dev|ai|example|internal|local|co|kr)\b",
+            re.IGNORECASE,
+        ),
+        "<host>",
+    ),
     (re.compile(r"\b[0-9a-f]{7,}\b"), "<hex>"),
     (re.compile(r"\d+"), "<n>"),
 ]
