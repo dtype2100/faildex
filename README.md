@@ -13,8 +13,8 @@ Coding agents do not remember. A session hits `fatal: not a git repository`,
 works out why, and the next session hits it again. Each agent keeps its own log
 format, so nothing carries over between sessions or between agents.
 
-On the public session logs committed with this repository, **69% of the failures
-in the later sessions had already happened in an earlier session**, and for 59%
+On the public session logs committed with this repository, **68% of the failures
+in the later sessions had already happened in an earlier session**, and for 60%
 of those an earlier session also shows the same command succeeding a few calls
 later. That is knowledge the agent had on disk and could not reach.
 
@@ -99,7 +99,7 @@ make serve     # http://localhost:8765
 ```
 
 The page rebuilds the graph inside Relate WebAssembly and recomputes the
-evaluation in the browser; it arrives at the same 83 of 121.
+evaluation in the browser; it arrives at the same 80 of 117.
 
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
@@ -129,7 +129,7 @@ An agent skill that tells the agent when to call these is in
 ## Where the data lives
 
 - **`store/`** is the persisted Relate store: 422 sessions, 14,328 tool calls,
-  627 failed calls, 38,441 relationships, 0.85 MB. `faildex.store.open_store`
+  627 failed calls, 38,424 relationships, 0.85 MB. `faildex.store.open_store`
   opens it, including the first time after a fresh clone.
 - It is built from two public datasets only, both MIT licensed, pinned by revision
   in [`build.py`](src/faildex/build.py):
@@ -147,14 +147,14 @@ An agent skill that tells the agent when to call these is in
 
 | | later failures | already seen earlier | of those, recovery on record |
 |---|---|---|---|
-| All failure keys | 121 | 83 (68.6%) | 49 (59.0%) |
+| All failure keys | 117 | 80 (68.4%) | 48 (60.0%) |
 | Failure text only | 102 | 72 (70.6%) | 45 (62.5%) |
 
 What these numbers do and do not show is in [docs/evaluation.md](docs/evaluation.md).
 In short: they show that the knowledge was available, not that an agent given
 the warning would have acted on it. The Codex dataset is one developer on a
-Windows project, and one failure (`command timed out`) is 31 of the 83; without
-it the recurrence is 58%.
+Windows project, and one failure (`command timed out`) is 31 of the 80; without
+it the recurrence is 57%.
 
 ## Judging criteria
 
@@ -162,7 +162,7 @@ it the recurrence is 58%.
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer |
 | Functionality | `make demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
-| Usefulness | 69% of later failures were already in the graph; the hook warns only for those and is silent otherwise |
+| Usefulness | 68% of later failures were already in the graph; the hook warns only for those and is silent otherwise |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md`; every number comes from `make eval` on the committed store |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |
 
