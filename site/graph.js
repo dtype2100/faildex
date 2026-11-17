@@ -28,8 +28,8 @@ RETURN k.template AS command, hops AS calls_until_it_worked,
        coalesce(sk.template, step.tool) AS first_step_after_failure, count(DISTINCT f) AS times
 ORDER BY times DESC LIMIT 10`,
   evidence: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)-[:FROM]->(d:Source)
-RETURN d.name AS dataset, s.agent AS agent, s.id AS session, f.source_path AS file, f.source_line AS line
-ORDER BY session LIMIT 12`,
+WITH d.name AS dataset, s.agent AS agent, s.id AS session, f.source_path AS file, min(f.source_line) AS line
+RETURN dataset, agent, session, file, line ORDER BY session LIMIT 8`,
   preflight: `MATCH (k:Command {template: $command})<-[:RAN]-(c:Call)
 WITH k, count(c) AS runs
 MATCH (k)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig), (f)<-[:HAS_CALL]-(s:Session)
