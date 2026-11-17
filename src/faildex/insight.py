@@ -88,6 +88,22 @@ class Failure:
         """Sessions that hit it, weighted up when the recoveries agree on a fix."""
         return len(self.sessions) * (1 + self.consistency)
 
+    def notice(self) -> str:
+        """One line for the person at the keyboard; rule() is the full text for the agent."""
+        subject = f"`{self.command or self.tools.most_common(1)[0][0]}`"
+        what = (
+            f"failed with `{self.sig}`"
+            if self.kind == "text"
+            else f"exited with code {self.sig.rsplit(' ', 1)[-1]} and no useful output"
+        )
+        if not self.fix:
+            after = "no recovery on record"
+        elif self.fix == RETRY:
+            after = "it worked again on a later try"
+        else:
+            after = f"sessions got past it by running `{self.fix}` first"
+        return f"faildex: {subject} {what} in {len(self.sessions)} earlier sessions; {after}."
+
     def rule(self) -> str:
         subject = f"`{self.command or self.tools.most_common(1)[0][0]}`"
         head = (

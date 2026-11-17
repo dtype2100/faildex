@@ -125,6 +125,10 @@ def test_hook_warns_about_a_known_failure_without_deciding_permission(tmp_path):
     assert specific["hookEventName"] == "PreToolUse"
     assert "git pull" in specific["additionalContext"]
     assert "permissionDecision" not in specific
+    assert out["systemMessage"] == (
+        "faildex: `git push` failed with `rejected: non-fast-forward` in 3 earlier sessions; "
+        "sessions got past it by running `git pull` first."
+    )
 
 
 def test_hook_is_silent_for_unknown_commands_other_tools_and_bad_input(tmp_path):
@@ -187,3 +191,11 @@ def test_a_rare_failure_of_a_common_command_gives_no_warning():
     (kept,) = warnings_for(db, "ls", min_rate=0.01)
     assert kept.runs == 100
     assert "2% of this command's 100 runs" in kept.rule()
+
+
+def test_notice_says_what_happened_and_what_got_past_it():
+    items = {item.sig: item for item in proposals(_db())}
+    assert items["linker not found"].notice() == (
+        "faildex: `cargo build` failed with `linker not found` in 2 earlier sessions; "
+        "no recovery on record."
+    )
