@@ -157,6 +157,27 @@ the warning would have acted on it. The Codex dataset is one developer on a
 Windows project, and one failure (`command timed out`) is 31 of the 80; without
 it the recurrence is 57%.
 
+## Across agents, on real logs
+
+The public datasets cannot show the cross-agent case: one is PowerShell on
+Windows, the other bash on Linux, and no failure appears under both. The
+author's own logs can. These are counts from `faildex report` on a private
+store built with `faildex ingest` on 2026-11-17. The logs are not in this
+repository, so you cannot recompute these numbers; run the same two commands on
+your own logs to get yours.
+
+| Agent | Sessions | Tool calls | Failed |
+|---|---|---|---|
+| Claude Code | 190 | 19,443 | 364 |
+| Codex | 39 | 1,786 | 101 |
+| Cursor | 59 | 2,538 | 94 |
+
+- **12 failure keys were hit by more than one agent.** What one agent ran into,
+  another had already run into.
+- 57 failure keys recurred across two or more sessions; 13 of them have a
+  recovery on record.
+- The hook is selective: of 197 command templates, 7 would get a warning.
+
 ## Judging criteria
 
 | Criterion | Where to look |
