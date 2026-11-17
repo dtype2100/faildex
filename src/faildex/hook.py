@@ -1,7 +1,9 @@
 """Pre-run warning for Claude Code (PreToolUse hook).
 
 Reads the hook's JSON from stdin. When the command about to run has a failure
-that recurred across sessions, prints the known facts as `additionalContext`.
+that recurred across sessions, it gives the agent the known facts as
+`additionalContext` and shows the person one line (`systemMessage`), which
+Claude Code prints under the command.
 It never decides permission, never blocks, and stays silent (exit 0, no output)
 for unknown commands and on any error: a warning tool must not be able to break
 the session it is watching.
@@ -25,23 +27,36 @@ SHELL_TOOLS = frozenset(["Bash"])
 MAX_WARNINGS = 2
 
 
-def context_for(db, payload: object, min_sessions: int = 2) -> str | None:
-    """The text to hand the agent before this tool call, or None for nothing."""
+def _lookup(db, payload: object, min_sessions: int) -> tuple[str | None, list]:
+    """(command template, its recurring failures) for a shell call; (None, []) otherwise."""
     from faildex.insight import warnings_for
 
     if not isinstance(payload, dict) or payload.get("tool_name") not in SHELL_TOOLS:
-        return None
+        return None, []
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     template = command_template(command) if isinstance(command, str) else None
     if not template:
-        return None
-    found = warnings_for(db, template, min_sessions)[:MAX_WARNINGS]
-    if not found:
-        return None
+        return None, []
+    return template, warnings_for(db, template, min_sessions)[:MAX_WARNINGS]
+
+
+def _context(template: str, found: list) -> str:
     lines = [f"faildex: `{template}` has failed the same way in earlier sessions."]
     lines += [f"- {item.rule()}" for item in found]
     return "\n".join(lines)
+
+
+def context_for(db, payload: object, min_sessions: int = 2) -> str | None:
+    """The text to hand the agent before this tool call, or None for nothing."""
+    template, found = _lookup(db, payload, min_sessions)
+    return _context(template, found) if found else None
+
+
+def notice_for(found: list) -> str:
+    """The one line the person sees in the session, above the command's result."""
+    more = f" (+{len(found) - 1} more for the agent)" if len(found) > 1 else ""
+    return found[0].notice() + more
 
 
 def _log(path: Path, payload: dict, context: str) -> None:
@@ -65,15 +80,19 @@ def respond(raw: str, store: Path, min_sessions: int = 2, log: Path | None = Non
         payload = json.loads(raw)
         db = open_store(store)
         try:
-            context = context_for(db, payload, min_sessions)
+            template, found = _lookup(db, payload, min_sessions)
         finally:
             db.close()
-        if context and log:
+        if not found:
+            return ""
+        context = _context(template, found)
+        if log:
             _log(log, payload, context)
     except Exception:  # noqa: BLE001 - see module docstring
         return ""
-    if not context:
-        return ""
     return json.dumps(
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": context}}
+        {
+            "systemMessage": notice_for(found),
+            "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": context},
+        }
     )
