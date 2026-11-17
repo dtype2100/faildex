@@ -42,6 +42,21 @@ MATCH (k)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig), (f)<-[:HAS_CALL]-(s:Ses
 WITH k, e, runs, count(DISTINCT s) AS sessions, count(f) AS calls
 WHERE sessions >= 2 AND 1.0 * calls / runs >= ${MIN_RATE}
 RETURN DISTINCT k.template AS command ORDER BY command`,
+  // Every failed call with a failure key, for the timelines.
+  occurrences: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)-[:FROM]->(d:Source)
+RETURN e.sig AS failure, f.ts AS ts, s.id AS session, s.agent AS agent, d.name AS dataset`,
+  // The sessions and commands around one failure: its neighbourhood in the graph.
+  neighborhood: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)
+OPTIONAL MATCH (f)-[:RAN]->(k:Command)
+RETURN s.id AS session, s.agent AS agent, coalesce(k.template, f.tool) AS command, count(f) AS calls
+ORDER BY command, session`,
+  // How many failed calls of each failure have a recorded recovery.
+  recoveredCounts: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)
+WHERE coalesce(f.compound, false) = false
+MATCH (f)-[:NEXT*1..${RECOVERY_HOPS}]->(g:Call {ok: true}), (g)-[:RAN]->(k)
+WHERE coalesce(g.compound, false) = false AND (f.ts IS NULL OR g.ts IS NULL OR g.ts >= f.ts)
+RETURN e.sig AS failure, count(DISTINCT f) AS recovered`,
+  templates: `MATCH (k:Command) RETURN k.template AS template ORDER BY template`,
   sessionsOf: `MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)
 WHERE s.started_at IS NOT NULL
 RETURN s.id AS id, s.started_at AS started ORDER BY started, id`,
