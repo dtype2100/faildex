@@ -3,113 +3,313 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>faildex: the failures coding agents repeat</title>
+<title>faildex · the failures coding agents repeat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%23171717%22/%3E%3Ccircle cx=%2222%22 cy=%2222%22 r=%225%22 fill=%22%23e5484d%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
+  /* Layout: a quiet app shell. Result first, then the failures (list on the left, the
+     selected failure on the right), then the pre-run check, the evaluation and a query
+     console. Neutral greys; red only for failures, green only for recoveries. */
   :root {
-    --bg: #f6f4ef; --panel: #fffdf8; --ink: #1d1b16; --muted: #6b6558; --line: #ddd6c6;
-    --accent: #b3401f; --ok: #2f6b3c; --code: #efeadd;
-    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #fafafa; --surface: #ffffff; --raised: #f5f5f5; --ink: #171717; --body: #525252; --muted: #8f8f8f;
+    --line: #ebebeb; --line-strong: #dedede; --red: #e5484d; --red-soft: #feeceb; --red-ink: #c62a2f;
+    --green: #2f9e66; --green-soft: #e9f6ee; --green-ink: #1f7a4c; --focus: #0a72ef; --term: #171717; --term-ink: #ededed;
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #171613; --panel: #1f1e1a; --ink: #ece7da; --muted: #a39c8b; --line: #37342c;
-            --accent: #f08a66; --ok: #86c995; --code: #2a2822; }
+    :root:not([data-theme="light"]) {
+      --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #6f6f6f;
+      --line: #232323; --line-strong: #2e2e2e; --red: #ff6369; --red-soft: #2a1214; --red-ink: #ff8589;
+      --green: #3dd68c; --green-soft: #0f2419; --green-ink: #5fe3a4; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
+      color-scheme: dark;
+    }
   }
+  :root[data-theme="dark"] {
+    --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #6f6f6f;
+    --line: #232323; --line-strong: #2e2e2e; --red: #ff6369; --red-soft: #2a1214; --red-ink: #ff8589;
+    --green: #3dd68c; --green-soft: #0f2419; --green-ink: #5fe3a4; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
+    color-scheme: dark;
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 16px/1.55 Georgia, "Iowan Old Style", "Times New Roman", serif; }
-  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 80px; }
-  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
-  h1 em { color: var(--accent); font-style: normal; }
-  h2 { font-size: 22px; margin: 44px 0 6px; }
-  p { margin: 8px 0; max-width: 68ch; }
-  .muted { color: var(--muted); }
-  .mono, code, pre, td.k, th, button, select, textarea, input { font-family: var(--mono); font-size: 13px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 22px 0; }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
-  .stat b { display: block; font: 600 26px/1.1 var(--mono); }
-  .stat span { color: var(--muted); font-size: 13px; }
-  .stat.hot b { color: var(--accent); }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
-  .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; }
-  th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; white-space: nowrap; }
-  td { border-bottom: 1px solid var(--line); padding: 7px 10px 7px 0; vertical-align: top; font-size: 14px; }
-  td.k { overflow-wrap: anywhere; min-width: 7ch; }
-  td.n { font-family: var(--mono); text-align: right; white-space: nowrap; }
-  tr.pick { cursor: pointer; }
-  tr.pick:hover td, tr.on td { background: var(--code); }
-  pre { background: var(--code); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 10px 0; white-space: pre; }
-  details summary { cursor: pointer; color: var(--muted); font-family: var(--mono); font-size: 13px; }
-  button, select { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
-  select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); max-width: 100%; }
-  textarea { width: 100%; min-height: 108px; background: var(--code); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-  .warn { border-left: 4px solid var(--accent); padding: 8px 12px; margin: 8px 0; background: var(--code); border-radius: 0 6px 6px 0; }
-  .quiet { border-left: 4px solid var(--ok); padding: 8px 12px; background: var(--code); border-radius: 0 6px 6px 0; }
-  #status { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-  .err { color: var(--accent); font-family: var(--mono); font-size: 13px; }
-  a { color: var(--accent); }
-  .cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
-  @media (min-width: 860px) { .cols { grid-template-columns: 1fr 1fr; } }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .mono { font-family: var(--mono); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+
+  /* top bar */
+  .bar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
+  .bar .wrap { display: flex; align-items: center; gap: 18px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.02em; text-decoration: none; font-size: 16px; }
+  .brand i { width: 18px; height: 18px; border-radius: 5px; background: var(--ink); position: relative; display: block; }
+  .brand i::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+  .status { display: inline-flex; align-items: center; gap: 8px; font: 12.5px/1 var(--mono); color: var(--body); border: 1px solid var(--line); background: var(--surface); padding: 6px 10px; border-radius: 999px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status b { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status.ready b { background: var(--green); }
+  nav { margin-left: auto; display: flex; gap: 4px; }
+  nav a { text-decoration: none; color: var(--body); font-size: 14px; padding: 6px 10px; border-radius: 8px; }
+  nav a:hover { color: var(--ink); background: var(--raised); }
+  .progress { height: 2px; background: transparent; }
+  .progress span { display: block; height: 2px; width: 0; background: var(--ink); transition: width .2s ease, opacity .4s ease; }
+  @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; align-items: end; padding: 64px 0 28px; }
+  .eyebrow { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+  h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.03; letter-spacing: -0.035em; font-weight: 600; margin: 0; text-wrap: balance; }
+  h1 span { color: var(--muted); }
+  .lede { color: var(--body); font-size: 16.5px; line-height: 1.6; max-width: 58ch; margin: 18px 0 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .result { padding: 26px 26px 22px; }
+  .result-num { font-size: 64px; line-height: 1; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .result-label { margin: 8px 0 18px; color: var(--body); }
+  .meter { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--raised); gap: 2px; }
+  .meter span { display: block; height: 100%; transition: width .6s cubic-bezier(.2,.7,.2,1); width: 0; }
+  .meter .r { background: var(--red); } .meter .n { background: var(--line-strong); } .meter .g { background: var(--green); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--body); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+  .result hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0 16px; }
+  .result-sub { display: flex; align-items: baseline; gap: 10px; }
+  .result-sub strong { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .result-sub span { color: var(--body); font-size: 14px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin: 8px 0 72px; }
+  .kpi { padding: 16px 20px; border-left: 1px solid var(--line); }
+  .kpi:first-child { border-left: 0; }
+  .kpi b { display: block; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 13px; color: var(--muted); }
+  @media (max-width: 900px) { .hero { grid-template-columns: minmax(0, 1fr); padding-top: 40px; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi:nth-child(3) { border-left: 0; } .kpi:nth-child(n+3) { border-top: 1px solid var(--line); } }
+
+  /* sections */
+  section.block { margin: 0 0 80px; scroll-margin-top: 72px; }
+  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 18px; }
+  .head > div { flex: 1 1 420px; min-width: 0; }
+  .head h2 { font-size: 22px; letter-spacing: -0.02em; font-weight: 600; margin: 0; }
+  .head p { margin: 6px 0 0; color: var(--body); max-width: 70ch; }
+  .ghost { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--body); cursor: pointer; white-space: nowrap; }
+  .ghost:hover { color: var(--ink); border-color: var(--line-strong); }
+  pre.cypher { margin: 0 0 16px; padding: 14px 16px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; font: 12.5px/1.6 var(--mono); color: var(--body); overflow-x: auto; white-space: pre; }
+
+  /* failures: list + detail */
+  .split { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
+  @media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .list { padding: 6px; max-height: calc(100vh - 96px); overflow: auto; position: sticky; top: 72px; }
+  @media (max-width: 960px) { .list { position: static; max-height: 560px; } }
+  .map { position: relative; height: 300px; margin-bottom: 16px; }
+  .tile { position: absolute; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; overflow: hidden; background: var(--surface); display: flex; flex-direction: column; gap: 6px; transition: border-color .15s ease, box-shadow .15s ease; }
+  .tile.red { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
+  .tile.green { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 22%, transparent); }
+  .tile:hover { border-color: var(--line-strong); }
+  .tile[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+  .tile b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .tile b small { font-size: 12px; font-weight: 400; color: var(--body); margin-left: 4px; letter-spacing: 0; }
+  .tile .t-cmd { font: 12px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .t-sig { font: 11.5px/1.4 var(--mono); color: var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .tile.small b { font-size: 16px; }
+  .maplegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--body); margin: -4px 0 12px; }
+  .maplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line); }
+  .item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 12px 12px 11px; cursor: pointer; }
+  .item:hover { background: var(--raised); }
+  .item[aria-selected="true"] { background: var(--raised); border-color: var(--line-strong); }
+  .item .sig { font: 13px/1.45 var(--mono); color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; max-height: 2.9em; }
+  .item .n { font-size: 13px; color: var(--body); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .item .n b { color: var(--ink); font-weight: 600; font-size: 15px; display: block; }
+  .item .meta { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .chip { display: inline-flex; align-items: center; font: 12px/1 var(--mono); padding: 4px 7px; border-radius: 6px; background: var(--raised); border: 1px solid var(--line); color: var(--body); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .item[aria-selected="true"] .chip { background: var(--surface); }
+  .spark { flex: 1; min-width: 60px; height: 18px; }
+  .tag { font-size: 12px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .tag.red { background: var(--red-soft); color: var(--red-ink); }
+  .tag.green { background: var(--green-soft); color: var(--green-ink); }
+
+  .detail { padding: 24px; min-height: 400px; }
+  .detail .top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .detail h3 { font: 500 18px/1.45 var(--mono); letter-spacing: -0.01em; margin: 12px 0 18px; overflow-wrap: anywhere; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 10px; margin: 0 0 22px; }
+  .facts div { padding: 10px 14px; border-left: 1px solid var(--line); }
+  .facts div:first-child { border-left: 0; }
+  .facts dt { font-size: 12px; color: var(--muted); }
+  .facts dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sub { font-size: 13px; font-weight: 600; margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  .sub small { font-weight: 400; color: var(--muted); }
+  .pane { margin-top: 22px; }
+  .twin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; margin-top: 22px; }
+  @media (max-width: 640px) { .twin { grid-template-columns: minmax(0, 1fr); } .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .facts div:nth-child(3) { border-left: 0; } .facts div:nth-child(n+3) { border-top: 1px solid var(--line); } }
+  svg text { font-family: var(--mono); }
+  .timeline, .graph { width: 100%; display: block; }
+  .tl-box { overflow-x: auto; }
+  .tl-box .timeline { min-width: 520px; }
+  .graph-box { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .paths { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .paths li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .step { font: 12px/1 var(--mono); padding: 5px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); }
+  .step.fail { background: var(--red-soft); color: var(--red-ink); border-color: transparent; }
+  .step.ok { background: var(--green-soft); color: var(--green-ink); border-color: transparent; }
+  .arrow { color: var(--muted); font-size: 12px; }
+  .paths .times { margin-left: auto; font-size: 12.5px; color: var(--body); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--body); font-size: 14px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 10px; margin: 0; }
+  .evidence { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; }
+  .evidence li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 13px; }
+  .evidence li:first-child { border-top: 0; }
+  .evidence .ptr { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .evidence .who { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+  /* pre-run check */
+  .check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; }
+  @media (max-width: 900px) { .check { grid-template-columns: minmax(0, 1fr); } }
+  .check .card { padding: 22px; }
+  label.field { display: block; font-size: 13px; color: var(--body); margin-bottom: 8px; }
+  .input { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); padding: 0 12px; }
+  .input span { font: 14px var(--mono); color: var(--muted); }
+  .input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 15px/1 var(--mono); color: var(--ink); padding: 13px 0; }
+  .input:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+  .tries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .tries button { font: 12.5px/1 var(--mono); border: 1px solid var(--line); background: var(--raised); border-radius: 999px; padding: 6px 10px; cursor: pointer; color: var(--body); }
+  .tries button:hover { color: var(--ink); border-color: var(--line-strong); }
+  .note { font-size: 13.5px; color: var(--body); margin: 16px 0 0; }
+  .term { background: var(--term); color: var(--term-ink); border-radius: 14px; padding: 18px 20px; font: 13.5px/1.65 var(--mono); min-height: 190px; border: 1px solid var(--line); overflow-wrap: anywhere; }
+  .term .dim { color: #8b8b8b; }
+  .term .hook { color: #f3a3a6; }
+  .term .quiet { color: #7fd6a8; }
+
+  /* evaluation */
+  .eval { display: grid; gap: 10px; }
+  .erow { display: grid; grid-template-columns: 170px minmax(0, 1fr) 230px; gap: 18px; align-items: center; padding: 16px 20px; }
+  .erow .name { font-weight: 600; }
+  .erow .name small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .erow .bars { display: grid; gap: 7px; }
+  .erow .nums { font-size: 13px; color: var(--body); text-align: right; font-variant-numeric: tabular-nums; }
+  .erow .nums b { color: var(--ink); font-weight: 600; }
+  .erow.total { border-color: var(--line-strong); }
+  @media (max-width: 760px) { .erow { grid-template-columns: minmax(0, 1fr); gap: 10px; } .erow .nums { text-align: left; } }
+  .method { color: var(--body); font-size: 13.5px; margin: 14px 2px 0; max-width: 90ch; }
+  .evallegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--body); margin: 0 0 10px; }
+  .evallegend i { display: inline-block; width: 10px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+
+  /* query console */
+  .console { padding: 18px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  textarea { width: 100%; min-height: 120px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--raised); color: var(--ink); font: 13px/1.6 var(--mono); padding: 12px 14px; }
+  textarea:focus { outline: 0; border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+  .run { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+  .primary { border: 0; border-radius: 8px; background: var(--ink); color: var(--bg); padding: 8px 14px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .took { font: 12.5px var(--mono); color: var(--muted); }
+  .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12.5px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--raised); white-space: nowrap; }
+  td { padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  tr:first-child td { border-top: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  td.txt { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .err { color: var(--red-ink); font: 13px var(--mono); }
+
+  footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; padding: 24px 0 48px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
-<main>
-  <p class="mono muted">faildex · Relate by Neo4j Hackathon</p>
-  <h1>Coding agents fail the <em>same way twice</em>.<br>The graph remembers.</h1>
-  <p>This page runs <a href="https://github.com/relatedb/relate">Relate</a> in your browser (WebAssembly).
-     It rebuilds the graph of 422 public Claude Code and Codex sessions (the tool also reads Cursor logs) and runs every query below live.
-     Nothing is sent to a server.</p>
-  <p id="status">Loading Relate…</p>
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="faildex home"><i></i>faildex</a>
+    <span class="status" id="status"><b></b><span id="status-text">Loading Relate WebAssembly…</span></span>
+    <nav aria-label="Sections">
+      <a href="#failures">Failures</a><a href="#check">Pre-run check</a><a href="#evaluation">Evaluation</a><a href="#query">Query</a>
+      <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
+    </nav>
+  </div>
+  <div class="progress"><span id="progress"></span></div>
+</header>
 
-  <div class="stats" id="stats"></div>
-
-  <h2>1. How much of what went wrong was already known</h2>
-  <p class="muted">Sessions of each dataset are split by start time: the first 70% are "earlier", the rest "later".
-     A later failure is <b>recurring</b> if an earlier session already hit it, and <b>warnable</b> if an earlier
-     session also shows the same command succeeding within five calls.</p>
-  <div class="panel scroll" id="eval"><span class="muted">Waiting for the graph…</span></div>
-
-  <h2>2. Failures that came back across sessions</h2>
-  <p class="muted">Select a row to follow the graph from the failure to how sessions got past it and to the log lines.</p>
-  <div class="panel scroll" id="recurring"></div>
-  <details><summary>Cypher</summary><pre id="q-recurring"></pre></details>
-
-  <div class="cols">
+<main class="wrap" id="top">
+  <section class="hero">
     <div>
-      <h2>Recovery path</h2>
-      <p class="muted">Failed call, then <code>NEXT</code> hops to the same command succeeding.</p>
-      <div class="panel scroll" id="recovery"><span class="muted">Select a failure above.</span></div>
-      <details><summary>Cypher</summary><pre id="q-recovery"></pre></details>
+      <p class="eyebrow">faildex · built on Relate</p>
+      <h1>Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
+      <p class="lede">faildex reads Claude Code, Codex and Cursor logs into one Relate graph, finds the failures that keep coming back, and warns the agent before it repeats one. This page rebuilds that graph from 422 public sessions in your browser and runs every query live. Nothing is sent to a server.</p>
     </div>
-    <div>
-      <h2>Evidence</h2>
-      <p class="muted">Pointers into the public datasets. The graph stores no raw text.</p>
-      <div class="panel scroll" id="evidence"><span class="muted">Select a failure above.</span></div>
-      <details><summary>Cypher</summary><pre id="q-evidence"></pre></details>
+    <div class="card result" aria-live="polite">
+      <div class="result-num" id="r-rate">—</div>
+      <p class="result-label">of failures in later sessions had already happened in an earlier session</p>
+      <div class="meter" aria-hidden="true"><span class="r" id="r-seen"></span><span class="n" id="r-new"></span></div>
+      <div class="legend" id="r-legend"></div>
+      <hr>
+      <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text">of those also had a recovery on record</span></div>
+      <div class="meter" aria-hidden="true" style="margin-top:10px"><span class="g" id="r-fixed"></span><span class="n" id="r-unfixed"></span></div>
     </div>
+  </section>
+  <div class="kpis" id="kpis">
+    <div class="kpi"><b>—</b><span>sessions</span></div><div class="kpi"><b>—</b><span>tool calls</span></div>
+    <div class="kpi"><b>—</b><span>failure keys</span></div><div class="kpi"><b>—</b><span>relationships</span></div>
   </div>
 
-  <h2>3. Ask before you run</h2>
-  <p class="muted">What the Claude Code hook and the MCP <code>preflight</code> tool answer. Unknown commands get silence.</p>
-  <div class="panel">
-    <div class="row"><label for="command" class="mono">command</label><select id="command"></select></div>
-    <div id="preflight"></div>
-  </div>
-  <details><summary>Cypher</summary><pre id="q-preflight"></pre></details>
+  <section class="block" id="failures">
+    <div class="head">
+      <div><h2>Failures that came back</h2><p>Each failure below hit two or more sessions. The map shows where they cluster; the list shows when each one happened. Select one to see its place in the graph, how sessions got past it, and the log lines behind it.</p></div>
+      <button class="ghost" type="button" data-show="q-failures">Show Cypher</button>
+    </div>
+    <pre class="cypher" id="q-failures" hidden></pre>
+    <div class="maplegend"><span>Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i>no recovery on record</span><span><i style="background:var(--green-soft)"></i>recovered in an earlier session</span></div>
+    <div class="map" id="map" role="group" aria-label="Failure map"></div>
+    <div class="split">
+      <div class="card list" id="list" role="listbox" aria-label="Recurring failures"></div>
+      <article class="card detail" id="detail" aria-live="polite"></article>
+    </div>
+  </section>
 
-  <h2>4. Your own Cypher</h2>
-  <div class="panel">
-    <textarea id="cypher" spellcheck="false">MATCH (s:Session)-[:HAS_CALL]->(c:Call {ok: false})-[:RAN]->(k:Command)
-RETURN s.agent AS agent, k.template AS command, count(c) AS failed_calls
-ORDER BY failed_calls DESC LIMIT 10</textarea>
-    <div class="row"><button id="go">Run</button><span class="muted mono" id="took"></span></div>
-    <div class="scroll" id="result"></div>
-  </div>
+  <section class="block" id="check">
+    <div class="head">
+      <div><h2>Ask before you run</h2><p>The same lookup the Claude Code hook and the MCP <span class="mono">preflight</span> tool make. A command with a recurring failure gets one line of warning; every other command gets silence.</p></div>
+      <button class="ghost" type="button" data-show="q-check">Show Cypher</button>
+    </div>
+    <pre class="cypher" id="q-check" hidden></pre>
+    <div class="check">
+      <div class="card">
+        <label class="field" for="cmd">Command the agent is about to run</label>
+        <div class="input"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" list="templates" value="git status"></div>
+        <datalist id="templates"></datalist>
+        <div class="tries" id="tries"></div>
+        <p class="note" id="check-note"></p>
+      </div>
+      <div class="term" id="term" aria-live="polite"></div>
+    </div>
+  </section>
 
-  <p class="muted" style="margin-top:40px">Data: <span id="sources"></span>.
-     Source and the reproducible evaluation: <a href="https://github.com/dtype2100/faildex">github.com/dtype2100/faildex</a>.</p>
+  <section class="block" id="evaluation">
+    <div class="head">
+      <div><h2>How much was already known</h2><p>Sessions of each dataset are ordered by start time: the first 70% are earlier, the rest later. A later failure is recurring when an earlier session already hit it, and warnable when an earlier session also shows the same command working again within five calls.</p></div>
+      <button class="ghost" type="button" data-show="q-eval">Show Cypher</button>
+    </div>
+    <pre class="cypher" id="q-eval" hidden></pre>
+    <div class="evallegend"><span><i style="background:var(--red)"></i>recurring: seen in an earlier session</span><span><i style="background:var(--green)"></i>warnable: a recovery on record too</span><span><i style="background:var(--line-strong)"></i>the rest</span></div>
+    <div class="eval" id="eval"></div>
+    <p class="method">Computed here, in your browser, by Relate WebAssembly. <span class="mono">make eval</span> in the repository computes the same table from the same store.</p>
+  </section>
+
+  <section class="block" id="query">
+    <div class="head"><div><h2>Query the graph</h2><p>Session, Call, Command and ErrorSig nodes, joined by HAS_CALL, NEXT, RAN and FAILED_WITH. Pick a query or write your own.</p></div></div>
+    <div class="card console">
+      <div class="presets" id="presets"></div>
+      <label class="field" for="cypher">Cypher</label>
+      <textarea id="cypher" spellcheck="false"></textarea>
+      <div class="run"><button class="primary" type="button" id="go">Run query</button><span class="took" id="took"></span></div>
+      <div id="result"></div>
+    </div>
+  </section>
 </main>
+
+<footer>
+  <div class="wrap">
+    <span>Data: <span id="sources"></span></span>
+    <span>Source and reproducible evaluation: <a href="https://github.com/dtype2100/faildex">github.com/dtype2100/faildex</a></span>
+  </div>
+</footer>
 
 <script type="module">
 import init, { RelateDb } from "./vendor/relate.js";
@@ -117,93 +317,290 @@ import { load, run, evaluate, Q } from "./graph.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const pct = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}%` : "n/a");
-const cell = (v) => (Array.isArray(v) ? v.join(", ") : v);
+const pct = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}%` : "—");
+const fmt = (n) => Number(n).toLocaleString("en-US");
+const AGENT = { codex: "Codex", "claude-code": "Claude Code", cursor: "Cursor" };
+const DATASET = { "codex-trajectories": "Codex", wisp: "Claude Code" };
+const day = (ts) => new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const paint = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-function table(rows, { pick } = {}) {
-  if (!rows.length) return `<span class="muted">No rows.</span>`;
+document.querySelectorAll("[data-show]").forEach((b) => b.addEventListener("click", () => {
+  const pre = $(b.dataset.show); pre.hidden = !pre.hidden; b.textContent = pre.hidden ? "Show Cypher" : "Hide Cypher";
+}));
+
+function table(rows) {
+  if (!rows.length) return `<p class="empty">No rows.</p>`;
   const cols = Object.keys(rows[0]);
-  const head = cols.map((c) => `<th>${esc(c)}</th>`).join("");
-  const body = rows.map((r, i) => `<tr ${pick ? `class="pick" data-i="${i}"` : ""}>` +
-    cols.map((c) => `<td class="${typeof r[c] === "number" ? "n" : "k"}">${esc(cell(r[c]))}</td>`).join("") + "</tr>").join("");
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  const cell = (v) => (Array.isArray(v) ? v.join(", ") : v);
+  return `<div class="table"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
+    `<tr>${cols.map((c) => `<td class="${typeof r[c] === "number" ? "num" : "txt"}">${esc(cell(r[c]))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
-
-const paint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
 async function main() {
   await init();
-  $("status").textContent = "Downloading the graph…";
+  $("status-text").textContent = "Downloading the graph…";
   const data = await (await fetch("./data.json")).json();
-  $("status").textContent = "Building the graph in Relate…";
+  $("status-text").textContent = "Building the graph in Relate…";
   await paint();
   const db = new RelateDb();
   const t0 = performance.now();
-  const calls = load(db, data);
+  const calls = load(db, data, (done, total) => { $("progress").style.width = `${(100 * done) / total}%`; });
   const built = Math.round(performance.now() - t0);
-
   const counts = Object.fromEntries(run(db, Q.counts).map((r) => [r.label, r.n]));
   const rels = run(db, Q.relationships).reduce((n, r) => n + r.n, 0);
-  $("status").textContent = `Graph built in ${built} ms inside your browser: ${calls.toLocaleString()} calls, ${rels.toLocaleString()} relationships.`;
+  $("status").classList.add("ready");
+  $("status-text").textContent = `Relate WebAssembly · graph built in ${(built / 1000).toFixed(1)} s · ${fmt(calls)} calls`;
+  $("progress").style.opacity = "0";
   $("sources").innerHTML = data.sources.map((s) => `<a href="${esc(s.url)}">${esc(s.repo)}</a> (${esc(s.license)})`).join(", ");
 
+  const kpi = [counts.Session, counts.Call, counts.ErrorSig, rels];
+  document.querySelectorAll("#kpis .kpi b").forEach((b, i) => { b.textContent = fmt(kpi[i]); });
+
+  // ---- the result
   await paint();
   const scores = evaluate(db, data.sources);
   const all = scores[scores.length - 1];
-  const stat = (n, label, hot) => `<div class="stat ${hot ? "hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
-  $("stats").innerHTML =
-    stat(counts.Session.toLocaleString(), "sessions") + stat(counts.Call.toLocaleString(), "tool calls") +
-    stat(counts.ErrorSig, "failure keys") +
-    stat(pct(all.recurring, all.failures), "of later failures were already in the graph", true) +
-    stat(pct(all.warnable, all.recurring), "of those had a recovery on record", true);
-  $("eval").innerHTML = table(scores.map((r) => ({
-    dataset: r.dataset, "sessions earlier / later": `${r.earlier} / ${r.later}`, "later failures": r.failures,
-    recurring: r.recurring, recurrence: pct(r.recurring, r.failures), warnable: r.warnable,
-    "of recurring": pct(r.warnable, r.recurring) })));
+  $("r-rate").textContent = pct(all.recurring, all.failures);
+  $("r-seen").style.width = `${(100 * all.recurring) / all.failures}%`;
+  $("r-new").style.width = `${(100 * (all.failures - all.recurring)) / all.failures}%`;
+  $("r-legend").innerHTML = `<span><i style="background:var(--red)"></i>${all.recurring} seen before</span><span><i style="background:var(--line-strong)"></i>${all.failures - all.recurring} new</span><span>of ${all.failures} later failures</span>`;
+  $("r-warn").textContent = pct(all.warnable, all.recurring);
+  $("r-warn-text").textContent = `of those ${all.recurring} also had a recovery on record (${all.warnable})`;
+  $("r-fixed").style.width = `${(100 * all.warnable) / all.recurring}%`;
+  $("r-unfixed").style.width = `${(100 * (all.recurring - all.warnable)) / all.recurring}%`;
 
-  for (const [id, q] of [["q-recurring", Q.recurring], ["q-recovery", Q.recovery], ["q-evidence", Q.evidence], ["q-preflight", Q.preflight]]) $(id).textContent = q;
+  $("eval").innerHTML = scores.map((r) => {
+    const total = r.dataset === "all";
+    const label = total ? "All datasets" : `${DATASET[r.dataset] || r.dataset}`;
+    const sub = total ? `${r.earlier} earlier · ${r.later} later sessions` : `${esc(r.dataset)} · ${r.earlier}/${r.later} sessions`;
+    return `<div class="card erow ${total ? "total" : ""}">
+      <div class="name">${label}<small>${sub}</small></div>
+      <div class="bars">
+        <div class="meter"><span class="r" style="width:${(100 * r.recurring) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.recurring)) / Math.max(1, r.failures)}%"></span></div>
+        <div class="meter"><span class="g" style="width:${(100 * r.warnable) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.warnable)) / Math.max(1, r.failures)}%"></span></div>
+      </div>
+      <div class="nums"><b>${r.recurring}</b> of ${r.failures} recurring · <b>${pct(r.recurring, r.failures)}</b><br><b>${r.warnable}</b> warnable · ${pct(r.warnable, r.recurring)} of recurring</div>
+    </div>`;
+  }).join("");
+  $("q-eval").textContent = [Q.sessionsOf, Q.earlierKeys, Q.later, Q.recovered].join("\n\n");
 
+  // ---- failures
   const recurring = run(db, Q.recurring);
-  $("recurring").innerHTML = table(recurring, { pick: true });
-  const show = (i) => {
-    document.querySelectorAll("#recurring tr.pick").forEach((tr) => tr.classList.toggle("on", Number(tr.dataset.i) === i));
-    const failure = recurring[i].failure;
-    const path = run(db, Q.recovery, { failure });
-    $("recovery").innerHTML = path.length ? table(path) : `<span class="muted">No recovery on record: no session shows the command working again within five calls.</span>`;
-    $("evidence").innerHTML = table(run(db, Q.evidence, { failure }).map((r) => ({ dataset: r.dataset, agent: r.agent, pointer: `${r.file}:${r.line}` })));
-  };
-  $("recurring").addEventListener("click", (e) => { const tr = e.target.closest("tr.pick"); if (tr) show(Number(tr.dataset.i)); });
-  show(0);
+  const occ = run(db, Q.occurrences);
+  const recovered = Object.fromEntries(run(db, Q.recoveredCounts).map((r) => [r.failure, r.recovered]));
+  const byFailure = {};
+  for (const o of occ) (byFailure[o.failure] ||= []).push(o);
+  const times = occ.map((o) => Date.parse(o.ts)).filter(Number.isFinite);
+  const tMin = Math.min(...times), tMax = Math.max(...times);
+  const xOf = (ts, w, pad = 4) => pad + ((Date.parse(ts) - tMin) / Math.max(1, tMax - tMin)) * (w - 2 * pad);
 
-  const known = run(db, Q.commandsWithFailures).map((r) => r.command);
-  $("command").innerHTML = [...known, "rg", "ls", "npm test"].map((c) => `<option>${esc(c)}</option>`).join("");
-  const ask = () => {
-    const command = $("command").value;
-    const rows = run(db, Q.preflight, { command });
-    $("preflight").innerHTML = rows.length
-      ? rows.map((r) => `<div class="warn"><span class="mono">${esc(command)}</span> has failed with <b class="mono">${esc(r.known_failure)}</b> in ${r.sessions} sessions (${r.calls} of its ${r.runs} runs).</div>`).join("")
-      : `<div class="quiet">Nothing known about <span class="mono">${esc(command)}</span>. The hook stays silent.</div>`;
+  const spark = (f) => {
+    const w = 160, h = 18;
+    const ticks = (byFailure[f] || []).map((o) => `<line x1="${xOf(o.ts, w).toFixed(1)}" x2="${xOf(o.ts, w).toFixed(1)}" y1="3" y2="${h - 3}" stroke="var(--red)" stroke-width="1.5" stroke-opacity=".75"/>`).join("");
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${w}" y1="${h / 2}" y2="${h / 2}" stroke="var(--line-strong)"/>${ticks}</svg>`;
   };
-  $("command").addEventListener("change", ask);
-  $("command").value = known.includes("git status") ? "git status" : known[0];
-  ask();
+  $("q-failures").textContent = [Q.recurring, Q.occurrences, Q.neighborhood, Q.recovery, Q.evidence].join("\n\n");
+  $("list").innerHTML = recurring.map((r, i) => {
+    const fixed = recovered[r.failure] || 0;
+    const cmd = (r.commands || [])[0];
+    return `<button class="item" type="button" role="option" aria-selected="false" data-i="${i}">
+      <span class="sig">${esc(r.failure)}</span>
+      <span class="n"><b>${r.sessions}</b>sessions</span>
+      <span class="meta">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${spark(r.failure)}${fixed ? `<span class="tag green">recovered ${fixed}×</span>` : `<span class="tag red">no recovery</span>`}</span>
+    </button>`;
+  }).join("");
 
+  // A squarified treemap: one tile per failure, area by sessions.
+  const worst = (row, side) => {
+    const sum = row.reduce((a, r) => a + r.area, 0), max = Math.max(...row.map((r) => r.area)), min = Math.min(...row.map((r) => r.area));
+    return Math.max((side * side * max) / (sum * sum), (sum * sum) / (side * side * min));
+  };
+  const squarify = (items, x, y, w, h) => {
+    const total = items.reduce((a, it) => a + it.value, 0);
+    let rest = items.map((it) => ({ ...it, area: (it.value * w * h) / total }));
+    const out = [];
+    while (rest.length) {
+      const side = Math.min(w, h);
+      let row = [rest[0]], best = worst(row, side), i = 1;
+      while (i < rest.length) { const next = [...row, rest[i]]; const v = worst(next, side); if (v > best) break; row = next; best = v; i++; }
+      const sum = row.reduce((a, r) => a + r.area, 0);
+      if (w >= h) { const cw = sum / h; let cy = y; for (const r of row) { const rh = r.area / cw; out.push({ ...r, x, y: cy, w: cw, h: rh }); cy += rh; } x += cw; w -= cw; }
+      else { const ch = sum / w; let cx = x; for (const r of row) { const rw = r.area / ch; out.push({ ...r, x: cx, y, w: rw, h: ch }); cx += rw; } y += ch; h -= ch; }
+      rest = rest.slice(row.length);
+    }
+    return out;
+  };
+  let current = 0;
+  const drawMap = () => {
+    const box = $("map"), W = box.clientWidth, H = box.clientHeight, gap = 3;
+    const tiles = squarify(recurring.map((r, i) => ({ value: r.sessions, i, r })), 0, 0, W, H);
+    box.innerHTML = tiles.map((t) => {
+      const fixed = recovered[t.r.failure] || 0, cmd = (t.r.commands || [])[0] || "", tw = t.w - gap, th = t.h - gap;
+      const big = tw > 150 && th > 92, mid = tw > 70 && th > 48;
+      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${t.i}" aria-pressed="${t.i === current}" title="${esc(t.r.failure)}"
+        style="left:${t.x.toFixed(1)}px;top:${t.y.toFixed(1)}px;width:${tw.toFixed(1)}px;height:${th.toFixed(1)}px">
+        ${mid ? `<b>${t.r.sessions}<small>${big ? "sessions" : ""}</small></b>` : `<b>${t.r.sessions}</b>`}${mid && cmd ? `<span class="t-cmd">${esc(cmd)}</span>` : ""}${big ? `<span class="t-sig">${esc(t.r.failure)}</span>` : ""}
+      </button>`;
+    }).join("");
+  };
+  $("map").addEventListener("click", (e) => { const b = e.target.closest(".tile"); if (b) select(Number(b.dataset.i)); });
+  let resizing;
+  addEventListener("resize", () => { clearTimeout(resizing); resizing = setTimeout(drawMap, 150); });
+
+  const timeline = (f) => {
+    const w = 640, h = 88, rows = ["codex", "claude-code"];
+    const y = { codex: 30, "claude-code": 58 };
+    const list = byFailure[f] || [];
+    const months = [];
+    const d = new Date(tMin); d.setUTCDate(1); d.setUTCHours(0, 0, 0, 0);
+    while (d.getTime() <= tMax) { if (d.getTime() >= tMin) months.push(new Date(d)); d.setUTCMonth(d.getUTCMonth() + 1); }
+    const axis = months.map((m) => { const x = xOf(m.toISOString(), w, 90); return `<line x1="${x}" x2="${x}" y1="12" y2="${h - 14}" stroke="var(--line)"/><text x="${x + 4}" y="${h - 2}" font-size="10" fill="var(--muted)">${m.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}</text>`; }).join("");
+    const lanes = rows.map((a) => `<text x="0" y="${y[a] + 3.5}" font-size="10.5" fill="var(--body)">${AGENT[a]}</text><line x1="90" x2="${w - 4}" y1="${y[a]}" y2="${y[a]}" stroke="var(--line)"/>`).join("");
+    const dots = list.map((o) => `<circle cx="${xOf(o.ts, w, 90).toFixed(1)}" cy="${y[o.agent] ?? 30}" r="4.5" fill="var(--red)" fill-opacity=".8" stroke="var(--surface)" stroke-width="1.5"/>`).join("");
+    const ends = `<text x="90" y="${h - 2}" font-size="10" fill="var(--muted)">${day(new Date(tMin).toISOString())}</text><text x="${w - 4}" y="${h - 2}" font-size="10" fill="var(--muted)" text-anchor="end">${day(new Date(tMax).toISOString())}</text>`;
+    return `<div class="tl-box"><svg class="timeline" viewBox="0 0 ${w} ${h}" role="img" aria-label="When this failure happened">${axis}${ends}${lanes}${dots}</svg></div>`;
+  };
+
+  const graph = (f) => {
+    const raw = run(db, Q.neighborhood, { failure: f });
+    const bySessions = {};
+    for (const r of raw) bySessions[r.command] = (bySessions[r.command] || 0) + 1;
+    const keep = Object.entries(bySessions).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+    const rows = raw.map((r) => (keep.includes(r.command) ? r : { ...r, command: "other" }));
+    const cmds = [...keep, ...(rows.some((r) => r.command === "other") ? ["other"] : [])];
+    const W = 360, H = 300, cx = W / 2, cy = H / 2;
+    const r1 = 82, r2 = 130;
+    const at = (i, n, r, off = -Math.PI / 2) => [cx + r * Math.cos(off + (2 * Math.PI * i) / Math.max(1, n)), cy + r * Math.sin(off + (2 * Math.PI * i) / Math.max(1, n))];
+    const cmdPos = Object.fromEntries(cmds.map((c, i) => [c, at(i, cmds.length, cmds.length === 1 ? 0 : r1)]));
+    const sess = rows.map((r, i) => ({ ...r, pos: at(i, rows.length, r2) }));
+    const lines = sess.map((s) => `<line x1="${s.pos[0].toFixed(1)}" y1="${s.pos[1].toFixed(1)}" x2="${cmdPos[s.command][0].toFixed(1)}" y2="${cmdPos[s.command][1].toFixed(1)}" stroke="var(--line-strong)" stroke-width="1"/>`).join("")
+      + cmds.map((c) => `<line x1="${cmdPos[c][0].toFixed(1)}" y1="${cmdPos[c][1].toFixed(1)}" x2="${cx}" y2="${cy}" stroke="var(--red)" stroke-opacity=".55" stroke-width="2"/>`).join("");
+    const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${((rows.length > 36 ? 2.6 : 3.4) + Math.min(3, s.calls - 1)).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} session · ${s.calls} call(s) · ${esc(s.command)}</title></circle>`).join("");
+    const cmdNodes = cmds.map((c) => { const [x, y] = cmdPos[c]; const label = c.length > 16 ? `${c.slice(0, 15)}…` : c; const w = 12 + label.length * 6.4; return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
+    const center = `<circle cx="${cx}" cy="${cy}" r="${cmds.length === 1 ? 14 : 16}" fill="var(--red)"><title>the failure (ErrorSig)</title></circle>`;
+    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This failure, the commands that hit it and the sessions they ran in">${lines}${nodes}${cmds.length === 1 ? "" : center}${cmdNodes}${cmds.length === 1 ? center : ""}</svg>`;
+    const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>the failure</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>command</span><span><i style="background:var(--ink);border-radius:50%"></i>Codex session</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>Claude Code session</span></div>`;
+    return `<div class="graph-box">${svg}${legend}</div>`;
+  };
+
+  const paths = (f) => {
+    const rows = run(db, Q.recovery, { failure: f }).slice(0, 4);
+    if (!rows.length) return `<p class="empty">No session shows the command working again within five calls. The warning says so: stop and check before retrying.</p>`;
+    return `<ol class="paths">${rows.map((r) => {
+      const mid = r.calls_until_it_worked > 1 && r.first_step_after_failure && r.first_step_after_failure !== r.command
+        ? `<span class="arrow">→</span><span class="step">${esc(r.first_step_after_failure)}</span>${r.calls_until_it_worked > 2 ? `<span class="arrow">→ ${r.calls_until_it_worked - 2} more →</span>` : `<span class="arrow">→</span>`}`
+        : `<span class="arrow">→</span>`;
+      return `<li><span class="step fail">${esc(r.command)} ✕</span>${mid}<span class="step ok">${esc(r.command)} ✓</span><span class="times">${r.times}×</span></li>`;
+    }).join("")}</ol>`;
+  };
+
+  const evidence = (f) => {
+    const rows = run(db, Q.evidence, { failure: f }).slice(0, 6);
+    return `<ul class="evidence">${rows.map((r) => `<li><span class="chip">${esc(DATASET[r.dataset] || r.dataset)}</span><span class="ptr" title="${esc(r.file)}:${r.line}">${esc(String(r.file).split("/").pop())}:${r.line}</span><span class="who">${esc(String(r.session).split(":").pop().slice(0, 8))}</span></li>`).join("")}</ul>`;
+  };
+
+  const select = (i) => {
+    current = i;
+    document.querySelectorAll("#list .item").forEach((b) => b.setAttribute("aria-selected", String(Number(b.dataset.i) === i)));
+    document.querySelectorAll("#map .tile").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i)));
+    const r = recurring[i];
+    const list = (byFailure[r.failure] || []).map((o) => o.ts).sort();
+    const fixed = recovered[r.failure] || 0;
+    const cmd = (r.commands || [])[0];
+    $("detail").innerHTML = `
+      <div class="top">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${fixed ? `<span class="tag green">recovered ${fixed} of ${r.calls} times</span>` : `<span class="tag red">no recovery on record</span>`}</div>
+      <h3>${esc(r.failure)}</h3>
+      <dl class="facts">
+        <div><dt>Sessions</dt><dd>${r.sessions}</dd></div><div><dt>Failed calls</dt><dd>${r.calls}</dd></div>
+        <div><dt>First seen</dt><dd>${list.length ? day(list[0]) : "—"}</dd></div><div><dt>Last seen</dt><dd>${list.length ? day(list[list.length - 1]) : "—"}</dd></div>
+      </dl>
+      <p class="sub">When it happened <small>each dot is one failed call</small></p>
+      ${timeline(r.failure)}
+      <div class="twin">
+        <div><p class="sub">In the graph <small>sessions → command → failure</small></p>${graph(r.failure)}</div>
+        <div><p class="sub">How sessions got past it <small>same command working again</small></p>${paths(r.failure)}</div>
+      </div>
+      <div class="pane"><p class="sub">Evidence <small>pointers into the public logs; the graph keeps no raw text</small></p>${evidence(r.failure)}</div>`;
+  };
+  $("list").addEventListener("click", (e) => { const b = e.target.closest(".item"); if (b) select(Number(b.dataset.i)); });
+  $("list").addEventListener("keydown", (e) => {
+    if (!["ArrowDown", "ArrowUp"].includes(e.key)) return;
+    const items = [...document.querySelectorAll("#list .item")];
+    const now = items.findIndex((b) => b.getAttribute("aria-selected") === "true");
+    const next = Math.max(0, Math.min(items.length - 1, now + (e.key === "ArrowDown" ? 1 : -1)));
+    e.preventDefault(); items[next].focus(); select(next);
+  });
+  drawMap();
+  select(0);
+
+  // ---- pre-run check
+  const templates = run(db, Q.templates).map((r) => r.template).filter((t) => t && !t.startsWith("<"));
+  const warned = run(db, Q.commandsWithFailures).map((r) => r.command).sort((a, b) => (b === "git status") - (a === "git status"));
+  $("templates").innerHTML = templates.map((t) => `<option value="${esc(t)}">`).join("");
+  $("tries").innerHTML = [...warned.slice(0, 4), "ls", "npm test", "python app.py"].filter((v, i, a) => a.indexOf(v) === i)
+    .map((t) => `<button type="button">${esc(t)}</button>`).join("");
+  $("q-check").textContent = [Q.preflight, Q.recovery].join("\n\n");
+  const templateOf = (line) => {
+    const s = line.trim().replace(/\s+/g, " ");
+    let best = null;
+    for (const t of templates) if ((s === t || s.startsWith(`${t} `)) && (!best || t.length > best.length)) best = t;
+    return best || s.split(" ")[0] || "";
+  };
+  const check = () => {
+    const line = $("cmd").value;
+    const template = templateOf(line);
+    if (!template) { $("term").innerHTML = `<span class="dim">Type a command.</span>`; $("check-note").textContent = ""; return; }
+    const known = run(db, Q.preflight, { command: template });
+    const shown = esc(line.trim() || template);
+    if (!known.length) {
+      $("term").innerHTML = `<div>● Bash(${shown})</div><div class="quiet">  ⎿ no notice</div><div class="dim" style="margin-top:14px">faildex knows no recurring failure for <span class="quiet">${esc(template)}</span>, so the hook prints nothing and the agent runs as usual.</div>`;
+      $("check-note").textContent = `Looked up as "${template}". Silence is the common case: most commands get no warning.`;
+      return;
+    }
+    const k = known[0];
+    const fixes = run(db, Q.recovery, { failure: k.known_failure }).filter((r) => r.command === template);
+    let after = "no recovery on record";
+    if (fixes.length) {
+      const top = fixes[0];
+      after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
+    }
+    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">The agent also receives the full rule and the log pointers as context. The hook never blocks the command.</div>`;
+    $("check-note").textContent = `Looked up as "${template}": ${k.calls} of its ${k.runs} runs failed this way (${pct(k.calls, k.runs)}).${known.length > 1 ? ` ${known.length - 1} more known failure(s) go to the agent.` : ""}`;
+  };
+  let pending;
+  $("cmd").addEventListener("input", () => { clearTimeout(pending); pending = setTimeout(check, 120); });
+  $("tries").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("cmd").value = b.textContent; check(); } });
+  check();
+
+  // ---- query console
+  const presets = {
+    "Most failing commands": `MATCH (s:Session)-[:HAS_CALL]->(c:Call {ok: false})-[:RAN]->(k:Command)\nRETURN s.agent AS agent, k.template AS command, count(c) AS failed_calls\nORDER BY failed_calls DESC LIMIT 10`,
+    "Failures by sessions": `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(:Call)<-[:HAS_CALL]-(s:Session)\nRETURN e.sig AS failure, count(DISTINCT s) AS sessions\nORDER BY sessions DESC LIMIT 10`,
+    "A recovery path": `MATCH (k:Command {template: 'rg'})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)\nMATCH p = (f)-[:NEXT*1..5]->(g:Call {ok: true}), (g)-[:RAN]->(k)\nRETURN e.sig AS failure, min(length(p)) AS calls_until_it_worked\nORDER BY calls_until_it_worked LIMIT 10`,
+    "Sessions per dataset": `MATCH (d:Source)<-[:FROM]-(s:Session)\nRETURN d.name AS dataset, d.license AS license, count(s) AS sessions`,
+  };
+  $("presets").innerHTML = Object.keys(presets).map((k) => `<button class="ghost" type="button">${esc(k)}</button>`).join("");
+  $("presets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("cypher").value = presets[b.textContent]; query(); } });
   const query = () => {
     const t = performance.now();
     try {
       const rows = run(db, $("cypher").value);
       $("result").innerHTML = table(rows.slice(0, 200));
-      $("took").textContent = `${rows.length} rows in ${Math.round(performance.now() - t)} ms`;
+      $("took").textContent = `${rows.length} rows · ${Math.round(performance.now() - t)} ms`;
     } catch (err) {
       $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`;
       $("took").textContent = "";
     }
   };
   $("go").addEventListener("click", query);
+  $("cypher").value = presets["Most failing commands"];
   query();
 }
 
-main().catch((err) => { $("status").innerHTML = `<span class="err">Could not start: ${esc(err.message)}</span>`; });
+main().catch((err) => {
+  $("status-text").textContent = `Could not start: ${err.message}`;
+  console.error(err);
+});
 </script>
 </body>
 </html>
