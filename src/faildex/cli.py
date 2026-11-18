@@ -95,16 +95,16 @@ def _ingest(args: argparse.Namespace) -> int:
     """Private by construction: the store stays on this machine and keeps local pointers."""
     import relate
 
-    from faildex.adapters import claude_code, codex, codex_local, cursor
+    from faildex.adapters import antigravity, claude_code, codex, codex_local, cursor
     from faildex.build import counts
     from faildex.schema import ingest
 
-    if not (args.claude or args.codex or args.codex_sessions or args.cursor):
-        print("error: give --claude DIR, --codex-sessions DIR, --cursor DIR or --codex FILE")
+    if not (args.claude or args.codex or args.codex_sessions or args.cursor or args.antigravity):
+        print("error: give --claude, --codex-sessions, --cursor, --antigravity or --codex")
         return 1
     missing = [
         str(p)
-        for p in [*args.claude, *args.codex, *args.codex_sessions, *args.cursor]
+        for p in [*args.claude, *args.codex, *args.codex_sessions, *args.cursor, *args.antigravity]
         if not p.exists()
     ]
     if missing:
@@ -113,6 +113,7 @@ def _ingest(args: argparse.Namespace) -> int:
     records = [r for root in args.claude for r in claude_code.read_dir(root)]
     records += [r for root in args.codex_sessions for r in codex_local.read_dir(root)]
     records += [r for root in args.cursor for r in cursor.read_dir(root)]
+    records += [r for root in args.antigravity for r in antigravity.read_dir(root)]
     records += list(codex.read_files(args.codex)) if args.codex else []
     args.store.parent.mkdir(parents=True, exist_ok=True)
     db = relate.connect(str(args.store))
@@ -269,6 +270,14 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         metavar="DIR",
         help="a directory of Cursor agent chats (~/.cursor/chats)",
+    )
+    ingest.add_argument(
+        "--antigravity",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="an Antigravity data folder (~/.gemini/antigravity or ~/.gemini/antigravity-cli)",
     )
     ingest.add_argument("--store", type=Path, default=None, help="store directory")
     ingest.set_defaults(run=_ingest)

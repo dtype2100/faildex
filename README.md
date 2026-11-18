@@ -1,7 +1,9 @@
 # faildex
 
+**English** · [한국어](README.ko.md)
+
 A failure index for coding agents. faildex reads the session logs of Claude Code,
-Codex and Cursor into one embedded [Relate](https://github.com/relatedb/relate) graph,
+Codex, Cursor and Antigravity into one embedded [Relate](https://github.com/relatedb/relate) graph,
 finds the failures that keep coming back across sessions, reads the way out off
 the graph, and tells the agent before it runs the same command again.
 
@@ -36,7 +38,7 @@ faildex turns it into three things:
 | `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs, and prints nothing otherwise. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. |
-| `faildex ingest` | Your own Claude Code, Codex CLI and Cursor agent logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
+| `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
 | `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and warnings the hook gave. |
 
 ### In a real Claude Code session
@@ -159,7 +161,8 @@ and Korean: switch in the top bar, or open it with `?lang=ko`.
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
 ```bash
-faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions --cursor ~/.cursor/chats
+faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions \
+  --cursor ~/.cursor/chats --antigravity ~/.gemini/antigravity-cli --antigravity ~/.gemini/antigravity
 faildex rules
 ```
 
