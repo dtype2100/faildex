@@ -1,0 +1,85 @@
+import json
+
+from faildex.cli import main
+from faildex.link import link, unlink
+
+
+def _home(tmp_path, antigravity=True):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "CLAUDE.md").write_text(
+        "@/somewhere/working-rules.md"
+    )  # no trailing newline
+    if antigravity:
+        (home / ".gemini" / "antigravity-cli").mkdir(parents=True)
+    return home
+
+
+def test_link_wires_both_agents_and_is_idempotent(tmp_path):
+    home = _home(tmp_path)
+    rules = tmp_path / "rules.md"
+    first = {s.agent: s.status for s in link(rules, home)}
+    assert first == {"Claude Code": "linked", "Antigravity": "linked", "Codex": "skipped"}
+    claude = (home / ".claude" / "CLAUDE.md").read_text()
+    assert claude == f"@/somewhere/working-rules.md\n@{rules.resolve()}\n"
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    assert agents.is_symlink() and agents.resolve() == rules.resolve()
+    assert json.loads((agents.parent.parent / "plugin.json").read_text())["name"] == "faildex-rules"
+    assert rules.read_text().startswith("# Rules learned")  # created so approve can append
+
+    second = {s.agent: s.status for s in link(rules, home)}
+    assert second["Claude Code"] == second["Antigravity"] == "already"
+    assert (home / ".claude" / "CLAUDE.md").read_text() == claude
+
+
+def test_dry_run_changes_nothing(tmp_path):
+    home = _home(tmp_path)
+    rules = tmp_path / "rules.md"
+    steps = {s.agent: s.status for s in link(rules, home, dry_run=True)}
+    assert steps["Claude Code"] == steps["Antigravity"] == "would link"
+    assert not rules.exists()
+    assert not (home / ".gemini" / "config").exists()
+    assert (home / ".claude" / "CLAUDE.md").read_text() == "@/somewhere/working-rules.md"
+
+
+def test_unlink_removes_only_what_link_added(tmp_path):
+    home = _home(tmp_path)
+    rules = tmp_path / "rules.md"
+    link(rules, home)
+    steps = {s.agent: s.status for s in unlink(rules, home)}
+    assert steps == {"Claude Code": "removed", "Antigravity": "removed"}
+    assert (home / ".claude" / "CLAUDE.md").read_text() == "@/somewhere/working-rules.md\n"
+    assert not (home / ".gemini/config/plugins/faildex-rules").exists()
+    assert rules.exists()  # the rules themselves are kept
+    assert {s.status for s in unlink(rules, home)} == {"absent"}
+
+
+def test_other_peoples_files_are_left_alone(tmp_path):
+    home = _home(tmp_path)
+    plugin = home / ".gemini/config/plugins/faildex-rules"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.json").write_text('{"name": "someone-else"}')
+    steps = {s.agent: s.status for s in link(tmp_path / "rules.md", home)}
+    assert steps["Antigravity"] == "skipped"
+    assert {s.agent: s.status for s in unlink(tmp_path / "rules.md", home)}[
+        "Antigravity"
+    ] == "skipped"
+    assert plugin.exists()
+
+
+def test_antigravity_is_skipped_when_not_installed(tmp_path):
+    home = _home(tmp_path, antigravity=False)
+    steps = {s.agent: s.status for s in link(tmp_path / "rules.md", home)}
+    assert steps["Antigravity"] == "skipped"
+    assert not (home / ".gemini").exists()
+
+
+def test_cli_link(tmp_path, monkeypatch, capsys):
+    home = _home(tmp_path)
+    monkeypatch.setenv("HOME", str(home))
+    rules = tmp_path / "rules.md"
+    assert main(["link", "--rules", str(rules)]) == 0
+    out = capsys.readouterr().out
+    assert "Claude Code  linked" in out and "Antigravity  linked" in out
+    assert main(["link", "--rules", str(rules), "--remove"]) == 0
+    assert "removed" in capsys.readouterr().out

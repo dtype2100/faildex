@@ -58,6 +58,16 @@ def _rules(args: argparse.Namespace) -> int:
     return 0
 
 
+def _link(args: argparse.Namespace) -> int:
+    from faildex.link import link, render, unlink
+
+    steps = (unlink if args.remove else link)(args.rules, dry_run=args.dry_run)
+    print(render(steps))
+    if not args.remove and not args.dry_run:
+        print(f"rules file: {args.rules.expanduser().resolve()}  (new sessions read it)")
+    return 0
+
+
 def _check(args: argparse.Namespace) -> int:
     from faildex.insight import warnings_for
     from faildex.normalize import command_template
@@ -233,6 +243,19 @@ def main(argv: list[str] | None = None) -> int:
     rules.add_argument("--approve", type=int, nargs="+", metavar="N", help="write these proposals")
     rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help="rules file")
     rules.set_defaults(run=_rules)
+
+    linker = commands.add_parser(
+        "link", help="make Claude Code and Antigravity read your approved rules file"
+    )
+    linker.add_argument(
+        "--rules",
+        type=Path,
+        default=Path("~/faildex-rules.md"),
+        help="rules file to link (default ~/faildex-rules.md)",
+    )
+    linker.add_argument("--remove", action="store_true", help="undo the links")
+    linker.add_argument("--dry-run", action="store_true", help="show what would change")
+    linker.set_defaults(run=_link)
 
     check = commands.add_parser("check", help="what is known to go wrong with a command")
     check.add_argument("command_line", help="the command about to run, quoted")

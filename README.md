@@ -163,6 +163,8 @@ Index your own logs. They stay on your machine, in `~/.faildex/store`:
 ```bash
 faildex ingest    # reads every default folder it finds; or pass --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
+cd ~ && faildex rules --approve 1 3   # write the ones you want to ~/faildex-rules.md
+faildex link      # make Claude Code and Antigravity read that file (--remove undoes it)
 ```
 
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,

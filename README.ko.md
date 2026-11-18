@@ -158,6 +158,8 @@ make serve     # http://localhost:8765
 ```bash
 faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
+cd ~ && faildex rules --approve 1 3   # 원하는 규칙만 ~/faildex-rules.md에 기록
+faildex link      # Claude Code와 Antigravity가 그 파일을 읽게 연결 (--remove로 되돌림)
 ```
 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
