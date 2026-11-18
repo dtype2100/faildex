@@ -476,15 +476,24 @@ async function main() {
     const lines = sess.map((s) => `<line x1="${s.pos[0].toFixed(1)}" y1="${s.pos[1].toFixed(1)}" x2="${cmdPos[s.command][0].toFixed(1)}" y2="${cmdPos[s.command][1].toFixed(1)}" stroke="var(--line-strong)" stroke-width="1"/>`).join("")
       + cmds.map((c) => `<line x1="${cmdPos[c][0].toFixed(1)}" y1="${cmdPos[c][1].toFixed(1)}" x2="${cx}" y2="${cy}" stroke="var(--red)" stroke-opacity=".55" stroke-width="2"/>`).join("");
     const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${((rows.length > 36 ? 2.6 : 3.4) + Math.min(3, s.calls - 1)).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} session · ${s.calls} call(s) · ${esc(s.command)}</title></circle>`).join("");
-    const cmdNodes = cmds.map((c) => { const [x, y] = cmdPos[c]; const label = c.length > 16 ? `${c.slice(0, 15)}…` : c; const w = 12 + label.length * 6.4; return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
+    const pillAt = (c) => (cmds.length === 1 ? [cx, cy + 38] : cmdPos[c]);
+    const cmdNodes = cmds.map((c) => { const [x, y] = pillAt(c); const label = c.length > 16 ? `${c.slice(0, 15)}…` : c; const w = 12 + label.length * 6.4; return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
     const center = `<circle cx="${cx}" cy="${cy}" r="${cmds.length === 1 ? 14 : 16}" fill="var(--red)"><title>the failure (ErrorSig)</title></circle>`;
-    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This failure, the commands that hit it and the sessions they ran in">${lines}${nodes}${cmds.length === 1 ? "" : center}${cmdNodes}${cmds.length === 1 ? center : ""}</svg>`;
+    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This failure, the commands that hit it and the sessions they ran in">${lines}${nodes}${center}${cmdNodes}</svg>`;
     const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>the failure</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>command</span><span><i style="background:var(--ink);border-radius:50%"></i>Codex session</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>Claude Code session</span></div>`;
     return `<div class="graph-box">${svg}${legend}</div>`;
   };
 
   const paths = (f) => {
-    const rows = run(db, Q.recovery, { failure: f }).slice(0, 4);
+    const merged = new Map();
+    for (const r of run(db, Q.recovery, { failure: f })) {
+      const direct = r.calls_until_it_worked === 1 || !r.first_step_after_failure || r.first_step_after_failure === r.command;
+      const key = direct ? `${r.command}|direct` : `${r.command}|${r.first_step_after_failure}|${r.calls_until_it_worked}`;
+      const row = merged.get(key) || { ...r, calls_until_it_worked: direct ? 1 : r.calls_until_it_worked, times: 0 };
+      row.times += r.times;
+      merged.set(key, row);
+    }
+    const rows = [...merged.values()].sort((a, b) => b.times - a.times).slice(0, 4);
     if (!rows.length) return `<p class="empty">No session shows the command working again within five calls. The warning says so: stop and check before retrying.</p>`;
     return `<ol class="paths">${rows.map((r) => {
       const mid = r.calls_until_it_worked > 1 && r.first_step_after_failure && r.first_step_after_failure !== r.command

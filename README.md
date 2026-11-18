@@ -7,6 +7,16 @@ the graph, and tells the agent before it runs the same command again.
 
 Built for the Relate by Neo4j Hackathon.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+faildex demo
+```
+
+![The faildex browser demo: 68.4% of later failures had already happened in an earlier session, and a map of the failures that came back, sized by sessions and coloured by whether a recovery is on record](docs/images/overview.jpg)
+
+*The browser demo rebuilds the graph from 422 public sessions inside Relate
+WebAssembly and recomputes every number on the page. Run it with `make site && make serve`.*
+
 ## Use case
 
 Coding agents do not remember. A session hits `fatal: not a git repository`,
@@ -28,6 +38,22 @@ faildex turns it into three things:
 | `faildex eval` | The numbers above, recomputed from the committed store. |
 | `faildex ingest` | Your own Claude Code, Codex CLI and Cursor agent logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
 | `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and warnings the hook gave. |
+
+### In a real Claude Code session
+
+The agent runs `git status` in a folder that is not a repository. Before the
+result comes back, the faildex hook prints what earlier sessions learned, and
+Claude acts on it:
+
+![A Claude Code session: under Bash(git status) the line "PreToolUse:Bash says: faildex: `git status` failed with `fatal: not a git repository` in 24 earlier sessions; no recovery on record", then Claude's answer "A faildex hook in this project flagged that this same failure has come up in 24 earlier sessions, so I didn't retry."](docs/images/claude-code-hook.jpg)
+
+### One failure, followed through the graph
+
+Select a failure in the browser demo to see when it happened, its neighbourhood
+in the graph (the sessions and commands that hit it), how sessions got past it,
+and the log lines behind it:
+
+<img src="docs/images/failure-detail.jpg" width="640" alt="Detail of the failure 'rg: regex parse error': 8 sessions, 12 failed calls, a timeline of when it happened, its neighbourhood in the graph, and recovery paths such as rg failing and then succeeding on the next call (8 times)">
 
 ## How it uses Relate
 
@@ -126,7 +152,8 @@ make serve     # http://localhost:8765
 ```
 
 The page rebuilds the graph inside Relate WebAssembly and recomputes the
-evaluation in the browser; it arrives at the same 80 of 117.
+evaluation in the browser; it arrives at the same 80 of 117. Every panel has a
+"Show Cypher" button with the queries behind it, and a console runs your own.
 
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
@@ -209,10 +236,10 @@ your own logs to get yours.
 
 | Criterion | Where to look |
 |---|---|
-| Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer |
+| Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer; the same graph and queries running in Relate WebAssembly in the browser demo, with each failure's neighbourhood drawn |
 | Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
-| Usefulness | 68% of later failures were already in the graph; the hook warns only for those and is silent otherwise |
-| Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md`; every number comes from `make eval` on the committed store |
+| Usefulness | 68% of later failures were already in the graph; in a real Claude Code session Claude cited the hook's notice and did not retry; it warns only for recurring failures and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
+| Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md` (each rule of the method mapped to the test that guards it); every number comes from `make eval` on the committed store, a test fails if a document disagrees, and the WebAssembly build reaches the same numbers |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |
 
 ## AI use
