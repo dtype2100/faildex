@@ -57,9 +57,16 @@
   nav { margin-left: auto; display: flex; gap: 4px; }
   nav a { text-decoration: none; color: var(--body); font-size: 14px; padding: 6px 10px; border-radius: 8px; }
   nav a:hover { color: var(--ink); background: var(--raised); }
-  .langs { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
-  .langs button { border: 0; background: transparent; font-size: 12.5px; padding: 5px 9px; cursor: pointer; color: var(--body); }
-  .langs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .lang { position: relative; flex: none; }
+  .lang > button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--muted); font: 500 12px var(--mono); padding: 6px; border-radius: 6px; cursor: pointer; }
+  .lang > button:hover, .lang > button[aria-expanded="true"] { color: var(--ink); background: var(--raised); }
+  .lang > button:focus-visible, .lang li:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .lang svg { width: 15px; height: 15px; }
+  .lang ul { position: absolute; right: 0; top: calc(100% + 6px); margin: 0; padding: 4px; list-style: none; min-width: 140px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); z-index: 50; }
+  .lang li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--body); cursor: pointer; }
+  .lang li:hover, .lang li:focus { background: var(--raised); color: var(--ink); outline: none; }
+  .lang li[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+  .lang li[aria-selected="true"]::after { content: "✓"; font-size: 12px; }
   .progress { height: 2px; background: transparent; }
   .progress span { display: block; height: 2px; width: 0; background: var(--ink); transition: width .2s ease, opacity .4s ease; }
   @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
@@ -227,7 +234,13 @@
       <a href="#failures" data-i18n="nav.failures">Failures</a><a href="#check" data-i18n="nav.check">Pre-run check</a><a href="#evaluation" data-i18n="nav.evaluation">Evaluation</a><a href="#query" data-i18n="nav.query">Query</a>
       <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
     </nav>
-    <div class="langs" id="langs" role="group" aria-label="Language"></div>
+    <div class="lang" id="lang">
+      <button type="button" id="lang-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Language" title="Language">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+        <span id="lang-code"></span>
+      </button>
+      <ul role="listbox" id="lang-list" aria-label="Language" hidden></ul>
+    </div>
   </div>
   <div class="progress"><span id="progress"></span></div>
 </header>
@@ -322,8 +335,24 @@ import { load, run, evaluate, Q } from "./graph.js";
 import { LANGS, applyStatic, lang, switchTo, t } from "./i18n.js";
 
 applyStatic();
-document.getElementById("langs").innerHTML = Object.entries(LANGS).map(([k, v]) => `<button type="button" data-lang="${k}" aria-pressed="${k === lang}">${v}</button>`).join("");
-document.getElementById("langs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.lang !== lang) switchTo(b.dataset.lang); });
+{
+  // Language: a small globe menu in the top bar, closed by default.
+  const btn = document.getElementById("lang-btn"), list = document.getElementById("lang-list");
+  document.getElementById("lang-code").textContent = lang.toUpperCase();
+  list.innerHTML = Object.entries(LANGS).map(([k, v]) => `<li role="option" tabindex="-1" data-lang="${k}" aria-selected="${k === lang}">${v}</li>`).join("");
+  const items = [...list.querySelectorAll("li")];
+  const open = (yes) => { list.hidden = !yes; btn.setAttribute("aria-expanded", String(yes)); if (yes) (items.find((li) => li.dataset.lang === lang) || items[0]).focus(); };
+  const pick = (li) => { open(false); if (li && li.dataset.lang !== lang) switchTo(li.dataset.lang); else btn.focus(); };
+  btn.addEventListener("click", () => open(list.hidden));
+  list.addEventListener("click", (e) => pick(e.target.closest("li")));
+  list.addEventListener("keydown", (e) => {
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(document.activeElement); }
+    else if (e.key === "Escape" || e.key === "Tab") { open(false); btn.focus(); }
+  });
+  document.addEventListener("click", (e) => { if (!list.hidden && !e.target.closest("#lang")) open(false); });
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
