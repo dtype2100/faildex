@@ -83,3 +83,19 @@ def test_cli_link(tmp_path, monkeypatch, capsys):
     assert "Claude Code  linked" in out and "Antigravity  linked" in out
     assert main(["link", "--rules", str(rules), "--remove"]) == 0
     assert "removed" in capsys.readouterr().out
+
+
+def test_without_symlinks_a_marked_copy_is_written_and_refreshed(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    def refuse(self, target):
+        raise OSError("symlinks need Developer Mode")
+
+    monkeypatch.setattr(Path, "symlink_to", refuse)
+    home = _home(tmp_path)
+    rules = tmp_path / "rules.md"
+    assert {s.agent: s.status for s in link(rules, home)}["Antigravity"] == "copied"
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    rules.write_text(rules.read_text() + "- a new rule\n")
+    assert {s.agent: s.status for s in link(rules, home)}["Antigravity"] == "copied"
+    assert agents.read_text().endswith("- a new rule\n")

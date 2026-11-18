@@ -14,3 +14,16 @@ jobs:
       - run: make site
       - run: uv run pytest -q -rs
       - run: make demo
+
+  # Windows: install and run the CLI (the browser demo build needs make and is skipped).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest -q -rs
+      - run: uv run faildex demo
+      - run: uv tool install .
+      - run: faildex check "git status"

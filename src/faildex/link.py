@@ -22,6 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HEADER = "# Rules learned from recurring failures (faildex)\n\n"
+# Where symlinks are not allowed (Windows without Developer Mode) the plugin gets a
+# marked copy instead, refreshed by running `faildex link` again.
+COPY = "<!-- faildex link: copy of {} -->\n"
 PLUGIN = "faildex-rules"
 
 
@@ -51,6 +54,13 @@ def _ours(plugin: Path) -> bool:
     try:
         return json.loads((plugin / "plugin.json").read_text()).get("name") == PLUGIN
     except (OSError, ValueError):
+        return False
+
+
+def _is_copy(target: Path, rules: Path) -> bool:
+    try:
+        return target.read_text().startswith(COPY.format(rules))
+    except OSError:
         return False
 
 
@@ -94,7 +104,7 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
         )
     elif target.is_symlink() and target.resolve() == rules:
         steps.append(Step("Antigravity", "already", target, f"-> {rules}"))
-    elif target.exists() and not target.is_symlink():
+    elif target.exists() and not target.is_symlink() and not _is_copy(target, rules):
         steps.append(
             Step("Antigravity", "skipped", target, "a regular file is there; not replaced")
         )
@@ -113,10 +123,21 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
             )
             + "\n"
         )
-        if target.is_symlink():
+        if target.is_symlink() or target.exists():
             target.unlink()
-        target.symlink_to(rules)
-        steps.append(Step("Antigravity", "linked", target, f"-> {rules}"))
+        try:
+            target.symlink_to(rules)
+            steps.append(Step("Antigravity", "linked", target, f"-> {rules}"))
+        except OSError:
+            target.write_text(COPY.format(rules) + rules.read_text())
+            steps.append(
+                Step(
+                    "Antigravity",
+                    "copied",
+                    target,
+                    "symlinks not allowed here; run faildex link again after approving rules",
+                )
+            )
 
     steps.append(
         Step(
