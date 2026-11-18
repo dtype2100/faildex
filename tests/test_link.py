@@ -77,10 +77,16 @@ def test_antigravity_is_skipped_when_not_installed(tmp_path):
 def test_cli_link(tmp_path, monkeypatch, capsys):
     home = _home(tmp_path)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # Windows
     rules = tmp_path / "rules.md"
     assert main(["link", "--rules", str(rules)]) == 0
     out = capsys.readouterr().out
-    assert "Claude Code  linked" in out and "Antigravity  linked" in out
+    status = {}
+    for line in out.splitlines():
+        for agent in ("Claude Code", "Antigravity"):
+            if line.startswith(agent):
+                status[agent] = line[len(agent) :].split()[0]
+    assert status == {"Claude Code": "linked", "Antigravity": "linked"}
     assert main(["link", "--rules", str(rules), "--remove"]) == 0
     assert "removed" in capsys.readouterr().out
 

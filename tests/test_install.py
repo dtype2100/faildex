@@ -21,6 +21,7 @@ def test_public_store_is_a_cached_copy_that_opens(tmp_path, monkeypatch):
 def test_default_store_falls_back_to_the_public_store(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Windows
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
     assert default_store().is_relative_to(tmp_path / "cache")
