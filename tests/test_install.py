@@ -67,3 +67,4 @@ def test_built_wheel_contains_the_store(tmp_path):
     assert "faildex/_store/manifest.json" in names
     assert any(n.startswith("faildex/_store/nodes/") for n in names)
     assert not any("/wal/" in n or n.endswith((".lock", ".writer")) for n in names)
+    assert "faildex/_skills/faildex/SKILL.md" in names  # faildex link installs it

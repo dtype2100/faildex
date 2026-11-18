@@ -64,7 +64,9 @@ def _link(args: argparse.Namespace) -> int:
     steps = (unlink if args.remove else link)(args.rules, dry_run=args.dry_run)
     print(render(steps))
     if not args.remove and not args.dry_run:
-        print(f"rules file: {args.rules.expanduser().resolve()}  (new sessions read it)")
+        print(
+            f"rules file: {args.rules.expanduser().resolve()}  (new sessions read it and the skill)"
+        )
     return 0
 
 
@@ -243,7 +245,8 @@ def main(argv: list[str] | None = None) -> int:
     rules.set_defaults(run=_rules)
 
     linker = commands.add_parser(
-        "link", help="make Claude Code and Antigravity read your approved rules file"
+        "link",
+        help="install the faildex skill and your approved rules into Claude Code, Antigravity and Codex",
     )
     linker.add_argument(
         "--rules",

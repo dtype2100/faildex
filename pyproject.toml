@@ -30,6 +30,7 @@ packages = ["src/faildex"]
 "store/nodes" = "faildex/_store/nodes"
 "store/relationships" = "faildex/_store/relationships"
 "store/.cypherlite" = "faildex/_store/.cypherlite"
+"skills/faildex/SKILL.md" = "faildex/_skills/faildex/SKILL.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

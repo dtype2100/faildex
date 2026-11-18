@@ -1,17 +1,20 @@
-"""Make every agent on this machine read one approved-rules file.
+"""Make every agent on this machine use faildex: the approved rules and the skill.
 
 `faildex rules --approve` writes rules to a Markdown file; an agent only follows
-them once its own instructions load that file. This module wires the file into
-each agent's global instructions, and takes it out again:
+them once its own instructions load that file. The faildex skill tells an agent
+when to ask faildex (before retrying a failed command, when asked what keeps
+going wrong). This module wires both in, and takes them out again:
 
-- Claude Code: an `@<file>` import line in `~/.claude/CLAUDE.md`.
+- Claude Code: an `@<file>` import line in `~/.claude/CLAUDE.md`, and the skill
+  at `~/.claude/skills/faildex/SKILL.md`.
 - Antigravity: a plugin at `~/.gemini/config/plugins/faildex-rules/` whose
-  `rules/AGENTS.md` is a link to the file (Antigravity loads plugin rules for
-  every workspace).
+  `rules/AGENTS.md` is a link to the file and whose `skills/faildex/SKILL.md` is
+  the skill (Antigravity loads plugin rules and skills in every workspace).
+- Codex: the skill at `~/.codex/skills/faildex/SKILL.md`. The rules are reported,
+  not changed: its single `~/.codex/AGENTS.md` has no import syntax.
 
 Every change is idempotent: running it twice changes nothing the second time.
-Nothing outside these two places is touched. Codex is reported, not changed:
-its single `~/.codex/AGENTS.md` has no import syntax.
+Files that are not faildex's own are never replaced.
 """
 
 from __future__ import annotations
@@ -26,14 +29,27 @@ HEADER = "# Rules learned from recurring failures (faildex)\n\n"
 # marked copy instead, refreshed by running `faildex link` again.
 COPY = "<!-- faildex link: copy of {} -->\n"
 PLUGIN = "faildex-rules"
+_HERE = Path(__file__).resolve().parent
+
+
+def skill_source() -> Path:
+    """The SKILL.md that ships with this copy of faildex (wheel or checkout)."""
+    for candidate in (
+        _HERE / "_skills" / "faildex" / "SKILL.md",
+        _HERE.parents[1] / "skills" / "faildex" / "SKILL.md",
+    ):
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("the faildex skill is missing from this installation")
 
 
 @dataclass
 class Step:
     agent: str
-    status: str  # linked, already, removed, absent, skipped, would link, would remove
+    status: str  # linked, installed, updated, already, removed, absent, skipped, would ...
     where: Path
     note: str = ""
+    what: str = "rules"  # rules or skill
 
 
 def _claude_md(home: Path) -> Path:
@@ -55,6 +71,57 @@ def _ours(plugin: Path) -> bool:
         return json.loads((plugin / "plugin.json").read_text()).get("name") == PLUGIN
     except (OSError, ValueError):
         return False
+
+
+def _is_faildex_skill(path: Path) -> bool:
+    try:
+        head = path.read_text().split("---", 2)[1]
+    except (OSError, IndexError):
+        return False
+    return any(line.strip() == "name: faildex" for line in head.splitlines())
+
+
+def _install_skill(agent: str, folder: Path, dry_run: bool) -> Step:
+    """Copy the shipped skill to `folder/SKILL.md`, unless someone else's skill is there."""
+    dest = folder / "SKILL.md"
+    text = skill_source().read_text()
+    if dest.exists() and dest.read_text() == text:
+        return Step(agent, "already", dest, what="skill")
+    if dest.exists() and not _is_faildex_skill(dest):
+        return Step(agent, "skipped", dest, "a different skill is there; not replaced", "skill")
+    if dry_run:
+        return Step(agent, "would install", dest, what="skill")
+    status = "updated" if dest.exists() else "installed"
+    folder.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text)
+    return Step(agent, status, dest, what="skill")
+
+
+def _remove_skill(agent: str, folder: Path, dry_run: bool) -> Step:
+    dest = folder / "SKILL.md"
+    if not dest.exists():
+        return Step(agent, "absent", dest, what="skill")
+    if not _is_faildex_skill(dest):
+        return Step(agent, "skipped", dest, "not the faildex skill; left alone", "skill")
+    if dry_run:
+        return Step(agent, "would remove", dest, what="skill")
+    shutil.rmtree(folder)
+    return Step(agent, "removed", dest, what="skill")
+
+
+def _write_manifest(plugin: Path, rules: Path) -> None:
+    plugin.mkdir(parents=True, exist_ok=True)
+    (plugin / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": PLUGIN,
+                "version": "1.1.0",
+                "description": f"faildex for Antigravity: approved rules (in {rules}) and the faildex skill.",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 def _is_copy(target: Path, rules: Path) -> bool:
@@ -85,6 +152,7 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
         with claude.open("a") as out:
             out.write(("" if not text or text.endswith("\n") else "\n") + line + "\n")
         steps.append(Step("Claude Code", "linked", claude, line))
+    steps.append(_install_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run))
 
     # Antigravity: a plugin whose rules file is a link to ours.
     plugin = _plugin(home)
@@ -112,17 +180,7 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
         steps.append(Step("Antigravity", "would link", target, f"-> {rules}"))
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
-        (plugin / "plugin.json").write_text(
-            json.dumps(
-                {
-                    "name": PLUGIN,
-                    "version": "1.0.0",
-                    "description": f"Rules approved with faildex; they live in {rules}.",
-                },
-                indent=2,
-            )
-            + "\n"
-        )
+        _write_manifest(plugin, rules)
         if target.is_symlink() or target.exists():
             target.unlink()
         try:
@@ -139,6 +197,11 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
                 )
             )
 
+    if _has_antigravity(home) and (not plugin.exists() or _ours(plugin)):
+        if not dry_run and not (plugin / "plugin.json").exists():
+            _write_manifest(plugin, rules)
+        steps.append(_install_skill("Antigravity", plugin / "skills" / "faildex", dry_run))
+
     steps.append(
         Step(
             "Codex",
@@ -147,6 +210,8 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
             "no import syntax; copy the rule lines in yourself if you want them there",
         )
     )
+    if (home / ".codex").is_dir():
+        steps.append(_install_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
     return steps
 
 
@@ -167,6 +232,9 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
         claude.write_text("".join(kept))
         steps.append(Step("Claude Code", "removed", claude, line))
 
+    steps.append(_remove_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run))
+    steps.append(_remove_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
+
     plugin = _plugin(home)
     if not plugin.exists():
         steps.append(Step("Antigravity", "absent", plugin))
@@ -176,7 +244,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
         steps.append(Step("Antigravity", "would remove", plugin))
     else:
         shutil.rmtree(plugin)
-        steps.append(Step("Antigravity", "removed", plugin))
+        steps.append(Step("Antigravity", "removed", plugin, "rules and skill"))
     return steps
 
 
@@ -191,7 +259,7 @@ def render(steps: list[Step], home: Path | None = None) -> str:
     for step in steps:
         note = step.note.replace(str(home), "~")
         rows.append(
-            f"{step.agent:<12} {step.status:<12} {short(step.where)}"
+            f"{step.agent:<12} {step.what:<6} {step.status:<14} {short(step.where)}"
             + (f"  ({note})" if note else "")
         )
     return "\n".join(rows)
