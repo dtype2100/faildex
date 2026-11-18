@@ -97,8 +97,10 @@ def test_ingest_builds_a_private_store_that_grows_without_duplicates(tmp_path, c
     assert main(["rules", "--store", str(store)]) == 0
 
 
-def test_ingest_needs_an_existing_source(tmp_path, capsys):
+def test_ingest_needs_an_existing_source(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
     assert main(["ingest", "--store", str(tmp_path / "s")]) == 1
+    assert "no agent logs in the default folders" in capsys.readouterr().out
     assert main(["ingest", "--claude", str(tmp_path / "none"), "--store", str(tmp_path / "s")]) == 1
 
 
@@ -124,3 +126,13 @@ def test_default_store_order_env_local_private_then_public(tmp_path, monkeypatch
     # named explicitly: that one
     monkeypatch.setenv("FAILDEX_STORE", str(tmp_path / "elsewhere"))
     assert default_store() == tmp_path / "elsewhere"
+
+
+def test_ingest_without_sources_reads_the_default_folders(tmp_path, capsys, monkeypatch):
+    home = tmp_path / "home"
+    fixture = Path(__file__).parent / "fixtures" / "antigravity"
+    shutil.copytree(fixture, home / ".gemini" / "antigravity-cli")
+    monkeypatch.setenv("HOME", str(home))
+    assert main(["ingest", "--store", str(tmp_path / "s")]) == 0
+    out = capsys.readouterr().out
+    assert "antigravity-cli" in out and "ingested 4 calls" in out

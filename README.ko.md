@@ -156,10 +156,12 @@ make serve     # http://localhost:8765
 내 기록 적재하기. 기록은 내 컴퓨터의 `~/.faildex/store`에만 남습니다.
 
 ```bash
-faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions \
-  --cursor ~/.cursor/chats --antigravity ~/.gemini/antigravity-cli --antigravity ~/.gemini/antigravity
+faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 ```
+
+옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
+`~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.
 
 Claude Code에서 쓰기. 프로젝트의 `.claude/settings.json`(모든 세션에 쓰려면
 `~/.claude/settings.json`)에 추가하세요. `faildex ingest`를 실행한 뒤에는 내 스토어를,

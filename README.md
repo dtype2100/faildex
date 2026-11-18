@@ -161,10 +161,12 @@ and Korean: switch in the top bar, or open it with `?lang=ko`.
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
 ```bash
-faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions \
-  --cursor ~/.cursor/chats --antigravity ~/.gemini/antigravity-cli --antigravity ~/.gemini/antigravity
+faildex ingest    # reads every default folder it finds; or pass --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 ```
+
+With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
+`~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.
 
 Use it in Claude Code. Add this to `.claude/settings.json` (your project's, or
 `~/.claude/settings.json` for every session). It reads your own store once you

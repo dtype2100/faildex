@@ -91,6 +91,16 @@ def _mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+# Where each agent keeps its logs by default, relative to the home folder.
+DEFAULT_SOURCES = (
+    ("claude", ".claude/projects"),
+    ("codex_sessions", ".codex/sessions"),
+    ("cursor", ".cursor/chats"),
+    ("antigravity", ".gemini/antigravity-cli"),
+    ("antigravity", ".gemini/antigravity"),
+)
+
+
 def _ingest(args: argparse.Namespace) -> int:
     """Private by construction: the store stays on this machine and keeps local pointers."""
     import relate
@@ -100,8 +110,22 @@ def _ingest(args: argparse.Namespace) -> int:
     from faildex.schema import ingest
 
     if not (args.claude or args.codex or args.codex_sessions or args.cursor or args.antigravity):
-        print("error: give --claude, --codex-sessions, --cursor, --antigravity or --codex")
-        return 1
+        # No source given: use every agent's default folder that exists on this machine.
+        home = Path.home()
+        found_any = False
+        for attr, rel in DEFAULT_SOURCES:
+            path = home / rel
+            if path.is_dir():
+                getattr(args, attr).append(path)
+                print(f"found {path}")
+                found_any = True
+        if not found_any:
+            print(
+                "error: no agent logs in the default folders "
+                f"({', '.join('~/' + rel for _, rel in DEFAULT_SOURCES)}); "
+                "give --claude, --codex-sessions, --cursor or --antigravity DIR"
+            )
+            return 1
     missing = [
         str(p)
         for p in [*args.claude, *args.codex, *args.codex_sessions, *args.cursor, *args.antigravity]
