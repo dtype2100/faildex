@@ -153,7 +153,8 @@ make serve     # http://localhost:8765
 
 The page rebuilds the graph inside Relate WebAssembly and recomputes the
 evaluation in the browser; it arrives at the same 80 of 117. Every panel has a
-"Show Cypher" button with the queries behind it, and a console runs your own.
+"Show Cypher" button with the queries behind it, and a console runs your own. The page is in English
+and Korean: switch in the top bar, or open it with `?lang=ko`.
 
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 

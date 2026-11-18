@@ -16,7 +16,7 @@
     --bg: #fafafa; --surface: #ffffff; --raised: #f5f5f5; --ink: #171717; --body: #525252; --muted: #8f8f8f;
     --line: #ebebeb; --line-strong: #dedede; --red: #e5484d; --red-soft: #feeceb; --red-ink: #c62a2f;
     --green: #2f9e66; --green-soft: #e9f6ee; --green-ink: #1f7a4c; --focus: #0a72ef; --term: #171717; --term-ink: #ededed;
-    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
     --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color-scheme: light;
   }
@@ -38,6 +38,7 @@
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  :lang(ko) body { word-break: keep-all; }
   a { color: inherit; }
   button { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
@@ -56,6 +57,9 @@
   nav { margin-left: auto; display: flex; gap: 4px; }
   nav a { text-decoration: none; color: var(--body); font-size: 14px; padding: 6px 10px; border-radius: 8px; }
   nav a:hover { color: var(--ink); background: var(--raised); }
+  .langs { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+  .langs button { border: 0; background: transparent; font-size: 12.5px; padding: 5px 9px; cursor: pointer; color: var(--body); }
+  .langs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
   .progress { height: 2px; background: transparent; }
   .progress span { display: block; height: 2px; width: 0; background: var(--ink); transition: width .2s ease, opacity .4s ease; }
   @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
@@ -174,7 +178,7 @@
   .tries button:hover { color: var(--ink); border-color: var(--line-strong); }
   .note { font-size: 13.5px; color: var(--body); margin: 16px 0 0; }
   .term { background: var(--term); color: var(--term-ink); border-radius: 14px; padding: 18px 20px; font: 13.5px/1.65 var(--mono); min-height: 190px; border: 1px solid var(--line); overflow-wrap: anywhere; }
-  .term .dim { color: #8b8b8b; }
+  .term .dim { color: #8b8b8b; font-family: var(--sans); font-size: 14px; }
   .term .hook { color: #f3a3a6; }
   .term .quiet { color: #7fd6a8; }
 
@@ -218,11 +222,12 @@
 <header class="bar">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="faildex home"><i></i>faildex</a>
-    <span class="status" id="status"><b></b><span id="status-text">Loading Relate WebAssembly…</span></span>
+    <span class="status" id="status"><b></b><span id="status-text" data-i18n="status.loading">Loading Relate WebAssembly…</span></span>
     <nav aria-label="Sections">
-      <a href="#failures">Failures</a><a href="#check">Pre-run check</a><a href="#evaluation">Evaluation</a><a href="#query">Query</a>
+      <a href="#failures" data-i18n="nav.failures">Failures</a><a href="#check" data-i18n="nav.check">Pre-run check</a><a href="#evaluation" data-i18n="nav.evaluation">Evaluation</a><a href="#query" data-i18n="nav.query">Query</a>
       <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
     </nav>
+    <div class="langs" id="langs" role="group" aria-label="Language"></div>
   </div>
   <div class="progress"><span id="progress"></span></div>
 </header>
@@ -230,32 +235,32 @@
 <main class="wrap" id="top">
   <section class="hero">
     <div>
-      <p class="eyebrow">faildex · built on Relate</p>
-      <h1>Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
-      <p class="lede">faildex reads Claude Code, Codex and Cursor logs into one Relate graph, finds the failures that keep coming back, and warns the agent before it repeats one. This page rebuilds that graph from 422 public sessions in your browser and runs every query live. Nothing is sent to a server.</p>
+      <p class="eyebrow" data-i18n="hero.eyebrow">faildex · built on Relate</p>
+      <h1 data-i18n-html="hero.title">Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
+      <p class="lede" data-i18n="hero.lede">faildex reads Claude Code, Codex and Cursor logs into one Relate graph, finds the failures that keep coming back, and warns the agent before it repeats one. This page rebuilds that graph from 422 public sessions in your browser and runs every query live. Nothing is sent to a server.</p>
     </div>
     <div class="card result" aria-live="polite">
       <div class="result-num" id="r-rate">—</div>
-      <p class="result-label">of failures in later sessions had already happened in an earlier session</p>
+      <p class="result-label" data-i18n="result.label">of failures in later sessions had already happened in an earlier session</p>
       <div class="meter" aria-hidden="true"><span class="r" id="r-seen"></span><span class="n" id="r-new"></span></div>
       <div class="legend" id="r-legend"></div>
       <hr>
-      <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text">of those also had a recovery on record</span></div>
+      <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text"></span></div>
       <div class="meter" aria-hidden="true" style="margin-top:10px"><span class="g" id="r-fixed"></span><span class="n" id="r-unfixed"></span></div>
     </div>
   </section>
   <div class="kpis" id="kpis">
-    <div class="kpi"><b>—</b><span>sessions</span></div><div class="kpi"><b>—</b><span>tool calls</span></div>
-    <div class="kpi"><b>—</b><span>failure keys</span></div><div class="kpi"><b>—</b><span>relationships</span></div>
+    <div class="kpi"><b>—</b><span data-i18n="kpi.sessions">sessions</span></div><div class="kpi"><b>—</b><span data-i18n="kpi.calls">tool calls</span></div>
+    <div class="kpi"><b>—</b><span data-i18n="kpi.keys">failure keys</span></div><div class="kpi"><b>—</b><span data-i18n="kpi.rels">relationships</span></div>
   </div>
 
   <section class="block" id="failures">
     <div class="head">
-      <div><h2>Failures that came back</h2><p>Each failure below hit two or more sessions. The map shows where they cluster; the list shows when each one happened. Select one to see its place in the graph, how sessions got past it, and the log lines behind it.</p></div>
-      <button class="ghost" type="button" data-show="q-failures">Show Cypher</button>
+      <div><h2 data-i18n="fail.title">Failures that came back</h2><p data-i18n="fail.intro">Each failure below hit two or more sessions. The map shows where they cluster; the list shows when each one happened. Select one to see its place in the graph, how sessions got past it, and the log lines behind it.</p></div>
+      <button class="ghost" type="button" data-show="q-failures" data-i18n="cypher.show">Show Cypher</button>
     </div>
     <pre class="cypher" id="q-failures" hidden></pre>
-    <div class="maplegend"><span>Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i>no recovery on record</span><span><i style="background:var(--green-soft)"></i>recovered in an earlier session</span></div>
+    <div class="maplegend"><span data-i18n="map.size">Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i><span data-i18n="map.none">no recovery on record</span></span><span><i style="background:var(--green-soft)"></i><span data-i18n="map.fixed">recovered in an earlier session</span></span></div>
     <div class="map" id="map" role="group" aria-label="Failure map"></div>
     <div class="split">
       <div class="card list" id="list" role="listbox" aria-label="Recurring failures"></div>
@@ -265,13 +270,13 @@
 
   <section class="block" id="check">
     <div class="head">
-      <div><h2>Ask before you run</h2><p>The same lookup the Claude Code hook and the MCP <span class="mono">preflight</span> tool make. A command with a recurring failure gets one line of warning; every other command gets silence.</p></div>
-      <button class="ghost" type="button" data-show="q-check">Show Cypher</button>
+      <div><h2 data-i18n="check.title">Ask before you run</h2><p data-i18n-html="check.intro">The same lookup the Claude Code hook and the MCP <span class="mono">preflight</span> tool make. A command with a recurring failure gets one line of warning; every other command gets silence.</p></div>
+      <button class="ghost" type="button" data-show="q-check" data-i18n="cypher.show">Show Cypher</button>
     </div>
     <pre class="cypher" id="q-check" hidden></pre>
     <div class="check">
       <div class="card">
-        <label class="field" for="cmd">Command the agent is about to run</label>
+        <label class="field" for="cmd" data-i18n="check.label">Command the agent is about to run</label>
         <div class="input"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" list="templates" value="git status"></div>
         <datalist id="templates"></datalist>
         <div class="tries" id="tries"></div>
@@ -283,22 +288,22 @@
 
   <section class="block" id="evaluation">
     <div class="head">
-      <div><h2>How much was already known</h2><p>Sessions of each dataset are ordered by start time: the first 70% are earlier, the rest later. A later failure is recurring when an earlier session already hit it, and warnable when an earlier session also shows the same command working again within five calls.</p></div>
-      <button class="ghost" type="button" data-show="q-eval">Show Cypher</button>
+      <div><h2 data-i18n="eval.title">How much was already known</h2><p data-i18n="eval.intro">Sessions of each dataset are ordered by start time: the first 70% are earlier, the rest later. A later failure is recurring when an earlier session already hit it, and warnable when an earlier session also shows the same command working again within five calls.</p></div>
+      <button class="ghost" type="button" data-show="q-eval" data-i18n="cypher.show">Show Cypher</button>
     </div>
     <pre class="cypher" id="q-eval" hidden></pre>
-    <div class="evallegend"><span><i style="background:var(--red)"></i>recurring: seen in an earlier session</span><span><i style="background:var(--green)"></i>warnable: a recovery on record too</span><span><i style="background:var(--line-strong)"></i>the rest</span></div>
+    <div class="evallegend"><span><i style="background:var(--red)"></i><span data-i18n="eval.lRecurring">recurring: seen in an earlier session</span></span><span><i style="background:var(--green)"></i><span data-i18n="eval.lWarnable">warnable: a recovery on record too</span></span><span><i style="background:var(--line-strong)"></i><span data-i18n="eval.lRest">the rest</span></span></div>
     <div class="eval" id="eval"></div>
-    <p class="method">Computed here, in your browser, by Relate WebAssembly. <span class="mono">make eval</span> in the repository computes the same table from the same store.</p>
+    <p class="method" data-i18n-html="eval.method">Computed here, in your browser, by Relate WebAssembly. <span class="mono">make eval</span> in the repository computes the same table from the same store.</p>
   </section>
 
   <section class="block" id="query">
-    <div class="head"><div><h2>Query the graph</h2><p>Session, Call, Command and ErrorSig nodes, joined by HAS_CALL, NEXT, RAN and FAILED_WITH. Pick a query or write your own.</p></div></div>
+    <div class="head"><div><h2 data-i18n="query.title">Query the graph</h2><p data-i18n="query.intro">Session, Call, Command and ErrorSig nodes, joined by HAS_CALL, NEXT, RAN and FAILED_WITH. Pick a query or write your own.</p></div></div>
     <div class="card console">
       <div class="presets" id="presets"></div>
       <label class="field" for="cypher">Cypher</label>
       <textarea id="cypher" spellcheck="false"></textarea>
-      <div class="run"><button class="primary" type="button" id="go">Run query</button><span class="took" id="took"></span></div>
+      <div class="run"><button class="primary" type="button" id="go" data-i18n="query.run">Run query</button><span class="took" id="took"></span></div>
       <div id="result"></div>
     </div>
   </section>
@@ -306,30 +311,36 @@
 
 <footer>
   <div class="wrap">
-    <span>Data: <span id="sources"></span></span>
-    <span>Source and reproducible evaluation: <a href="https://github.com/dtype2100/faildex">github.com/dtype2100/faildex</a></span>
+    <span><span data-i18n="footer.data">Data:</span> <span id="sources"></span></span>
+    <span><span data-i18n="footer.source">Source and reproducible evaluation:</span> <a href="https://github.com/dtype2100/faildex">github.com/dtype2100/faildex</a></span>
   </div>
 </footer>
 
 <script type="module">
 import init, { RelateDb } from "./vendor/relate.js";
 import { load, run, evaluate, Q } from "./graph.js";
+import { LANGS, applyStatic, lang, switchTo, t } from "./i18n.js";
+
+applyStatic();
+document.getElementById("langs").innerHTML = Object.entries(LANGS).map(([k, v]) => `<button type="button" data-lang="${k}" aria-pressed="${k === lang}">${v}</button>`).join("");
+document.getElementById("langs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.lang !== lang) switchTo(b.dataset.lang); });
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const LOCALE = lang === "ko" ? "ko-KR" : "en-US";
 const pct = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}%` : "—");
-const fmt = (n) => Number(n).toLocaleString("en-US");
+const fmt = (n) => Number(n).toLocaleString(LOCALE);
 const AGENT = { codex: "Codex", "claude-code": "Claude Code", cursor: "Cursor" };
 const DATASET = { "codex-trajectories": "Codex", wisp: "Claude Code" };
-const day = (ts) => new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const day = (ts) => new Date(ts).toLocaleDateString(LOCALE, { month: "short", day: "numeric", timeZone: "UTC" });
 const paint = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
 document.querySelectorAll("[data-show]").forEach((b) => b.addEventListener("click", () => {
-  const pre = $(b.dataset.show); pre.hidden = !pre.hidden; b.textContent = pre.hidden ? "Show Cypher" : "Hide Cypher";
+  const pre = $(b.dataset.show); pre.hidden = !pre.hidden; b.textContent = t(pre.hidden ? "cypher.show" : "cypher.hide");
 }));
 
 function table(rows) {
-  if (!rows.length) return `<p class="empty">No rows.</p>`;
+  if (!rows.length) return `<p class="empty">${t("query.noRows")}</p>`;
   const cols = Object.keys(rows[0]);
   const cell = (v) => (Array.isArray(v) ? v.join(", ") : v);
   return `<div class="table"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
@@ -338,9 +349,9 @@ function table(rows) {
 
 async function main() {
   await init();
-  $("status-text").textContent = "Downloading the graph…";
+  $("status-text").textContent = t("status.downloading");
   const data = await (await fetch("./data.json")).json();
-  $("status-text").textContent = "Building the graph in Relate…";
+  $("status-text").textContent = t("status.building");
   await paint();
   const db = new RelateDb();
   const t0 = performance.now();
@@ -349,7 +360,7 @@ async function main() {
   const counts = Object.fromEntries(run(db, Q.counts).map((r) => [r.label, r.n]));
   const rels = run(db, Q.relationships).reduce((n, r) => n + r.n, 0);
   $("status").classList.add("ready");
-  $("status-text").textContent = `Relate WebAssembly · graph built in ${(built / 1000).toFixed(1)} s · ${fmt(calls)} calls`;
+  $("status-text").textContent = t("status.ready", { s: (built / 1000).toFixed(1), calls: fmt(calls) });
   $("progress").style.opacity = "0";
   $("sources").innerHTML = data.sources.map((s) => `<a href="${esc(s.url)}">${esc(s.repo)}</a> (${esc(s.license)})`).join(", ");
 
@@ -363,23 +374,23 @@ async function main() {
   $("r-rate").textContent = pct(all.recurring, all.failures);
   $("r-seen").style.width = `${(100 * all.recurring) / all.failures}%`;
   $("r-new").style.width = `${(100 * (all.failures - all.recurring)) / all.failures}%`;
-  $("r-legend").innerHTML = `<span><i style="background:var(--red)"></i>${all.recurring} seen before</span><span><i style="background:var(--line-strong)"></i>${all.failures - all.recurring} new</span><span>of ${all.failures} later failures</span>`;
+  $("r-legend").innerHTML = `<span><i style="background:var(--red)"></i>${t("result.seen", { n: all.recurring })}</span><span><i style="background:var(--line-strong)"></i>${t("result.new", { n: all.failures - all.recurring })}</span><span>${t("result.of", { n: all.failures })}</span>`;
   $("r-warn").textContent = pct(all.warnable, all.recurring);
-  $("r-warn-text").textContent = `of those ${all.recurring} also had a recovery on record (${all.warnable})`;
+  $("r-warn-text").textContent = t("result.warn", { n: all.recurring, w: all.warnable });
   $("r-fixed").style.width = `${(100 * all.warnable) / all.recurring}%`;
   $("r-unfixed").style.width = `${(100 * (all.recurring - all.warnable)) / all.recurring}%`;
 
   $("eval").innerHTML = scores.map((r) => {
     const total = r.dataset === "all";
-    const label = total ? "All datasets" : `${DATASET[r.dataset] || r.dataset}`;
-    const sub = total ? `${r.earlier} earlier · ${r.later} later sessions` : `${esc(r.dataset)} · ${r.earlier}/${r.later} sessions`;
+    const label = total ? t("eval.all") : `${DATASET[r.dataset] || r.dataset}`;
+    const sub = total ? t("eval.subAll", { e: r.earlier, l: r.later }) : t("eval.sub", { name: esc(r.dataset), e: r.earlier, l: r.later });
     return `<div class="card erow ${total ? "total" : ""}">
       <div class="name">${label}<small>${sub}</small></div>
       <div class="bars">
         <div class="meter"><span class="r" style="width:${(100 * r.recurring) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.recurring)) / Math.max(1, r.failures)}%"></span></div>
         <div class="meter"><span class="g" style="width:${(100 * r.warnable) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.warnable)) / Math.max(1, r.failures)}%"></span></div>
       </div>
-      <div class="nums"><b>${r.recurring}</b> of ${r.failures} recurring · <b>${pct(r.recurring, r.failures)}</b><br><b>${r.warnable}</b> warnable · ${pct(r.warnable, r.recurring)} of recurring</div>
+      <div class="nums">${t("eval.nums", { r: r.recurring, f: r.failures, p: pct(r.recurring, r.failures), w: r.warnable, wp: pct(r.warnable, r.recurring) })}</div>
     </div>`;
   }).join("");
   $("q-eval").textContent = [Q.sessionsOf, Q.earlierKeys, Q.later, Q.recovered].join("\n\n");
@@ -405,8 +416,8 @@ async function main() {
     const cmd = (r.commands || [])[0];
     return `<button class="item" type="button" role="option" aria-selected="false" data-i="${i}">
       <span class="sig">${esc(r.failure)}</span>
-      <span class="n"><b>${r.sessions}</b>sessions</span>
-      <span class="meta">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${spark(r.failure)}${fixed ? `<span class="tag green">recovered ${fixed}×</span>` : `<span class="tag red">no recovery</span>`}</span>
+      <span class="n"><b>${r.sessions}</b>${t("list.sessions")}</span>
+      <span class="meta">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${spark(r.failure)}${fixed ? `<span class="tag green">${t("tag.recovered", { n: fixed })}</span>` : `<span class="tag red">${t("tag.none")}</span>`}</span>
     </button>`;
   }).join("");
 
@@ -434,12 +445,12 @@ async function main() {
   const drawMap = () => {
     const box = $("map"), W = box.clientWidth, H = box.clientHeight, gap = 3;
     const tiles = squarify(recurring.map((r, i) => ({ value: r.sessions, i, r })), 0, 0, W, H);
-    box.innerHTML = tiles.map((t) => {
-      const fixed = recovered[t.r.failure] || 0, cmd = (t.r.commands || [])[0] || "", tw = t.w - gap, th = t.h - gap;
+    box.innerHTML = tiles.map((tile) => {
+      const fixed = recovered[tile.r.failure] || 0, cmd = (tile.r.commands || [])[0] || "", tw = tile.w - gap, th = tile.h - gap;
       const big = tw > 150 && th > 92, mid = tw > 70 && th > 48;
-      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${t.i}" aria-pressed="${t.i === current}" title="${esc(t.r.failure)}"
-        style="left:${t.x.toFixed(1)}px;top:${t.y.toFixed(1)}px;width:${tw.toFixed(1)}px;height:${th.toFixed(1)}px">
-        ${mid ? `<b>${t.r.sessions}<small>${big ? "sessions" : ""}</small></b>` : `<b>${t.r.sessions}</b>`}${mid && cmd ? `<span class="t-cmd">${esc(cmd)}</span>` : ""}${big ? `<span class="t-sig">${esc(t.r.failure)}</span>` : ""}
+      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${tile.i}" aria-pressed="${tile.i === current}" title="${esc(tile.r.failure)}"
+        style="left:${tile.x.toFixed(1)}px;top:${tile.y.toFixed(1)}px;width:${tw.toFixed(1)}px;height:${th.toFixed(1)}px">
+        ${mid ? `<b>${tile.r.sessions}<small>${big ? t("list.sessions") : ""}</small></b>` : `<b>${tile.r.sessions}</b>`}${mid && cmd ? `<span class="t-cmd">${esc(cmd)}</span>` : ""}${big ? `<span class="t-sig">${esc(tile.r.failure)}</span>` : ""}
       </button>`;
     }).join("");
   };
@@ -478,9 +489,9 @@ async function main() {
     const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${((rows.length > 36 ? 2.6 : 3.4) + Math.min(3, s.calls - 1)).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} session · ${s.calls} call(s) · ${esc(s.command)}</title></circle>`).join("");
     const pillAt = (c) => (cmds.length === 1 ? [cx, cy + 38] : cmdPos[c]);
     const cmdNodes = cmds.map((c) => { const [x, y] = pillAt(c); const label = c.length > 16 ? `${c.slice(0, 15)}…` : c; const w = 12 + label.length * 6.4; return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
-    const center = `<circle cx="${cx}" cy="${cy}" r="${cmds.length === 1 ? 14 : 16}" fill="var(--red)"><title>the failure (ErrorSig)</title></circle>`;
+    const center = `<circle cx="${cx}" cy="${cy}" r="${cmds.length === 1 ? 14 : 16}" fill="var(--red)"><title>${t("graph.failure")} (ErrorSig)</title></circle>`;
     const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This failure, the commands that hit it and the sessions they ran in">${lines}${nodes}${center}${cmdNodes}</svg>`;
-    const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>the failure</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>command</span><span><i style="background:var(--ink);border-radius:50%"></i>Codex session</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>Claude Code session</span></div>`;
+    const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>${t("graph.failure")}</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>${t("graph.command")}</span><span><i style="background:var(--ink);border-radius:50%"></i>${t("graph.codex")}</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>${t("graph.claude")}</span></div>`;
     return `<div class="graph-box">${svg}${legend}</div>`;
   };
 
@@ -494,10 +505,10 @@ async function main() {
       merged.set(key, row);
     }
     const rows = [...merged.values()].sort((a, b) => b.times - a.times).slice(0, 4);
-    if (!rows.length) return `<p class="empty">No session shows the command working again within five calls. The warning says so: stop and check before retrying.</p>`;
+    if (!rows.length) return `<p class="empty">${t("paths.none")}</p>`;
     return `<ol class="paths">${rows.map((r) => {
       const mid = r.calls_until_it_worked > 1 && r.first_step_after_failure && r.first_step_after_failure !== r.command
-        ? `<span class="arrow">→</span><span class="step">${esc(r.first_step_after_failure)}</span>${r.calls_until_it_worked > 2 ? `<span class="arrow">→ ${r.calls_until_it_worked - 2} more →</span>` : `<span class="arrow">→</span>`}`
+        ? `<span class="arrow">→</span><span class="step">${esc(r.first_step_after_failure)}</span>${r.calls_until_it_worked > 2 ? `<span class="arrow">${t("paths.more", { n: r.calls_until_it_worked - 2 })}</span>` : `<span class="arrow">→</span>`}`
         : `<span class="arrow">→</span>`;
       return `<li><span class="step fail">${esc(r.command)} ✕</span>${mid}<span class="step ok">${esc(r.command)} ✓</span><span class="times">${r.times}×</span></li>`;
     }).join("")}</ol>`;
@@ -517,19 +528,19 @@ async function main() {
     const fixed = recovered[r.failure] || 0;
     const cmd = (r.commands || [])[0];
     $("detail").innerHTML = `
-      <div class="top">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${fixed ? `<span class="tag green">recovered ${fixed} of ${r.calls} times</span>` : `<span class="tag red">no recovery on record</span>`}</div>
+      <div class="top">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${fixed ? `<span class="tag green">${t("detail.recovered", { n: fixed, m: r.calls })}</span>` : `<span class="tag red">${t("detail.none")}</span>`}</div>
       <h3>${esc(r.failure)}</h3>
       <dl class="facts">
-        <div><dt>Sessions</dt><dd>${r.sessions}</dd></div><div><dt>Failed calls</dt><dd>${r.calls}</dd></div>
-        <div><dt>First seen</dt><dd>${list.length ? day(list[0]) : "—"}</dd></div><div><dt>Last seen</dt><dd>${list.length ? day(list[list.length - 1]) : "—"}</dd></div>
+        <div><dt>${t("facts.sessions")}</dt><dd>${r.sessions}</dd></div><div><dt>${t("facts.calls")}</dt><dd>${r.calls}</dd></div>
+        <div><dt>${t("facts.first")}</dt><dd>${list.length ? day(list[0]) : "—"}</dd></div><div><dt>${t("facts.last")}</dt><dd>${list.length ? day(list[list.length - 1]) : "—"}</dd></div>
       </dl>
-      <p class="sub">When it happened <small>each dot is one failed call</small></p>
+      <p class="sub">${t("sub.when")} <small>${t("sub.whenHint")}</small></p>
       ${timeline(r.failure)}
       <div class="twin">
-        <div><p class="sub">In the graph <small>sessions → command → failure</small></p>${graph(r.failure)}</div>
-        <div><p class="sub">How sessions got past it <small>same command working again</small></p>${paths(r.failure)}</div>
+        <div><p class="sub">${t("sub.graph")} <small>${t("sub.graphHint")}</small></p>${graph(r.failure)}</div>
+        <div><p class="sub">${t("sub.paths")} <small>${t("sub.pathsHint")}</small></p>${paths(r.failure)}</div>
       </div>
-      <div class="pane"><p class="sub">Evidence <small>pointers into the public logs; the graph keeps no raw text</small></p>${evidence(r.failure)}</div>`;
+      <div class="pane"><p class="sub">${t("sub.evidence")} <small>${t("sub.evidenceHint")}</small></p>${evidence(r.failure)}</div>`;
   };
   $("list").addEventListener("click", (e) => { const b = e.target.closest(".item"); if (b) select(Number(b.dataset.i)); });
   $("list").addEventListener("keydown", (e) => {
@@ -558,12 +569,12 @@ async function main() {
   const check = () => {
     const line = $("cmd").value;
     const template = templateOf(line);
-    if (!template) { $("term").innerHTML = `<span class="dim">Type a command.</span>`; $("check-note").textContent = ""; return; }
+    if (!template) { $("term").innerHTML = `<span class="dim">${t("check.type")}</span>`; $("check-note").textContent = ""; return; }
     const known = run(db, Q.preflight, { command: template });
     const shown = esc(line.trim() || template);
     if (!known.length) {
-      $("term").innerHTML = `<div>● Bash(${shown})</div><div class="quiet">  ⎿ no notice</div><div class="dim" style="margin-top:14px">faildex knows no recurring failure for <span class="quiet">${esc(template)}</span>, so the hook prints nothing and the agent runs as usual.</div>`;
-      $("check-note").textContent = `Looked up as "${template}". Silence is the common case: most commands get no warning.`;
+      $("term").innerHTML = `<div>● Bash(${shown})</div><div class="quiet">  ⎿ ${t("check.noNotice")}</div><div class="dim" style="margin-top:14px">${t("check.silent", { cmd: `<span class="quiet">${esc(template)}</span>` })}</div>`;
+      $("check-note").textContent = t("check.silentNote", { cmd: template });
       return;
     }
     const k = known[0];
@@ -573,8 +584,8 @@ async function main() {
       const top = fixes[0];
       after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
     }
-    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">The agent also receives the full rule and the log pointers as context. The hook never blocks the command.</div>`;
-    $("check-note").textContent = `Looked up as "${template}": ${k.calls} of its ${k.runs} runs failed this way (${pct(k.calls, k.runs)}).${known.length > 1 ? ` ${known.length - 1} more known failure(s) go to the agent.` : ""}`;
+    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
+    $("check-note").textContent = t("check.warnNote", { cmd: template, calls: k.calls, runs: k.runs, pct: pct(k.calls, k.runs) }) + (known.length > 1 ? t("check.more", { n: known.length - 1 }) : "");
   };
   let pending;
   $("cmd").addEventListener("input", () => { clearTimeout(pending); pending = setTimeout(check, 120); });
@@ -583,31 +594,31 @@ async function main() {
 
   // ---- query console
   const presets = {
-    "Most failing commands": `MATCH (s:Session)-[:HAS_CALL]->(c:Call {ok: false})-[:RAN]->(k:Command)\nRETURN s.agent AS agent, k.template AS command, count(c) AS failed_calls\nORDER BY failed_calls DESC LIMIT 10`,
-    "Failures by sessions": `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(:Call)<-[:HAS_CALL]-(s:Session)\nRETURN e.sig AS failure, count(DISTINCT s) AS sessions\nORDER BY sessions DESC LIMIT 10`,
-    "A recovery path": `MATCH (k:Command {template: 'rg'})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)\nMATCH p = (f)-[:NEXT*1..5]->(g:Call {ok: true}), (g)-[:RAN]->(k)\nRETURN e.sig AS failure, min(length(p)) AS calls_until_it_worked\nORDER BY calls_until_it_worked LIMIT 10`,
-    "Sessions per dataset": `MATCH (d:Source)<-[:FROM]-(s:Session)\nRETURN d.name AS dataset, d.license AS license, count(s) AS sessions`,
+    top: `MATCH (s:Session)-[:HAS_CALL]->(c:Call {ok: false})-[:RAN]->(k:Command)\nRETURN s.agent AS agent, k.template AS command, count(c) AS failed_calls\nORDER BY failed_calls DESC LIMIT 10`,
+    bySessions: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(:Call)<-[:HAS_CALL]-(s:Session)\nRETURN e.sig AS failure, count(DISTINCT s) AS sessions\nORDER BY sessions DESC LIMIT 10`,
+    path: `MATCH (k:Command {template: 'rg'})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)\nMATCH p = (f)-[:NEXT*1..5]->(g:Call {ok: true}), (g)-[:RAN]->(k)\nRETURN e.sig AS failure, min(length(p)) AS calls_until_it_worked\nORDER BY calls_until_it_worked LIMIT 10`,
+    datasets: `MATCH (d:Source)<-[:FROM]-(s:Session)\nRETURN d.name AS dataset, d.license AS license, count(s) AS sessions`,
   };
-  $("presets").innerHTML = Object.keys(presets).map((k) => `<button class="ghost" type="button">${esc(k)}</button>`).join("");
-  $("presets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("cypher").value = presets[b.textContent]; query(); } });
+  $("presets").innerHTML = Object.keys(presets).map((k) => `<button class="ghost" type="button" data-preset="${k}">${esc(t(`preset.${k}`))}</button>`).join("");
+  $("presets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("cypher").value = presets[b.dataset.preset]; query(); } });
   const query = () => {
-    const t = performance.now();
+    const t0q = performance.now();
     try {
       const rows = run(db, $("cypher").value);
       $("result").innerHTML = table(rows.slice(0, 200));
-      $("took").textContent = `${rows.length} rows · ${Math.round(performance.now() - t)} ms`;
+      $("took").textContent = t("query.took", { n: rows.length, ms: Math.round(performance.now() - t0q) });
     } catch (err) {
       $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`;
       $("took").textContent = "";
     }
   };
   $("go").addEventListener("click", query);
-  $("cypher").value = presets["Most failing commands"];
+  $("cypher").value = presets.top;
   query();
 }
 
 main().catch((err) => {
-  $("status-text").textContent = `Could not start: ${err.message}`;
+  $("status-text").textContent = t("status.failed", { msg: err.message });
   console.error(err);
 });
 </script>
