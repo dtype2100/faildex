@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from faildex.insight import Failure, failures, proposals, warnings_for
-from faildex.normalize import command_template
+from faildex.insight import Failure, failures, proposals, warnings_for_line
+from faildex.normalize import command_templates
 from faildex.store import open_store
 
 
@@ -37,15 +37,19 @@ def _summary(item: Failure) -> dict:
 
 
 def preflight(store: Path, command: str, min_sessions: int = 2) -> dict:
-    template = command_template(command)
-    if not template:
-        return {"command": None, "known_failures": []}
+    templates = command_templates(command)
+    if not templates:
+        return {"command": None, "commands": [], "known_failures": []}
     db = open_store(store)
     try:
-        found = warnings_for(db, template, min_sessions)
+        _, pairs = warnings_for_line(db, command, min_sessions)
     finally:
         db.close()
-    return {"command": template, "known_failures": [_summary(item) for item in found[:5]]}
+    return {
+        "command": pairs[0][0] if pairs else templates[0],
+        "commands": templates,
+        "known_failures": [{**_summary(item), "command": t} for t, item in pairs[:5]],
+    }
 
 
 def evidence(store: Path, failure: str) -> dict:

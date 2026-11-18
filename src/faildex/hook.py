@@ -27,18 +27,26 @@ SHELL_TOOLS = frozenset(["Bash"])
 MAX_WARNINGS = 2
 
 
-def _lookup(db, payload: object, min_sessions: int) -> tuple[str | None, list]:
-    """(command template, its recurring failures) for a shell call; (None, []) otherwise."""
-    from faildex.insight import warnings_for
+def _lookup(
+    db, payload: object, min_sessions: int, top: int = MAX_WARNINGS
+) -> tuple[str | None, list]:
+    """(command template, its recurring failures) for a shell call; (None, []) otherwise.
+
+    Every part of a compound line is looked up (`ls && git status` warns for git).
+    """
+    from faildex.insight import warnings_for_line
 
     if not isinstance(payload, dict) or payload.get("tool_name") not in SHELL_TOOLS:
         return None, []
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    template = command_template(command) if isinstance(command, str) else None
-    if not template:
+    if not isinstance(command, str):
         return None, []
-    return template, warnings_for(db, template, min_sessions)[:MAX_WARNINGS]
+    _, pairs = warnings_for_line(db, command, min_sessions)
+    pairs = pairs[: max(0, top)]
+    if not pairs:
+        return None, []
+    return pairs[0][0], [item for _, item in pairs]
 
 
 def _context(template: str, found: list) -> str:
@@ -47,9 +55,9 @@ def _context(template: str, found: list) -> str:
     return "\n".join(lines)
 
 
-def context_for(db, payload: object, min_sessions: int = 2) -> str | None:
+def context_for(db, payload: object, min_sessions: int = 2, top: int = MAX_WARNINGS) -> str | None:
     """The text to hand the agent before this tool call, or None for nothing."""
-    template, found = _lookup(db, payload, min_sessions)
+    template, found = _lookup(db, payload, min_sessions, top)
     return _context(template, found) if found else None
 
 
@@ -72,7 +80,9 @@ def _log(path: Path, payload: dict, context: str) -> None:
         out.write(json.dumps(entry) + "\n")
 
 
-def respond(raw: str, store: Path, min_sessions: int = 2, log: Path | None = None) -> str:
+def respond(
+    raw: str, store: Path, min_sessions: int = 2, log: Path | None = None, top: int = MAX_WARNINGS
+) -> str:
     """Hook stdout for one stdin payload; empty when there is nothing to say."""
     try:
         from faildex.store import open_store
@@ -80,7 +90,7 @@ def respond(raw: str, store: Path, min_sessions: int = 2, log: Path | None = Non
         payload = json.loads(raw)
         db = open_store(store)
         try:
-            template, found = _lookup(db, payload, min_sessions)
+            template, found = _lookup(db, payload, min_sessions, top)
         finally:
             db.close()
         if not found:

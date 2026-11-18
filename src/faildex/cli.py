@@ -69,16 +69,14 @@ def _link(args: argparse.Namespace) -> int:
 
 
 def _check(args: argparse.Namespace) -> int:
-    from faildex.insight import warnings_for
-    from faildex.normalize import command_template
+    from faildex.insight import warnings_for_line
 
     db = _open(args)
     if db is None:
         return 1
-    template = command_template(args.command_line)
-    found = warnings_for(db, template, args.min_sessions) if template else []
+    _, pairs = warnings_for_line(db, args.command_line, args.min_sessions)
     db.close()
-    for item in found[: args.top]:
+    for _, item in pairs[: args.top]:
         print(item.rule())
     return 0
 
@@ -88,7 +86,7 @@ def _hook(args: argparse.Namespace) -> int:
 
     from faildex.hook import respond
 
-    out = respond(sys.stdin.read(), args.store, args.min_sessions, args.log)
+    out = respond(sys.stdin.read(), args.store, args.min_sessions, args.log, args.top)
     if out:
         print(out)
     return 0
@@ -347,7 +345,13 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "store", "set") is None:
         from faildex.store import PRIVATE_STORE, default_store
 
-        args.store = PRIVATE_STORE.expanduser() if args.command == "ingest" else default_store()
+        private = PRIVATE_STORE.expanduser()
+        if args.command == "ingest":
+            args.store = private
+        elif args.command == "report" and (private / "manifest.json").is_file():
+            args.store = private  # report is about your own logs, even inside a checkout
+        else:
+            args.store = default_store()
     return args.run(args)
 
 

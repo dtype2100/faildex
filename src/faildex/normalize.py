@@ -226,6 +226,17 @@ def command_template(command: str) -> str | None:
     return found[0] if found else fallback
 
 
+def command_templates(command: str) -> list[str]:
+    """Every distinct program template a command line runs, in order.
+
+    `ls && git status` gives ["ls", "git status"], so a pre-run check can look
+    up each part, not only the first.
+    """
+    found, fallback = _templates(command)
+    unique = list(dict.fromkeys(found))
+    return unique or ([fallback] if fallback else [])
+
+
 def is_compound(command: str) -> bool:
     """True when the command line runs more than one program in sequence.
 

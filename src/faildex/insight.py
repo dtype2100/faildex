@@ -172,6 +172,20 @@ def warnings_for(
     return [item for item in found if runs and item.calls / runs >= min_rate]
 
 
+def warnings_for_line(
+    db, line: str, min_sessions: int = 2
+) -> tuple[list[str], list[tuple[str, Failure]]]:
+    """(templates looked up, (template, warning) pairs) for a whole command line.
+
+    A compound line is looked up part by part, so `ls && git status` warns for git.
+    """
+    from faildex.normalize import command_templates
+
+    templates = command_templates(line)
+    found = [(t, item) for t in templates for item in warnings_for(db, t, min_sessions)]
+    return templates, found
+
+
 def render(items: list[Failure]) -> str:
     """Numbered proposals with their evidence pointers."""
     lines = []

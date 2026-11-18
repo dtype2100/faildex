@@ -111,11 +111,45 @@ def _peak_rss_mb() -> float:
 
 
 def build_store(data_dir: Path, out: Path) -> dict:
-    """Rebuild the store at `out` from scratch and return what was written."""
+    """Rebuild the store at `out` from scratch and return what was written.
+
+    The new store is built next to `out` and swapped in only when the build
+    succeeded, so a failed rebuild (missing data, a bad file) leaves the old
+    store untouched.
+    """
     started = time.monotonic()
-    if out.exists():
-        shutil.rmtree(out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    work = out.parent / f".{out.name}.building"
+    if work.exists():
+        shutil.rmtree(work)
+    try:
+        _build_into(data_dir, work)
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
+    old = out.parent / f".{out.name}.old"
+    if old.exists():
+        shutil.rmtree(old)
+    if out.exists():
+        out.rename(old)
+    work.rename(out)
+    shutil.rmtree(old, ignore_errors=True)
+    from faildex.store import open_store
+
+    db = open_store(out)
+    try:
+        found = counts(db)
+    finally:
+        db.close()
+    return {
+        "counts": found,
+        "bytes": _size(out),
+        "seconds": time.monotonic() - started,
+        "peak_rss_mb": _peak_rss_mb(),
+    }
+
+
+def _build_into(data_dir: Path, out: Path) -> None:
     db = relate.connect(str(out))
     try:
         for source in SOURCES:
@@ -141,15 +175,8 @@ def build_store(data_dir: Path, out: Path) -> dict:
                 db.execute(_FROM, {"rows": rows[i : i + BATCH]})
         db.commit()
         db.flush()
-        found = counts(db)
     finally:
         db.close()
-    return {
-        "counts": found,
-        "bytes": _size(out),
-        "seconds": time.monotonic() - started,
-        "peak_rss_mb": _peak_rss_mb(),
-    }
 
 
 def report(result: dict, out: Path) -> str:

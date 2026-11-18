@@ -139,3 +139,18 @@ def test_ingest_without_sources_reads_the_default_folders(tmp_path, capsys, monk
     assert main(["ingest", "--store", str(tmp_path / "s")]) == 0
     out = capsys.readouterr().out
     assert "antigravity-cli" in out and "ingested 4 calls" in out
+
+
+def test_a_failed_rebuild_keeps_the_old_store(tmp_path):
+    from faildex.store import open_store
+
+    out = tmp_path / "store"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "store", out)
+    with pytest.raises(FileNotFoundError):
+        build.build_store(tmp_path / "no-such-data", out)
+    db = open_store(out)
+    try:
+        assert build.counts(db)["Call"] > 0
+    finally:
+        db.close()
+    assert not (tmp_path / ".store.building").exists()

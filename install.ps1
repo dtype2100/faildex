@@ -10,15 +10,22 @@
 $ErrorActionPreference = "Stop"
 $source = if ($env:FAILDEX_SOURCE) { $env:FAILDEX_SOURCE } else { "https://github.com/dtype2100/faildex/archive/refs/heads/main.zip" }
 
+# PowerShell does not stop on a failing external program, so check each one.
+function Fail($what) { Write-Host "faildex: $what failed (exit $LASTEXITCODE); nothing more was changed." -ForegroundColor Red; exit 1 }
+
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "faildex: installing uv first"
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    if ($LASTEXITCODE -ne 0) { Fail "installing uv" }
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { Fail "finding uv after installing it" }
 }
 
 Write-Host "faildex: installing from $source"
 uv tool install --force $source
+if ($LASTEXITCODE -ne 0) { Fail "uv tool install" }
 uv tool update-shell | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "faildex: could not add uv's tool folder to PATH; run 'uv tool update-shell' yourself." }
 
 Write-Host ""
 Write-Host "faildex is installed. Open a new terminal, then try:"
