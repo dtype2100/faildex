@@ -64,9 +64,8 @@ def _link(args: argparse.Namespace) -> int:
     steps = (unlink if args.remove else link)(args.rules, dry_run=args.dry_run)
     print(render(steps))
     if not args.remove and not args.dry_run:
-        print(
-            f"rules file: {args.rules.expanduser().resolve()}  (new sessions read it and the skill)"
-        )
+        where = str(args.rules.expanduser().resolve()).replace(str(Path.home()), "~", 1)
+        print(f"rules file: {where}  (new sessions read it and use the skill)")
     return 0
 
 
