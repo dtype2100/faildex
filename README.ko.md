@@ -10,9 +10,11 @@ Antigravity의 세션 기록을 하나의 내장형 [Relate](https://github.com/
 Relate by Neo4j 해커톤 출품작입니다.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh   # macOS, Linux
 faildex demo
 ```
+
+Windows는 [설치](#설치)의 PowerShell 한 줄을 쓰세요.
 
 ![faildex 브라우저 데모: 뒤 기간 실패의 68.4%가 앞선 세션에서 이미 일어났다는 결과와, 되풀이된 실패를 세션 수 크기와 복구 기록 여부 색으로 보여 주는 실패 지도](docs/images/overview.jpg)
 
@@ -97,26 +99,32 @@ Relate를 쓰는 곳:
 
 ### 설치
 
-macOS나 Linux에서 한 줄이면 됩니다. [uv](https://docs.astral.sh/uv/)가 없으면 먼저
-설치하고, 이어서 `faildex` 명령을 설치합니다.
+| | 한 줄 설치 | 필요한 것 |
+|---|---|---|
+| macOS | `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh \| sh` | 터미널, git(Xcode 명령줄 도구) |
+| Linux | `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh \| sh` | curl과 git이 있는 셸 |
+| Windows | `powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/dtype2100/faildex/main/install.ps1 \| iex"` | PowerShell. git은 필요 없음 |
+
+각 스크립트는 [uv](https://docs.astral.sh/uv/)가 없으면 먼저 설치하고, 이어서 `faildex`
+명령을 설치합니다. 다른 것은 바꾸지 않습니다. 먼저 읽어 보고 싶다면
+[install.sh](install.sh)와 [install.ps1](install.ps1)를 보세요. 각각 30줄 정도입니다.
+uv가 이미 있다면 직접 이렇게 해도 됩니다.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+uv tool install git+https://github.com/dtype2100/faildex      # macOS, Linux
+uv tool install https://github.com/dtype2100/faildex/archive/refs/heads/main.zip   # Windows, git 없이
 ```
 
-스크립트를 먼저 읽고 싶다면 [install.sh](install.sh)를 보세요. 30줄 정도입니다.
-uv가 이미 있다면 이렇게도 됩니다.
-
-```bash
-uv tool install git+https://github.com/dtype2100/faildex
-```
-
-그다음 어느 폴더에서든:
+설치 후 새 터미널을 열어야 `faildex`가 PATH에 잡힙니다. 그다음 어느 폴더에서든:
 
 ```bash
 faildex demo                  # 공개 기록으로 규칙 제안, 실행 전 경고, 수치를 보여 줌
 faildex check "git status"    # 이 명령에 알려진 실패가 있는지
 ```
+
+CI에서 macOS, Linux, Windows 모두 설치하고 실행합니다. Windows에서 심볼릭 링크를 만들 수
+없으면 `faildex link`는 규칙 파일을 Antigravity 플러그인에 복사합니다. 규칙을 새로 승인한
+뒤 다시 실행하세요.
 
 `faildex demo`는 다운로드, API 키, 설정이 필요 없습니다. 공개 스토어가 패키지에
 들어 있습니다. 몇 초면 끝납니다.

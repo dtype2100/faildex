@@ -25,5 +25,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest -q -rs
       - run: uv run faildex demo
-      - run: uv tool install .
+      - run: ./install.ps1
+        shell: pwsh
+        env:
+          FAILDEX_SOURCE: .
       - run: faildex check "git status"

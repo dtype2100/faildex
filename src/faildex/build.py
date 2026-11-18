@@ -8,7 +8,6 @@ form `<dataset name>/<path inside the dataset>:<line>`, never a local path.
 
 from __future__ import annotations
 
-import resource
 import shutil
 import sys
 import time
@@ -102,6 +101,11 @@ def _size(path: Path) -> int:
 
 
 def _peak_rss_mb() -> float:
+    """Peak memory of this process in MB; 0.0 where `resource` is missing (Windows)."""
+    try:
+        import resource
+    except ImportError:
+        return 0.0
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak / (1024 * 1024 if sys.platform == "darwin" else 1024)
 

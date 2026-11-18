@@ -10,9 +10,11 @@ the graph, and tells the agent before it runs the same command again.
 Built for the Relate by Neo4j Hackathon.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh   # macOS, Linux
 faildex demo
 ```
+
+On Windows, see [Install](#install) for the PowerShell line.
 
 ![The faildex browser demo: 68.4% of later failures had already happened in an earlier session, and a map of the failures that came back, sized by sessions and coloured by whether a recovery is on record](docs/images/overview.jpg)
 
@@ -102,26 +104,32 @@ masked signatures, and each call keeps a pointer to its log line.
 
 ### Install
 
-One line, on macOS or Linux. It installs [uv](https://docs.astral.sh/uv/) if you
-do not have it, then the `faildex` command:
+| | One line | Needs |
+|---|---|---|
+| macOS | `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh \| sh` | Terminal; git (Xcode command line tools) |
+| Linux | `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh \| sh` | any shell with curl and git |
+| Windows | `powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/dtype2100/faildex/main/install.ps1 \| iex"` | PowerShell; no git needed |
+
+Each script installs [uv](https://docs.astral.sh/uv/) if you do not have it, then
+the `faildex` command, and changes nothing else. Read them first if you prefer:
+[install.sh](install.sh) and [install.ps1](install.ps1), about thirty lines each.
+With uv already installed, the same thing by hand:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+uv tool install git+https://github.com/dtype2100/faildex      # macOS, Linux
+uv tool install https://github.com/dtype2100/faildex/archive/refs/heads/main.zip   # Windows, without git
 ```
 
-Read the script first if you prefer: it is [install.sh](install.sh), about thirty
-lines. Or, with uv already installed:
-
-```bash
-uv tool install git+https://github.com/dtype2100/faildex
-```
-
-Then, from any folder:
+Open a new terminal afterwards so `faildex` is on your PATH. Then, from any folder:
 
 ```bash
 faildex demo                  # rules, a pre-run warning and the numbers, on public logs
 faildex check "git status"    # what is known to go wrong with a command
 ```
+
+CI installs and runs faildex on macOS, Linux and Windows. On Windows, `faildex link`
+copies the rules file into Antigravity's plugin when symlinks are not allowed;
+run it again after approving new rules.
 
 `faildex demo` needs no download, no API key and no setup: the public store ships
 inside the package. It takes a few seconds.
