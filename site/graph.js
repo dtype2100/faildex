@@ -16,6 +16,10 @@ WITH e, count(DISTINCT s) AS sessions, count(f) AS calls, collect(DISTINCT k.tem
 WHERE sessions >= 2
 RETURN e.sig AS failure, sessions, calls, commands
 ORDER BY sessions DESC, calls DESC LIMIT 15`,
+  // How many failures came back at all (the map shows the biggest 15).
+  recurringCount: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(:Call)<-[:HAS_CALL]-(s:Session)
+WITH e, count(DISTINCT s) AS sessions WHERE sessions >= 2
+RETURN count(e) AS n`,
   recovery: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)
 WHERE coalesce(f.compound, false) = false
 MATCH p = (f)-[:NEXT*1..${RECOVERY_HOPS}]->(g:Call {ok: true}), (g)-[:RAN]->(k)

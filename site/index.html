@@ -72,11 +72,24 @@
   @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
 
   /* hero */
-  .hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; align-items: end; padding: 64px 0 28px; }
+  .hero { padding: 64px 0 36px; }
   .eyebrow { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
-  h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.03; letter-spacing: -0.035em; font-weight: 600; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; margin: 0; max-width: 18ch; text-wrap: balance; }
   h1 span { color: var(--muted); }
-  .lede { color: var(--body); font-size: 16.5px; line-height: 1.6; max-width: 58ch; margin: 18px 0 0; }
+  .lede { color: var(--body); font-size: 17px; line-height: 1.6; max-width: 62ch; margin: 18px 0 0; }
+  .flow { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr); align-items: stretch; }
+  .flow a { display: grid; gap: 4px; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-decoration: none; transition: border-color .15s ease; }
+  .flow a:hover { border-color: var(--line-strong); }
+  .flow .fn { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 600 12px/22px var(--sans); text-align: center; margin-bottom: 6px; }
+  .flow b { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .flow a > span:last-child { color: var(--body); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .farrow { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; }
+  .mini { margin-top: 18px; background: var(--term); color: var(--term-ink); border-radius: 12px; padding: 14px 18px; font: 13px/1.6 var(--mono); overflow-wrap: anywhere; max-width: 980px; }
+  .mini-hook { color: #f3a3a6; }
+  .mini-cap { margin-top: 8px; color: #9a9a9a; font: 13.5px/1.5 var(--sans); }
+  .start { display: inline-block; margin-top: 22px; font-weight: 500; color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-strong); padding-bottom: 2px; }
+  .start:hover { border-color: var(--ink); }
+  @media (max-width: 760px) { .flow { grid-template-columns: minmax(0, 1fr); gap: 0; } .farrow { transform: rotate(90deg); height: 28px; } }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
   .result { padding: 26px 26px 22px; }
   .result-num { font-size: 64px; line-height: 1; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
@@ -90,22 +103,33 @@
   .result-sub { display: flex; align-items: baseline; gap: 10px; }
   .result-sub strong { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .result-sub span { color: var(--body); font-size: 14px; }
-  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin: 8px 0 72px; }
-  .kpi { padding: 16px 20px; border-left: 1px solid var(--line); }
-  .kpi:first-child { border-left: 0; }
-  .kpi b { display: block; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .kpi span { font-size: 13px; color: var(--muted); }
-  @media (max-width: 900px) { .hero { grid-template-columns: minmax(0, 1fr); padding-top: 40px; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi:nth-child(3) { border-left: 0; } .kpi:nth-child(n+3) { border-top: 1px solid var(--line); } }
+  .caveat { margin: 14px 0 0; font-size: 12.5px; color: var(--muted); }
 
-  /* sections */
-  section.block { margin: 0 0 80px; scroll-margin-top: 72px; }
-  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 18px; }
+  /* steps: a numbered rail on the left ties the page into one reading line */
+  section.chapter { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 22px; scroll-margin-top: 64px; }
+  .rail { position: relative; display: flex; justify-content: center; }
+  .rail::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line); }
+  .rail span { position: sticky; top: 76px; z-index: 1; width: 32px; height: 32px; margin-top: 2px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 600 14px/32px var(--sans); text-align: center; }
+  .appendix .rail span { background: var(--surface); color: var(--muted); border: 1px solid var(--line-strong); line-height: 30px; }
+  .chapter .body { padding: 0 0 72px; min-width: 0; }
+  .chapter:last-child .rail::before { bottom: auto; height: 34px; }
+  @media (max-width: 640px) { .tl-box { display: none; } section.chapter { grid-template-columns: minmax(0, 1fr); } .rail { justify-content: flex-start; margin-bottom: 8px; } .rail::before { display: none; } .rail span { position: static; width: 28px; height: 28px; font-size: 13px; line-height: 28px; } .map { height: 360px; } .detail { padding: 16px; } }
+  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 16px; }
   .head > div { flex: 1 1 420px; min-width: 0; }
-  .head h2 { font-size: 22px; letter-spacing: -0.02em; font-weight: 600; margin: 0; }
-  .head p { margin: 6px 0 0; color: var(--body); max-width: 70ch; }
+  .head h2 { font-size: 26px; letter-spacing: -0.025em; font-weight: 600; margin: 0; line-height: 1.25; }
+  .head p { margin: 8px 0 0; color: var(--body); max-width: 70ch; }
+  .takeaway { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; background: var(--raised); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  .takeaway code, .next code { font: 0.92em var(--mono); }
+  .next { display: inline-block; margin-top: 18px; color: var(--body); text-decoration: none; font-size: 14.5px; }
+  .next:hover { color: var(--ink); }
   .ghost { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--body); cursor: pointer; white-space: nowrap; }
   .ghost:hover { color: var(--ink); border-color: var(--line-strong); }
   pre.cypher { margin: 0 0 16px; padding: 14px 16px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; font: 12.5px/1.6 var(--mono); color: var(--body); overflow-x: auto; white-space: pre; }
+  nav a.on { color: var(--ink); background: var(--raised); }
+  .picker { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--body); min-width: 0; max-width: 100%; }
+  .picker select { min-width: 0; max-width: min(420px, 100%); font: 13px var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 8px; }
+  .proof { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
+  @media (max-width: 960px) { .proof { grid-template-columns: minmax(0, 1fr); } }
 
   /* failures: list + detail */
   .split { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
@@ -124,7 +148,7 @@
   .tile .t-sig { font: 11.5px/1.4 var(--mono); color: var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
   .tile.small b { font-size: 16px; }
   .maplegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--body); margin: -4px 0 12px; }
-  .maplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line); }
+  .maplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line-strong); }
   .item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 12px 12px 11px; cursor: pointer; }
   .item:hover { background: var(--raised); }
   .item[aria-selected="true"] { background: var(--raised); border-color: var(--line-strong); }
@@ -140,6 +164,12 @@
   .tag.green { background: var(--green-soft); color: var(--green-ink); }
 
   .detail { padding: 24px; min-height: 400px; }
+  .detail .takeaway { margin: 0 0 22px; }
+  .story { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+  .story .k { font: 600 11px var(--mono); color: var(--muted); margin-right: 6px; }
+  details.ev summary { cursor: pointer; font-size: 13px; font-weight: 600; margin: 22px 0 10px; }
+  details.ev summary small { font-weight: 400; color: var(--muted); }
+  @media (max-width: 760px) { .story { grid-template-columns: minmax(0, 1fr); } }
   .detail .top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .detail h3 { font: 500 18px/1.45 var(--mono); letter-spacing: -0.01em; margin: 12px 0 18px; overflow-wrap: anywhere; }
   .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 10px; margin: 0 0 22px; }
@@ -231,7 +261,7 @@
     <a class="brand" href="#top" aria-label="faildex home"><i></i>faildex</a>
     <span class="status" id="status"><b></b><span id="status-text" data-i18n="status.loading">Loading Relate WebAssembly…</span></span>
     <nav aria-label="Sections">
-      <a href="#failures" data-i18n="nav.failures">Failures</a><a href="#check" data-i18n="nav.check">Pre-run check</a><a href="#evaluation" data-i18n="nav.evaluation">Evaluation</a><a href="#query" data-i18n="nav.query">Query</a>
+      <a href="#failures" data-i18n="nav.failures">1 Failures</a><a href="#failure" data-i18n="nav.failure">2 One failure</a><a href="#check" data-i18n="nav.check">3 Warning</a><a href="#evaluation" data-i18n="nav.evaluation">4 Proof</a><a href="#query" data-i18n="nav.query">Query</a>
       <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
     </nav>
     <div class="lang" id="lang">
@@ -247,77 +277,109 @@
 
 <main class="wrap" id="top">
   <section class="hero">
-    <div>
-      <p class="eyebrow" data-i18n="hero.eyebrow">faildex · built on Relate</p>
-      <h1 data-i18n-html="hero.title">Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
-      <p class="lede" data-i18n="hero.lede">faildex reads Claude Code, Codex and Cursor logs into one Relate graph, finds the failures that keep coming back, and warns the agent before it repeats one. This page rebuilds that graph from 422 public sessions in your browser and runs every query live. Nothing is sent to a server.</p>
-    </div>
-    <div class="card result" aria-live="polite">
-      <div class="result-num" id="r-rate">—</div>
-      <p class="result-label" data-i18n="result.label">of failures in later sessions had already happened in an earlier session</p>
-      <div class="meter" aria-hidden="true"><span class="r" id="r-seen"></span><span class="n" id="r-new"></span></div>
-      <div class="legend" id="r-legend"></div>
-      <hr>
-      <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text"></span></div>
-      <div class="meter" aria-hidden="true" style="margin-top:10px"><span class="g" id="r-fixed"></span><span class="n" id="r-unfixed"></span></div>
-    </div>
-  </section>
-  <div class="kpis" id="kpis">
-    <div class="kpi"><b>—</b><span data-i18n="kpi.sessions">sessions</span></div><div class="kpi"><b>—</b><span data-i18n="kpi.calls">tool calls</span></div>
-    <div class="kpi"><b>—</b><span data-i18n="kpi.keys">failure keys</span></div><div class="kpi"><b>—</b><span data-i18n="kpi.rels">relationships</span></div>
-  </div>
-
-  <section class="block" id="failures">
-    <div class="head">
-      <div><h2 data-i18n="fail.title">Failures that came back</h2><p data-i18n="fail.intro">Each failure below hit two or more sessions. The map shows where they cluster; the list shows when each one happened. Select one to see its place in the graph, how sessions got past it, and the log lines behind it.</p></div>
-      <button class="ghost" type="button" data-show="q-failures" data-i18n="cypher.show">Show Cypher</button>
-    </div>
-    <pre class="cypher" id="q-failures" hidden></pre>
-    <div class="maplegend"><span data-i18n="map.size">Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i><span data-i18n="map.none">no recovery on record</span></span><span><i style="background:var(--green-soft)"></i><span data-i18n="map.fixed">recovered in an earlier session</span></span></div>
-    <div class="map" id="map" role="group" aria-label="Failure map"></div>
-    <div class="split">
-      <div class="card list" id="list" role="listbox" aria-label="Recurring failures"></div>
-      <article class="card detail" id="detail" aria-live="polite"></article>
-    </div>
+    <p class="eyebrow" data-i18n="hero.eyebrow">faildex · built on Relate</p>
+    <h1 data-i18n-html="hero.title">Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
+    <p class="lede" data-i18n="hero.lede"></p>
+    <ol class="flow" aria-label="How faildex works">
+      <li><a href="#failures"><span class="fn">1</span><b data-i18n="flow.1t">Agent logs</b><span id="flow1">—</span></a></li>
+      <li aria-hidden="true" class="farrow">→</li>
+      <li><a href="#failure"><span class="fn">2</span><b data-i18n="flow.2t">One Relate graph</b><span id="flow2">—</span></a></li>
+      <li aria-hidden="true" class="farrow">→</li>
+      <li><a href="#check"><span class="fn">3</span><b data-i18n="flow.3t">A warning before the command</b><span data-i18n="flow.3b">one line, only for failures that came back</span></a></li>
+    </ol>
+    <div class="mini" aria-label="What the agent sees"><div class="mini-cmd">● Bash(git status)</div><div class="mini-hook" id="mini-hook">…</div><div class="mini-cap" data-i18n="hero.mini">This is the line an agent gets before it repeats a known failure. The rest of the page shows where it comes from.</div></div>
+    <a class="start" href="#failures" data-i18n="hero.start">Follow one failure, step by step ↓</a>
   </section>
 
-  <section class="block" id="check">
-    <div class="head">
-      <div><h2 data-i18n="check.title">Ask before you run</h2><p data-i18n-html="check.intro">The same lookup the Claude Code hook and the MCP <span class="mono">preflight</span> tool make. A command with a recurring failure gets one line of warning; every other command gets silence.</p></div>
-      <button class="ghost" type="button" data-show="q-check" data-i18n="cypher.show">Show Cypher</button>
-    </div>
-    <pre class="cypher" id="q-check" hidden></pre>
-    <div class="check">
-      <div class="card">
-        <label class="field" for="cmd" data-i18n="check.label">Command the agent is about to run</label>
-        <div class="input"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" list="templates" value="git status"></div>
-        <datalist id="templates"></datalist>
-        <div class="tries" id="tries"></div>
-        <p class="note" id="check-note"></p>
+  <section class="chapter" id="failures">
+    <div class="rail"><span>1</span></div>
+    <div class="body">
+      <div class="head">
+        <div><h2 data-i18n="s1.title">The same failures come back</h2><p data-i18n="s1.intro"></p></div>
+        <button class="ghost" type="button" data-show="q-failures" data-i18n="cypher.show">Show Cypher</button>
       </div>
-      <div class="term" id="term" aria-live="polite"></div>
+      <pre class="cypher" id="q-failures" hidden></pre>
+      <p class="takeaway" id="take1">—</p>
+      <div class="maplegend"><span data-i18n="map.size">Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i><span data-i18n="map.none">no recovery on record</span></span><span><i style="background:var(--green-soft)"></i><span data-i18n="map.fixed">recovered in an earlier session</span></span></div>
+      <div class="map" id="map" role="group" aria-label="Failure map"></div>
+      <a class="next" href="#failure" data-i18n="s1.next">Pick a tile, or go on with the biggest one ↓</a>
     </div>
   </section>
 
-  <section class="block" id="evaluation">
-    <div class="head">
-      <div><h2 data-i18n="eval.title">How much was already known</h2><p data-i18n="eval.intro">Sessions of each dataset are ordered by start time: the first 70% are earlier, the rest later. A later failure is recurring when an earlier session already hit it, and warnable when an earlier session also shows the same command working again within five calls.</p></div>
-      <button class="ghost" type="button" data-show="q-eval" data-i18n="cypher.show">Show Cypher</button>
+  <section class="chapter" id="failure">
+    <div class="rail"><span>2</span></div>
+    <div class="body">
+      <div class="head">
+        <div><h2 data-i18n="s2.title">Follow one failure through the graph</h2><p data-i18n="s2.intro"></p></div>
+        <label class="picker"><span data-i18n="s2.pick">Failure</span><select id="pick"></select></label>
+      </div>
+      <article class="card detail" id="detail" aria-live="polite"></article>
+      <a class="next" href="#check" id="next2">↓</a>
     </div>
-    <pre class="cypher" id="q-eval" hidden></pre>
-    <div class="evallegend"><span><i style="background:var(--red)"></i><span data-i18n="eval.lRecurring">recurring: seen in an earlier session</span></span><span><i style="background:var(--green)"></i><span data-i18n="eval.lWarnable">warnable: a recovery on record too</span></span><span><i style="background:var(--line-strong)"></i><span data-i18n="eval.lRest">the rest</span></span></div>
-    <div class="eval" id="eval"></div>
-    <p class="method" data-i18n-html="eval.method">Computed here, in your browser, by Relate WebAssembly. <span class="mono">make eval</span> in the repository computes the same table from the same store.</p>
   </section>
 
-  <section class="block" id="query">
-    <div class="head"><div><h2 data-i18n="query.title">Query the graph</h2><p data-i18n="query.intro">Session, Call, Command and ErrorSig nodes, joined by HAS_CALL, NEXT, RAN and FAILED_WITH. Pick a query or write your own.</p></div></div>
-    <div class="card console">
-      <div class="presets" id="presets"></div>
-      <label class="field" for="cypher">Cypher</label>
-      <textarea id="cypher" spellcheck="false"></textarea>
-      <div class="run"><button class="primary" type="button" id="go" data-i18n="query.run">Run query</button><span class="took" id="took"></span></div>
-      <div id="result"></div>
+  <section class="chapter" id="check">
+    <div class="rail"><span>3</span></div>
+    <div class="body">
+      <div class="head">
+        <div><h2 data-i18n="check.title">The agent is warned before it repeats it</h2><p data-i18n-html="check.intro"></p></div>
+        <button class="ghost" type="button" data-show="q-check" data-i18n="cypher.show">Show Cypher</button>
+      </div>
+      <pre class="cypher" id="q-check" hidden></pre>
+      <div class="check">
+        <div class="card">
+          <label class="field" for="cmd" data-i18n="check.label">Command the agent is about to run</label>
+          <div class="input"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" list="templates" value="git status"></div>
+          <datalist id="templates"></datalist>
+          <p class="field" style="margin:14px 0 0" data-i18n="check.try">Or try one of these:</p>
+          <div class="tries" id="tries"></div>
+          <p class="note" id="check-note"></p>
+        </div>
+        <div class="term" id="term" aria-live="polite"></div>
+      </div>
+      <a class="next" href="#evaluation" data-i18n="s3.next">Next: was this knowledge really there in advance? ↓</a>
+    </div>
+  </section>
+
+  <section class="chapter" id="evaluation">
+    <div class="rail"><span>4</span></div>
+    <div class="body">
+      <div class="head">
+        <div><h2 data-i18n="eval.title">Was it really known in advance?</h2><p data-i18n="eval.intro"></p></div>
+        <button class="ghost" type="button" data-show="q-eval" data-i18n="cypher.show">Show Cypher</button>
+      </div>
+      <pre class="cypher" id="q-eval" hidden></pre>
+      <div class="proof">
+        <div class="card result" aria-live="polite">
+          <div class="result-num" id="r-rate">—</div>
+          <p class="result-label" data-i18n="result.label">of failures in later sessions had already happened in an earlier session</p>
+          <div class="meter" aria-hidden="true"><span class="r" id="r-seen"></span><span class="n" id="r-new"></span></div>
+          <div class="legend" id="r-legend"></div>
+          <hr>
+          <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text"></span></div>
+          <div class="meter" aria-hidden="true" style="margin-top:10px"><span class="g" id="r-fixed"></span><span class="n" id="r-unfixed"></span></div>
+          <p class="caveat" data-i18n="result.caveat">How often a later failure had already happened before. It is not a measured effect of the warning.</p>
+        </div>
+        <div>
+          <div class="evallegend"><span><i style="background:var(--red)"></i><span data-i18n="eval.lRecurring">recurring: seen in an earlier session</span></span><span><i style="background:var(--green)"></i><span data-i18n="eval.lWarnable">warnable: a recovery on record too</span></span><span><i style="background:var(--line-strong)"></i><span data-i18n="eval.lRest">the rest</span></span></div>
+          <div class="eval" id="eval"></div>
+        </div>
+      </div>
+      <p class="method" data-i18n-html="eval.method"></p>
+    </div>
+  </section>
+
+  <section class="chapter appendix" id="query">
+    <div class="rail"><span>+</span></div>
+    <div class="body">
+      <div class="head"><div><p class="eyebrow" style="margin:0 0 4px" data-i18n="query.eyebrow">For the curious</p><h2 data-i18n="query.title">Query the graph yourself</h2><p data-i18n="query.intro"></p></div></div>
+      <div class="card console">
+        <div class="presets" id="presets"></div>
+        <label class="field" for="cypher">Cypher</label>
+        <textarea id="cypher" spellcheck="false"></textarea>
+        <div class="run"><button class="primary" type="button" id="go" data-i18n="query.run">Run query</button><span class="took" id="took"></span></div>
+        <div id="result"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -364,9 +426,13 @@ const DATASET = { "codex-trajectories": "Codex", wisp: "Claude Code" };
 const day = (ts) => new Date(ts).toLocaleDateString(LOCALE, { month: "short", day: "numeric", timeZone: "UTC" });
 const paint = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-document.querySelectorAll("[data-show]").forEach((b) => b.addEventListener("click", () => {
-  const pre = $(b.dataset.show); pre.hidden = !pre.hidden; b.textContent = t(pre.hidden ? "cypher.show" : "cypher.hide");
-}));
+document.querySelectorAll("[data-show]").forEach((b) => {
+  b.setAttribute("aria-controls", b.dataset.show); b.setAttribute("aria-expanded", "false");
+  b.addEventListener("click", () => {
+    const pre = $(b.dataset.show); pre.hidden = !pre.hidden;
+    b.textContent = t(pre.hidden ? "cypher.show" : "cypher.hide"); b.setAttribute("aria-expanded", String(!pre.hidden));
+  });
+});
 
 function table(rows) {
   if (!rows.length) return `<p class="empty">${t("query.noRows")}</p>`;
@@ -393,8 +459,8 @@ async function main() {
   $("progress").style.opacity = "0";
   $("sources").innerHTML = data.sources.map((s) => `<a href="${esc(s.url)}">${esc(s.repo)}</a> (${esc(s.license)})`).join(", ");
 
-  const kpi = [counts.Session, counts.Call, counts.ErrorSig, rels];
-  document.querySelectorAll("#kpis .kpi b").forEach((b, i) => { b.textContent = fmt(kpi[i]); });
+  $("flow1").textContent = t("flow.1b", { s: fmt(counts.Session), c: fmt(counts.Call) });
+  $("flow2").textContent = t("flow.2b", { r: fmt(rels), k: fmt(counts.ErrorSig) });
 
   // ---- the result
   await paint();
@@ -417,7 +483,7 @@ async function main() {
       <div class="name">${label}<small>${sub}</small></div>
       <div class="bars">
         <div class="meter"><span class="r" style="width:${(100 * r.recurring) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.recurring)) / Math.max(1, r.failures)}%"></span></div>
-        <div class="meter"><span class="g" style="width:${(100 * r.warnable) / Math.max(1, r.failures)}%"></span><span class="n" style="width:${(100 * (r.failures - r.warnable)) / Math.max(1, r.failures)}%"></span></div>
+        <div class="meter"><span class="g" style="width:${(100 * r.warnable) / Math.max(1, r.recurring)}%"></span><span class="n" style="width:${(100 * (r.recurring - r.warnable)) / Math.max(1, r.recurring)}%"></span></div>
       </div>
       <div class="nums">${t("eval.nums", { r: r.recurring, f: r.failures, p: pct(r.recurring, r.failures), w: r.warnable, wp: pct(r.warnable, r.recurring) })}</div>
     </div>`;
@@ -434,21 +500,13 @@ async function main() {
   const tMin = Math.min(...times), tMax = Math.max(...times);
   const xOf = (ts, w, pad = 4) => pad + ((Date.parse(ts) - tMin) / Math.max(1, tMax - tMin)) * (w - 2 * pad);
 
-  const spark = (f) => {
-    const w = 160, h = 18;
-    const ticks = (byFailure[f] || []).map((o) => `<line x1="${xOf(o.ts, w).toFixed(1)}" x2="${xOf(o.ts, w).toFixed(1)}" y1="3" y2="${h - 3}" stroke="var(--red)" stroke-width="1.5" stroke-opacity=".75"/>`).join("");
-    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${w}" y1="${h / 2}" y2="${h / 2}" stroke="var(--line-strong)"/>${ticks}</svg>`;
-  };
   $("q-failures").textContent = [Q.recurring, Q.occurrences, Q.neighborhood, Q.recovery, Q.evidence].join("\n\n");
-  $("list").innerHTML = recurring.map((r, i) => {
-    const fixed = recovered[r.failure] || 0;
-    const cmd = (r.commands || [])[0];
-    return `<button class="item" type="button" role="option" aria-selected="false" data-i="${i}">
-      <span class="sig">${esc(r.failure)}</span>
-      <span class="n"><b>${r.sessions}</b>${t("list.sessions")}</span>
-      <span class="meta">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${spark(r.failure)}${fixed ? `<span class="tag green">${t("tag.recovered", { n: fixed })}</span>` : `<span class="tag red">${t("tag.none")}</span>`}</span>
-    </button>`;
-  }).join("");
+  {
+    const top = recurring[0], cmd0 = (top.commands || [])[0] || "";
+    $("take1").innerHTML = t("s1.take", { n: run(db, Q.recurringCount)[0].n, shown: recurring.length, sig: `<code>${esc(top.failure.length > 60 ? top.failure.slice(0, 59) + "…" : top.failure)}</code>`, cmd: esc(cmd0), s: top.sessions });
+  }
+  $("pick").innerHTML = recurring.map((r, i) => `<option value="${i}">${esc(r.sessions)} · ${esc((r.commands || [])[0] || "")} · ${esc(r.failure.slice(0, 48))}</option>`).join("");
+  $("pick").addEventListener("change", () => select(Number($("pick").value)));
 
   // A squarified treemap: one tile per failure, area by sessions.
   const worst = (row, side) => {
@@ -477,49 +535,61 @@ async function main() {
     box.innerHTML = tiles.map((tile) => {
       const fixed = recovered[tile.r.failure] || 0, cmd = (tile.r.commands || [])[0] || "", tw = tile.w - gap, th = tile.h - gap;
       const big = tw > 150 && th > 92, mid = tw > 70 && th > 48;
-      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${tile.i}" aria-pressed="${tile.i === current}" title="${esc(tile.r.failure)}"
+      const name = `${cmd} · ${tile.r.failure} · ${tile.r.sessions} ${t("list.sessions")} · ${fixed ? t("map.fixed") : t("map.none")}`;
+      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${tile.i}" aria-pressed="${tile.i === current}" title="${esc(tile.r.failure)}" aria-label="${esc(name)}"
         style="left:${tile.x.toFixed(1)}px;top:${tile.y.toFixed(1)}px;width:${tw.toFixed(1)}px;height:${th.toFixed(1)}px">
         ${mid ? `<b>${tile.r.sessions}<small>${big ? t("list.sessions") : ""}</small></b>` : `<b>${tile.r.sessions}</b>`}${mid && cmd ? `<span class="t-cmd">${esc(cmd)}</span>` : ""}${big ? `<span class="t-sig">${esc(tile.r.failure)}</span>` : ""}
       </button>`;
     }).join("");
   };
-  $("map").addEventListener("click", (e) => { const b = e.target.closest(".tile"); if (b) select(Number(b.dataset.i)); });
+  $("map").addEventListener("click", (e) => { const b = e.target.closest(".tile"); if (b) { select(Number(b.dataset.i)); $("failure").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); } });
   let resizing;
   addEventListener("resize", () => { clearTimeout(resizing); resizing = setTimeout(drawMap, 150); });
 
   const timeline = (f) => {
-    const w = 640, h = 88, rows = ["codex", "claude-code"];
+    const w = 980, h = 88, rows = ["codex", "claude-code"];
     const y = { codex: 30, "claude-code": 58 };
     const list = byFailure[f] || [];
     const months = [];
     const d = new Date(tMin); d.setUTCDate(1); d.setUTCHours(0, 0, 0, 0);
     while (d.getTime() <= tMax) { if (d.getTime() >= tMin) months.push(new Date(d)); d.setUTCMonth(d.getUTCMonth() + 1); }
-    const axis = months.map((m) => { const x = xOf(m.toISOString(), w, 90); return `<line x1="${x}" x2="${x}" y1="12" y2="${h - 14}" stroke="var(--line)"/><text x="${x + 4}" y="${h - 2}" font-size="10" fill="var(--muted)">${m.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}</text>`; }).join("");
+    const axis = months.map((m) => { const x = xOf(m.toISOString(), w, 90); return `<line x1="${x}" x2="${x}" y1="12" y2="${h - 14}" stroke="var(--line)"/><text x="${x + 4}" y="${h - 2}" font-size="10" fill="var(--muted)">${m.toLocaleDateString(LOCALE, { month: "short", timeZone: "UTC" })}</text>`; }).join("");
     const lanes = rows.map((a) => `<text x="0" y="${y[a] + 3.5}" font-size="10.5" fill="var(--body)">${AGENT[a]}</text><line x1="90" x2="${w - 4}" y1="${y[a]}" y2="${y[a]}" stroke="var(--line)"/>`).join("");
     const dots = list.map((o) => `<circle cx="${xOf(o.ts, w, 90).toFixed(1)}" cy="${y[o.agent] ?? 30}" r="4.5" fill="var(--red)" fill-opacity=".8" stroke="var(--surface)" stroke-width="1.5"/>`).join("");
     const ends = `<text x="90" y="${h - 2}" font-size="10" fill="var(--muted)">${day(new Date(tMin).toISOString())}</text><text x="${w - 4}" y="${h - 2}" font-size="10" fill="var(--muted)" text-anchor="end">${day(new Date(tMax).toISOString())}</text>`;
     return `<div class="tl-box"><svg class="timeline" viewBox="0 0 ${w} ${h}" role="img" aria-label="When this failure happened">${axis}${ends}${lanes}${dots}</svg></div>`;
   };
 
+  // Left to right, as the hint reads: sessions -> the command they ran -> the failure.
   const graph = (f) => {
     const raw = run(db, Q.neighborhood, { failure: f });
     const bySessions = {};
     for (const r of raw) bySessions[r.command] = (bySessions[r.command] || 0) + 1;
-    const keep = Object.entries(bySessions).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+    const keep = Object.entries(bySessions).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c]) => c);
     const rows = raw.map((r) => (keep.includes(r.command) ? r : { ...r, command: "other" }));
     const cmds = [...keep, ...(rows.some((r) => r.command === "other") ? ["other"] : [])];
-    const W = 360, H = 300, cx = W / 2, cy = H / 2;
-    const r1 = 82, r2 = 130;
-    const at = (i, n, r, off = -Math.PI / 2) => [cx + r * Math.cos(off + (2 * Math.PI * i) / Math.max(1, n)), cy + r * Math.sin(off + (2 * Math.PI * i) / Math.max(1, n))];
-    const cmdPos = Object.fromEntries(cmds.map((c, i) => [c, at(i, cmds.length, cmds.length === 1 ? 0 : r1)]));
-    const sess = rows.map((r, i) => ({ ...r, pos: at(i, rows.length, r2) }));
-    const lines = sess.map((s) => `<line x1="${s.pos[0].toFixed(1)}" y1="${s.pos[1].toFixed(1)}" x2="${cmdPos[s.command][0].toFixed(1)}" y2="${cmdPos[s.command][1].toFixed(1)}" stroke="var(--line-strong)" stroke-width="1"/>`).join("")
-      + cmds.map((c) => `<line x1="${cmdPos[c][0].toFixed(1)}" y1="${cmdPos[c][1].toFixed(1)}" x2="${cx}" y2="${cy}" stroke="var(--red)" stroke-opacity=".55" stroke-width="2"/>`).join("");
-    const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${((rows.length > 36 ? 2.6 : 3.4) + Math.min(3, s.calls - 1)).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} session · ${s.calls} call(s) · ${esc(s.command)}</title></circle>`).join("");
-    const pillAt = (c) => (cmds.length === 1 ? [cx, cy + 38] : cmdPos[c]);
-    const cmdNodes = cmds.map((c) => { const [x, y] = pillAt(c); const label = c.length > 16 ? `${c.slice(0, 15)}…` : c; const w = 12 + label.length * 6.4; return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
-    const center = `<circle cx="${cx}" cy="${cy}" r="${cmds.length === 1 ? 14 : 16}" fill="var(--red)"><title>${t("graph.failure")} (ErrorSig)</title></circle>`;
-    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This failure, the commands that hit it and the sessions they ran in">${lines}${nodes}${center}${cmdNodes}</svg>`;
+    const W = 420, H = 300, top = 24, bottom = H - 24;
+    const yAt = (i, n) => (n === 1 ? H / 2 : top + ((bottom - top) * i) / (n - 1));
+    const fx = 368, cx = 228;
+    const cmdPos = Object.fromEntries(cmds.map((c, i) => [c, [cx, yAt(i, cmds.length)]]));
+    const bySession = new Map();
+    for (const r of rows) {
+      const one = bySession.get(r.session) || { session: r.session, agent: r.agent, calls: 0, commands: new Set() };
+      one.calls += r.calls; one.commands.add(r.command); bySession.set(r.session, one);
+    }
+    const allSessions = [...bySession.values()];
+    const cap = matchMedia("(max-width: 640px)").matches ? 12 : 60;
+    const shown = allSessions.slice(0, cap), hidden = allSessions.length - shown.length;
+    const cols = shown.length > 24 ? 2 : 1, per = Math.ceil(shown.length / cols);
+    const sess = shown.map((r, i) => ({ ...r, pos: [cols === 2 ? (i % 2 ? 62 : 28) : 44, yAt(cols === 2 ? Math.floor(i / 2) : i, per)] }));
+    const lines = sess.flatMap((s) => [...s.commands].map((c) => `<line x1="${s.pos[0].toFixed(1)}" y1="${s.pos[1].toFixed(1)}" x2="${cx - 40}" y2="${cmdPos[c][1].toFixed(1)}" stroke="var(--line-strong)" stroke-width="1"/>`)).join("")
+      + cmds.map((c) => `<line x1="${cx + 40}" y1="${cmdPos[c][1].toFixed(1)}" x2="${fx}" y2="${H / 2}" stroke="var(--red)" stroke-opacity=".6" stroke-width="2"/>`).join("");
+    const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${(shown.length > 36 ? 2.8 : 3.6).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} · ${s.calls} · ${esc([...s.commands].join(", "))}</title></circle>`).join("")
+      + (hidden ? `<text x="44" y="${H - 4}" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.more", { n: hidden })}</text>` : "");
+    const cmdNodes = cmds.map((c) => { const [x, y] = cmdPos[c]; const label = c.length > 13 ? `${c.slice(0, 12)}…` : c; return `<g><rect x="${x - 40}" y="${(y - 12).toFixed(1)}" width="80" height="24" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
+    const center = `<circle cx="${fx}" cy="${H / 2}" r="16" fill="var(--red)"><title>${t("graph.failure")} (ErrorSig)</title></circle>`;
+    const heads = `<text x="44" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.hSessions", { n: new Set(rows.map((r) => r.session)).size })}</text><text x="${cx}" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.command")}</text><text x="${fx}" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.failure")}</text>`;
+    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("graph.aria", { n: new Set(rows.map((r) => r.session)).size }))}">${heads}${lines}${nodes}${center}${cmdNodes}</svg>`;
     const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>${t("graph.failure")}</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>${t("graph.command")}</span><span><i style="background:var(--ink);border-radius:50%"></i>${t("graph.codex")}</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>${t("graph.claude")}</span></div>`;
     return `<div class="graph-box">${svg}${legend}</div>`;
   };
@@ -550,37 +620,38 @@ async function main() {
 
   const select = (i) => {
     current = i;
-    document.querySelectorAll("#list .item").forEach((b) => b.setAttribute("aria-selected", String(Number(b.dataset.i) === i)));
     document.querySelectorAll("#map .tile").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i)));
+    $("pick").value = String(i);
     const r = recurring[i];
     const list = (byFailure[r.failure] || []).map((o) => o.ts).sort();
     const fixed = recovered[r.failure] || 0;
-    const cmd = (r.commands || [])[0];
+    const cmd = (r.commands || [])[0] || "";
+    const take = fixed ? t("s2.takeFixed", { s: r.sessions, n: fixed }) : t("s2.takeNone", { s: r.sessions });
     $("detail").innerHTML = `
       <div class="top">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${fixed ? `<span class="tag green">${t("detail.recovered", { n: fixed, m: r.calls })}</span>` : `<span class="tag red">${t("detail.none")}</span>`}</div>
       <h3>${esc(r.failure)}</h3>
-      <dl class="facts">
-        <div><dt>${t("facts.sessions")}</dt><dd>${r.sessions}</dd></div><div><dt>${t("facts.calls")}</dt><dd>${r.calls}</dd></div>
-        <div><dt>${t("facts.first")}</dt><dd>${list.length ? day(list[0]) : "—"}</dd></div><div><dt>${t("facts.last")}</dt><dd>${list.length ? day(list[list.length - 1]) : "—"}</dd></div>
-      </dl>
-      <p class="sub">${t("sub.when")} <small>${t("sub.whenHint")}</small></p>
-      ${timeline(r.failure)}
-      <div class="twin">
-        <div><p class="sub">${t("sub.graph")} <small>${t("sub.graphHint")}</small></p>${graph(r.failure)}</div>
-        <div><p class="sub">${t("sub.paths")} <small>${t("sub.pathsHint")}</small></p>${paths(r.failure)}</div>
+      <p class="takeaway">${take}</p>
+      <div class="story">
+        <div><p class="sub"><span class="k">a</span>${t("sub.graph")} <small>${t("sub.graphHint")}</small></p>${graph(r.failure)}</div>
+        <div><p class="sub"><span class="k">b</span>${t("sub.paths")} <small>${t("sub.pathsHint")}</small></p>${paths(r.failure)}
+          <dl class="facts" style="margin:22px 0 0">
+            <div><dt>${t("facts.sessions")}</dt><dd>${r.sessions}</dd></div><div><dt>${t("facts.calls")}</dt><dd>${r.calls}</dd></div>
+            <div><dt>${t("facts.first")}</dt><dd>${list.length ? day(list[0]) : "—"}</dd></div><div><dt>${t("facts.last")}</dt><dd>${list.length ? day(list[list.length - 1]) : "—"}</dd></div>
+          </dl>
+        </div>
       </div>
-      <div class="pane"><p class="sub">${t("sub.evidence")} <small>${t("sub.evidenceHint")}</small></p>${evidence(r.failure)}</div>`;
+      <div class="pane"><p class="sub"><span class="k">c</span>${t("sub.when")} <small>${list.length ? t("sub.whenSum", { a: day(list[0]), b: day(list[list.length - 1]), n: r.calls }) : t("sub.whenHint")}</small></p>${timeline(r.failure)}</div>
+      <details class="ev"><summary>${t("sub.evidence")} <small>${t("sub.evidenceHint")}</small></summary>${evidence(r.failure)}</details>`;
+    $("next2").innerHTML = cmd ? t("s2.next", { cmd: esc(cmd) }) : t("s2.nextPlain");
+    if (cmd && typeof checkFor === "function") checkFor(cmd);
   };
-  $("list").addEventListener("click", (e) => { const b = e.target.closest(".item"); if (b) select(Number(b.dataset.i)); });
-  $("list").addEventListener("keydown", (e) => {
-    if (!["ArrowDown", "ArrowUp"].includes(e.key)) return;
-    const items = [...document.querySelectorAll("#list .item")];
-    const now = items.findIndex((b) => b.getAttribute("aria-selected") === "true");
-    const next = Math.max(0, Math.min(items.length - 1, now + (e.key === "ArrowDown" ? 1 : -1)));
-    e.preventDefault(); items[next].focus(); select(next);
-  });
+  let checkFor = null;
   drawMap();
-  select(0);
+
+  {
+    const g = run(db, Q.preflight, { command: "git status" })[0];
+    $("mini-hook").textContent = g ? `  ⎿ PreToolUse:Bash says: faildex: \`git status\` failed with \`${g.known_failure}\` in ${g.sessions} earlier sessions; no recovery on record.` : "";
+  }
 
   // ---- pre-run check
   const templates = run(db, Q.templates).map((r) => r.template).filter((t) => t && !t.startsWith("<"));
@@ -614,12 +685,24 @@ async function main() {
       after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
     }
     $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
-    $("check-note").textContent = t("check.warnNote", { cmd: template, calls: k.calls, runs: k.runs, pct: pct(k.calls, k.runs) }) + (known.length > 1 ? t("check.more", { n: known.length - 1 }) : "");
+    const picked = recurring[current];
+    const scope = picked && picked.failure === k.known_failure && picked.calls !== k.calls ? t("check.scope", { cmd: template }) : "";
+    $("check-note").textContent = t("check.warnNote", { cmd: template, calls: k.calls, runs: k.runs, pct: pct(k.calls, k.runs) }) + scope + (known.length > 1 ? t("check.more", { n: known.length - 1 }) : "");
   };
   let pending;
   $("cmd").addEventListener("input", () => { clearTimeout(pending); pending = setTimeout(check, 120); });
   $("tries").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("cmd").value = b.textContent; check(); } });
-  check();
+  checkFor = (cmd) => { $("cmd").value = cmd; check(); };
+  // Start with the biggest failure that also shows a way out, so the story reaches a recovery.
+  const withWayOut = recurring.findIndex((r) => (recovered[r.failure] || 0) > 0);
+  select(withWayOut >= 0 ? withWayOut : 0);
+
+  // The nav marks the step being read.
+  const links = [...document.querySelectorAll("nav a[href^='#']")];
+  const spy = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${e.target.id}`));
+  }, { rootMargin: "-40% 0px -55% 0px" });
+  document.querySelectorAll("section.chapter").forEach((sec) => spy.observe(sec));
 
   // ---- query console
   const presets = {
