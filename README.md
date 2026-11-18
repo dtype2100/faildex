@@ -19,7 +19,8 @@ On Windows, see [Install](#install) for the PowerShell line.
 ![The faildex browser demo: 68.4% of later failures had already happened in an earlier session, and a map of the failures that came back, sized by sessions and coloured by whether a recovery is on record](docs/images/overview.jpg)
 
 *The browser demo rebuilds the graph from 422 public sessions inside Relate
-WebAssembly and recomputes every number on the page. Run it with `make site && make serve`.*
+WebAssembly and recomputes every number on the page. Open it at
+<https://dtype2100.github.io/faildex/>, or run it locally with `make site && make serve`.*
 
 ## Use case
 
