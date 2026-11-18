@@ -72,18 +72,44 @@ masked signatures, and each call keeps a pointer to its log line.
 
 ## Setup and run
 
-Requirements: Python 3.10 or later and [uv](https://docs.astral.sh/uv/).
-Tested on macOS and Linux in CI.
+### Install
+
+One line, on macOS or Linux. It installs [uv](https://docs.astral.sh/uv/) if you
+do not have it, then the `faildex` command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+```
+
+Read the script first if you prefer: it is [install.sh](install.sh), about thirty
+lines. Or, with uv already installed:
+
+```bash
+uv tool install git+https://github.com/dtype2100/faildex
+```
+
+Then, from any folder:
+
+```bash
+faildex demo                  # rules, a pre-run warning and the numbers, on public logs
+faildex check "git status"    # what is known to go wrong with a command
+```
+
+`faildex demo` needs no download, no API key and no setup: the public store ships
+inside the package. It takes a few seconds.
+
+### From a checkout
+
+Requirements: Python 3.10 or later and uv. Tested on macOS and Linux in CI.
 
 ```bash
 git clone https://github.com/dtype2100/faildex && cd faildex
-make setup     # install
-make demo      # rules, a pre-run check and the evaluation, from the committed store
+make setup     # dependencies and the secret-scan hook
+make demo      # the same demo, from the committed store
 make eval      # the evaluation table alone
-make test      # 120+ tests
+make test      # 160+ tests
+make install   # put this checkout on your PATH as `faildex`
 ```
-
-`make demo` needs no download and no API key. It takes a few seconds.
 
 Rebuild the store from the public datasets (about 120 MB of downloads):
 
@@ -105,23 +131,24 @@ evaluation in the browser; it arrives at the same 80 of 117.
 Index your own logs. They stay on your machine, in `~/.faildex/store`:
 
 ```bash
-uv run faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions --cursor ~/.cursor/chats
-uv run faildex rules --store ~/.faildex/store
+faildex ingest --claude ~/.claude/projects --codex-sessions ~/.codex/sessions --cursor ~/.cursor/chats
+faildex rules
 ```
 
-Use it in Claude Code. Add this to `.claude/settings.json`:
+Use it in Claude Code. Add this to `.claude/settings.json` (your project's, or
+`~/.claude/settings.json` for every session). It reads your own store once you
+have run `faildex ingest`, and the public one until then:
 
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
-  {"type": "command", "command": "uv run --project /path/to/faildex faildex hook --store /path/to/faildex/store", "timeout": 5}
+  {"type": "command", "command": "faildex hook", "timeout": 5}
 ]}]}}
 ```
 
 Use it from any MCP client:
 
 ```json
-{"mcpServers": {"faildex": {"command": "uv",
-  "args": ["run", "--project", "/path/to/faildex", "faildex", "mcp", "--store", "/path/to/faildex/store"]}}}
+{"mcpServers": {"faildex": {"command": "faildex", "args": ["mcp"]}}}
 ```
 
 An agent skill that tells the agent when to call these is in
@@ -183,7 +210,7 @@ your own logs to get yours.
 | Criterion | Where to look |
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer |
-| Functionality | `make demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
+| Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
 | Usefulness | 68% of later failures were already in the graph; the hook warns only for those and is silent otherwise |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md`; every number comes from `make eval` on the committed store |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |

@@ -1,4 +1,4 @@
-.PHONY: setup test lint data build-store eval demo site serve
+.PHONY: setup test lint data build-store eval demo site serve install
 
 setup:
 	uv sync
@@ -23,14 +23,7 @@ eval:
 	@uv run faildex eval
 
 demo:
-	@echo "== 1. Failures that recurred across sessions, with the recovery on record"
-	@uv run faildex rules --top 5
-	@echo
-	@echo "== 2. Asking before running a command (what the hook and the MCP tool return)"
-	@uv run faildex check "git status"
-	@echo
-	@echo "== 3. How often the later sessions repeated a failure the graph already held"
-	@uv run faildex eval
+	@uv run faildex demo
 
 # The browser demo: the store as JSON plus Relate WebAssembly, in site/.
 site:
@@ -43,3 +36,7 @@ site:
 
 serve:
 	@cd site && python3 -m http.server 8765
+
+# Puts `faildex` on your PATH, running this checkout (edits apply at once).
+install:
+	uv tool install --editable . --force

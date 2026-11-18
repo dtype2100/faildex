@@ -154,6 +154,34 @@ def _report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _demo(args: argparse.Namespace) -> int:
+    """Rules, a pre-run check and the evaluation, on the public store that ships with faildex."""
+    from faildex.evaluate import report
+    from faildex.hook import notice_for
+    from faildex.insight import proposals, render, warnings_for
+    from faildex.store import open_store, public_store
+
+    db = open_store(public_store())
+    try:
+        print("== 1. Failures that came back across sessions, with the recovery on record\n")
+        print(render(proposals(db)[:3]))
+        print("\n== 2. Before running a command (what the Claude Code hook prints)\n")
+        for command in ("git status", "ls"):
+            found = warnings_for(db, command)
+            print(f"$ {command}")
+            print(
+                f"  {notice_for(found)}"
+                if found
+                else "  (no notice: no recurring failure on record)"
+            )
+        print("\n== 3. How often later sessions repeated a failure the graph already held\n")
+        print(report(db))
+    finally:
+        db.close()
+    print("\nThis ran on public session logs. Index your own with: faildex ingest --help")
+    return 0
+
+
 def _sources(args: argparse.Namespace) -> int:
     from faildex.build import SOURCES
 
@@ -249,6 +277,9 @@ def main(argv: list[str] | None = None) -> int:
     web.add_argument("--out", type=Path, default=Path("site/data.json"), help="output file")
     web.add_argument("--store", type=Path, default=None, help="store directory")
     web.set_defaults(run=_export_web)
+
+    demo = commands.add_parser("demo", help="see faildex work on the public logs it ships with")
+    demo.set_defaults(run=_demo)
 
     sources = commands.add_parser("sources", help="list the pinned public datasets")
     sources.set_defaults(run=_sources)

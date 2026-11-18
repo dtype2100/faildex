@@ -23,6 +23,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/faildex"]
 
+# The public demo store ships inside the package, so `faildex demo` works after
+# any install. Only the committed files: lock files and the WAL are per machine.
+[tool.hatch.build.targets.wheel.force-include]
+"store/manifest.json" = "faildex/_store/manifest.json"
+"store/nodes" = "faildex/_store/nodes"
+"store/relationships" = "faildex/_store/relationships"
+"store/.cypherlite" = "faildex/_store/.cypherlite"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
