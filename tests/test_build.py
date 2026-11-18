@@ -102,14 +102,25 @@ def test_ingest_needs_an_existing_source(tmp_path, capsys):
     assert main(["ingest", "--claude", str(tmp_path / "none"), "--store", str(tmp_path / "s")]) == 1
 
 
-def test_default_store_prefers_env_then_local_then_private(tmp_path, monkeypatch):
-    from faildex.store import PRIVATE_STORE, default_store
+def test_default_store_order_env_local_private_then_public(tmp_path, monkeypatch):
+    from faildex.store import default_store
 
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
-    assert default_store() == PRIVATE_STORE.expanduser()
+    # nothing of your own yet: the public store that ships with faildex
+    assert default_store().is_relative_to(tmp_path / "cache")
+    # after `faildex ingest`: your own store
+    private = home / ".faildex" / "store"
+    private.mkdir(parents=True)
+    (private / "manifest.json").write_text("{}")
+    assert default_store() == private
+    # inside a checkout: its committed store
     (tmp_path / "store").mkdir()
     (tmp_path / "store" / "manifest.json").write_text("{}")
     assert default_store().name == "store" and not default_store().is_absolute()
+    # named explicitly: that one
     monkeypatch.setenv("FAILDEX_STORE", str(tmp_path / "elsewhere"))
     assert default_store() == tmp_path / "elsewhere"
