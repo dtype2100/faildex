@@ -142,10 +142,11 @@ VALUE_FLAGS = frozenset(
 _WINDOWS_PATH = re.compile(r"[A-Za-z]:\\")
 
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
-_FUNCTION_DEF = re.compile(r"^[A-Za-z_][\w\-]*\s*\(\)")
+_FUNCTION_DEF = re.compile(r"^(?:[A-Za-z_][\w\-]*\s*\(\)|function\s)")
+_FUNCTION_HEAD = re.compile(r"^(?:function\s+)?[A-Za-z_][\w-]*(?:\s*\(\))?\s*$")
 _WRAPPER_ARG = re.compile(r"^(-.*|\d+(\.\d+)?[smhd]?)$")
 # A here-document or PowerShell here-string body is data, not commands.
-_HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\s*\2\b", re.DOTALL)
+_HEREDOC = re.compile(r"(<<-?\s*(['\"]?)([^\s'\";<>]+)\2[^\n]*)\n.*?\n[ \t]*\3(?=\n|$)", re.DOTALL)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
 _PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
 _EXCEPTION = re.compile(r"^(?:[A-Za-z_][\w.]*)?(Error|Exception|Exit|Interrupt|Warning)\s*(:|$)")
@@ -181,6 +182,12 @@ _MASKS = [
     (re.compile(r"\d+"), "<n>"),
 ]
 _COMMAND_NAME = re.compile(r"^[A-Za-z_](?:[\w.\-]*[A-Za-z0-9_])?$")
+# `do ls`, `then git status`: the keyword is syntax, the rest is the command.
+_BODY_PREFIX = re.compile(r"^(?:do|then|else|elif)(?:\s+|(?=[({])|$)")
+# zsh NOMATCH: `(eval):1: no matches found: README*` and `zsh:1: no matches found: *.py`
+# are the same shell error; keep the glob out of the signature so they line up.
+NOMATCH_SIG = "no matches found: <glob>"
+_NOMATCH = re.compile(r"^(?:\(eval\)|zsh):(?:\d+:)?\s*no matches found:\s+\S+", re.IGNORECASE)
 # "<file>:<line>:" opens a compiler message or a line of search output; only the
 # first is a failure, and it says so right after the position.
 _LOCATED = re.compile(r"^(?:\S+?\.\w{1,6}[:\-])?\d+[:\-](?:\d+[:\-])?\s*(.*)$")
@@ -222,7 +229,7 @@ def _program(token: str) -> str:
 
 def command_template(command: str) -> str | None:
     """Return "<program>" or "<program> <subcommand>" for the first real command."""
-    found, fallback = _templates(command)
+    found, fallback = _template_parts(command)
     return found[0] if found else fallback
 
 
@@ -230,11 +237,20 @@ def command_templates(command: str) -> list[str]:
     """Every distinct program template a command line runs, in order.
 
     `ls && git status` gives ["ls", "git status"], so a pre-run check can look
-    up each part, not only the first.
+    up each part, not only the first. `$(ls README*)` and `for …; do ls; done`
+    are included, so a glob failure inside a substitution or a loop is found.
     """
+    found, fallback = _template_parts(command)
+    return list(dict.fromkeys(found)) or ([fallback] if fallback else [])
+
+
+def _template_parts(command: str) -> tuple[list[str], str | None]:
     found, fallback = _templates(command)
-    unique = list(dict.fromkeys(found))
-    return unique or ([fallback] if fallback else [])
+    for body in _substitution_bodies(command):
+        inner, inner_fallback = _templates(body)
+        found.extend(inner)
+        fallback = fallback or inner_fallback
+    return found, fallback
 
 
 def is_compound(command: str) -> bool:
@@ -243,8 +259,13 @@ def is_compound(command: str) -> bool:
     The log then says only how the whole line ended, not which part failed or
     succeeded. `a || b` and `a; echo done` can even end well while `a` failed.
     """
-    found, fallback = _templates(command)
-    return len(found) > 1 or "||" in command or (bool(found) and fallback in OUTPUT_ONLY)
+    found, fallback = _template_parts(command)
+    return (
+        len(found) > 1
+        or "||" in command
+        or (bool(found) and fallback in OUTPUT_ONLY)
+        or any("|" in body for body in _substitution_bodies(command))
+    )
 
 
 def _subcommand(program: str, args: list[str]) -> str | None:
@@ -285,6 +306,11 @@ def _segments(command: str) -> list[str]:
             depth = max(0, depth - 1)
         elif depth == 0:
             width = 2 if command[i : i + 2] in ("&&", "||") else 1 if char in ";\n" else 0
+            if width and char == "\n":
+                head = command[start:i].strip()
+                if _FUNCTION_DEF.match(head) and _FUNCTION_HEAD.fullmatch(head):
+                    i += 1
+                    continue
             if width:
                 parts.append(command[start:i])
                 start = i + width
@@ -318,14 +344,114 @@ def _strip_assignments(segment: str) -> str:
         segment = segment[i:].lstrip()
 
 
+def _strip_body_prefix(segment: str) -> str:
+    """Drop a leading `do`/`then`/`else`/`elif` so the body is a command of its own."""
+    match = _BODY_PREFIX.match(segment)
+    return segment[match.end() :].lstrip() if match else segment
+
+
+def _substitution_bodies(command: str) -> list[str]:
+    """Bodies of `$(...)` substitutions, including those inside double quotes.
+
+    Single-quoted text is left alone. `$((...))` arithmetic is not a command.
+    Nested substitutions are returned as well, so `$(ls $(echo a))` yields both
+    `ls $(echo a)` and `echo a`.
+    """
+    command = "\n".join(_executable_segments(command))
+    bodies: list[str] = []
+    quote, i = None, 0
+    while i < len(command):
+        char = command[i]
+        if quote == "'":
+            quote = None if char == "'" else quote
+            i += 1
+            continue
+        if quote == '"':
+            if char == "\\":
+                i += 2
+                continue
+            if char == '"':
+                quote = None
+                i += 1
+                continue
+        elif char == "'" and not (i and command[i - 1].isalnum()):
+            quote = "'"
+            i += 1
+            continue
+        elif char == '"':
+            quote = '"'
+            i += 1
+            continue
+        elif char == "`":
+            i += 1
+            while i < len(command) and command[i] != "`":
+                i += 1
+            i += 1
+            continue
+        elif quote is None and char == "#" and (i == 0 or command[i - 1].isspace()):
+            end = command.find("\n", i)
+            i = len(command) if end < 0 else end + 1
+            continue
+        if command[i : i + 2] == "$(" and command[i : i + 3] != "$((":
+            depth, j, inner_quote = 1, i + 2, None
+            while j < len(command) and depth:
+                nested = command[j]
+                if inner_quote:
+                    if nested == "\\" and inner_quote == '"':
+                        j += 1
+                    elif nested == inner_quote:
+                        inner_quote = None
+                elif nested in "'\"":
+                    inner_quote = nested
+                elif nested == "(":
+                    depth += 1
+                elif nested == ")":
+                    depth -= 1
+                j += 1
+            if depth == 0:
+                body = "\n".join(_executable_segments(command[i + 2 : j - 1]))
+                bodies.append(body)
+                bodies.extend(_substitution_bodies(body))
+                i = j
+                continue
+        i += 1
+    return [body.strip() for body in bodies if body.strip()]
+
+
 def _commands(command: str) -> list[str]:
-    """The command lines of a script, with `( ... )` and `{ ...; }` groups opened up."""
+    """The command lines of a script, with `( ... )` and `{ ...; }` groups opened up.
+
+    A `do`/`then` prefix is dropped so `for …; do ls README*; done` yields `ls`,
+    and a subshell after `do` is opened the same way as a top-level `( ... )`.
+    """
     out = []
     for segment in _segments(command):
-        segment = _strip_assignments(segment)
+        segment = _strip_body_prefix(segment)
+        if not segment:
+            continue
         grouped = (segment[:1], segment[-1:]) in (("(", ")"), ("{", "}"))
-        out += _commands(segment[1:-1]) if grouped else [segment] if segment else []
+        out += _commands(segment[1:-1]) if grouped else [segment]
     return out
+
+
+def _executable_segments(command: str) -> list[str]:
+    if any(match.group(1).count("<<") > 1 for match in _HEREDOC.finditer(command)):
+        return []
+    command = _HERE_STRING.sub("", _HEREDOC.sub("", command))
+    # shortcut: unsupported heredocs skip the script; extend parsing if indexing them is needed.
+    if "<<" in command:
+        return []
+    command = _COMMENT_LINE.sub("", command)
+    return [segment for segment in _commands(command) if not _FUNCTION_DEF.match(segment)]
+
+
+def has_unquoted_glob(command: str) -> bool:
+    """Only executable, unquoted patterns can cause the shell's NOMATCH error."""
+    for segment in [*_executable_segments(command), *_substitution_bodies(command)]:
+        unquoted = re.sub(r"\\.|'[^']*'|\"[^\"]*\"", "", segment)
+        if any(char in unquoted for char in "*?["):
+            return True
+    return False
 
 
 def _templates(command: str) -> tuple[list[str], str | None]:
@@ -334,11 +460,8 @@ def _templates(command: str) -> tuple[list[str], str | None]:
     script = bool(_PS_SCRIPT.match(command))
     if script and "\n" in command.strip():
         fallback = SCRIPT
-    command = _HERE_STRING.sub("", _HEREDOC.sub(r"\1", command))
-    command = _COMMENT_LINE.sub("", command)
-    for segment in _commands(command):
-        if _FUNCTION_DEF.match(segment):
-            continue  # `name() {...}` defines a function; it runs nothing
+    for segment in _executable_segments(command):
+        segment = _strip_assignments(segment)
         tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
         while tokens and _program(tokens[0]) in WRAPPERS:
             tokens = tokens[1:]
@@ -408,8 +531,11 @@ def error_signature(text: str) -> str | None:
         picked = next((line for line in lines if _is_failure_line(line)), None)
     if picked is None:
         return None
-    picked = re.sub(r"<[^>]{1,40}>", "", picked)
-    for pattern, mask in _MASKS:
-        picked = pattern.sub(mask, picked)
+    if _NOMATCH.match(picked):
+        picked = NOMATCH_SIG
+    else:
+        picked = re.sub(r"<[^>]{1,40}>", "", picked)
+        for pattern, mask in _MASKS:
+            picked = pattern.sub(mask, picked)
     picked = re.sub(r"\s+", " ", picked).strip().lower()
     return picked[:MAX_SIG] or None

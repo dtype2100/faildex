@@ -199,3 +199,34 @@ def test_notice_says_what_happened_and_what_got_past_it():
         "faildex: `cargo build` failed with `linker not found` in 2 earlier sessions; "
         "no recovery on record."
     )
+
+
+def test_nomatch_combines_sessions_across_commands_only_for_unquoted_globs():
+    from faildex.insight import warnings_for_line
+
+    db = relate.connect(":memory:")
+    sig = "no matches found: <glob>"
+    ingest(
+        db,
+        [
+            _call("a", 0, ok=False, command="ls", sig=sig),
+            _call("b", 0, ok=False, command="rg", sig=sig),
+        ],
+    )
+    for command in ["ls README*", "find *.py", "f=$(ls *.py | head -1)", "ls *.py; rg *.txt"]:
+        _, pairs = warnings_for_line(db, command)
+        assert len(pairs) == 1, command
+        _, warning = pairs[0]
+        assert warning.sig == sig
+        assert warning.sessions == {"claude_code:a", "claude_code:b"}
+        assert warning.calls == 2
+        assert warning.recovered == 0
+    for command in [
+        "git status",
+        "ls '*.py'",
+        r"ls \*.py",
+        "cat <<'EOF'\n$(ls *.py)\nEOF",
+        "f() { ls *.py; }",
+    ]:
+        assert warnings_for_line(db, command)[1] == [], command
+    db.close()

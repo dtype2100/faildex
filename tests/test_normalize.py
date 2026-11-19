@@ -1,6 +1,6 @@
 import pytest
 
-from faildex.normalize import command_template, error_signature
+from faildex.normalize import command_template, command_templates, error_signature
 
 COMMANDS = [
     ("git status", "git status"),
@@ -46,6 +46,18 @@ COMMANDS = [
     ("uv run ./scripts/secret-name.py", "uv run"),
     ("python -m /Users/alice/x", "python -m"),
     ("if [ -f a ]; then\n  git status\nfi", "git status"),
+    ("for f in *.x; do ls README*; done", "ls"),
+    ("for d in a b; do ( ls README* ); done", "ls"),
+    ("( ls README* readme* )", "ls"),
+    ("cd /tmp && ( ls README* )", "ls"),
+    ("f=$(ls README* readme* | head -1)", "ls"),
+    ('echo "$(ls README*)"', "ls"),
+    ("echo '$(ls README*)'", "echo"),
+    ("git status # $(ls README*)", "git status"),
+    (
+        'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
+        "git log",
+    ),
     ("cat <<'EOF' > notes\nplain words here\nEOF\ngit add notes", "cat"),
     ("gh 2>/dev/null", "gh"),
     ("$roots = @(\n'arch294_loading03',\n'arch295_press'\n)\nGet-Item $roots", "Get-Item"),
@@ -77,6 +89,10 @@ SIGNATURES = [
     ),
     ("src/app.cs:12: throw new InvalidOperationException(x);", None),
     ('12: Console.Error.WriteLine("usage error: needs [start]', None),
+    ("(eval):1: no matches found: README*", "no matches found: <glob>"),
+    ("(eval):3: no matches found: --include=*.py", "no matches found: <glob>"),
+    ("zsh:1: no matches found: .aider*", "no matches found: <glob>"),
+    ("zsh:12: no matches found: src/*.yaml", "no matches found: <glob>"),
     ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
     ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
     (
@@ -141,6 +157,59 @@ def test_plain_output_is_not_a_signature():
     assert error_signature("sites/findings.md:12: - it is a mere backend selector") is None
 
 
+COMPOUND_GLOBS = [
+    (
+        "for f in *.x; do ls README*; done",
+        ["ls"],
+    ),
+    (
+        "for d in a b; do ( ls README* ); done",
+        ["ls"],
+    ),
+    (
+        "( ls README* readme* )",
+        ["ls"],
+    ),
+    (
+        "cd /tmp && ( ls README* )",
+        ["ls"],
+    ),
+    (
+        "f=$(ls README* readme* | head -1)",
+        ["ls"],
+    ),
+    (
+        'echo "$(ls README*)"',
+        ["ls"],
+    ),
+    (
+        "echo '$(ls README*)'",
+        ["echo"],
+    ),
+    (
+        "git status # $(ls README*)",
+        ["git status"],
+    ),
+    (
+        'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
+        ["git log", "ls"],
+    ),
+]
+
+
+@pytest.mark.parametrize(("command", "expected"), COMPOUND_GLOBS)
+def test_command_templates_open_for_subshell_and_substitution(command, expected):
+    """A glob inside a loop, a `( … )` group, or `$(…)` is still a command to look up."""
+    assert command_templates(command) == expected
+
+
+def test_zsh_glob_failures_share_one_signature():
+    """Literal globs must not split the same zsh NOMATCH error across keys."""
+    eval_sig = error_signature("(eval):1: no matches found: README*")
+    zsh_sig = error_signature("zsh:1: no matches found: --include=*.py")
+    assert eval_sig == zsh_sig == "no matches found: <glob>"
+
+
 def test_compound_means_several_different_programs():
     from faildex.normalize import is_compound
 
@@ -152,6 +221,71 @@ def test_compound_means_several_different_programs():
     assert is_compound("ROOT=$(pwd) git status; pytest -q")
     assert is_compound("git status && (pytest -q; ruff check .)")
     assert is_compound("git status # TODO (slow\npytest -q")
-    assert not is_compound("geo=$(hyprctl clients -j | jq .x)\ngrim out.png")
+    assert is_compound("geo=$(hyprctl clients -j | jq .x)\ngrim out.png")
     assert is_compound("git push; echo done")
     assert not is_compound("echo hello")
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ("cat <<'EOF'\n$(private_customer_command)\nEOF", ["cat"]),
+        ("cat <<EOF\n$(private_customer_command)\nEOF\ngit status", ["cat", "git status"]),
+        ("private_function() { value=$(private_customer_command); }", []),
+        (
+            "function private_function { value=$(private_customer_command); }\ngit status",
+            ["git status"],
+        ),
+        (
+            "( private_function() { value=$(private_customer_command); }; git status )",
+            ["git status"],
+        ),
+    ],
+)
+def test_data_and_function_substitutions_never_become_commands(command, expected):
+    assert command_templates(command) == expected
+    assert command_template(command) == (expected[0] if expected else None)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat <<'END-DATA'\n$(private_customer_command)\nEND-DATA",
+        "private_function()\n{ value=$(private_customer_command); }",
+        "function private_function\n{ value=$(private_customer_command); }",
+        "f=$(private_function() { value=$(private_customer_command); })",
+    ],
+)
+def test_nested_and_multiline_data_never_become_commands(command):
+    expected = ["cat"] if command.startswith("cat ") else []
+    assert command_templates(command) == expected
+
+
+def test_assignment_substitution_pipeline_does_not_prove_recovery():
+    from faildex.normalize import is_compound
+
+    assert is_compound("f=$(ls README* | head -1)")
+    assert is_compound("f=$(ls README*); git status")
+    assert not is_compound("f=$(ls README*)")
+
+
+@pytest.mark.parametrize("prefix", ["zsh:", "zsh:12:", "(eval):", "(eval):3:"])
+def test_nomatch_without_line_number_masks_the_entire_glob(prefix):
+    assert (
+        error_signature(f"{prefix} no matches found: private-customer-*")
+        == "no matches found: <glob>"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat <<A <<B\nfirst\nA\n$(private_customer_command)\nB",
+        "cat <<\\EOF\n$(private_customer_command)\nEOF",
+        "cat <<'END DATA'\n$(private_customer_command)\nEND DATA",
+        "cat <<EOF\n$(private_customer_command)",
+    ],
+)
+def test_unrecognized_heredocs_fail_closed(command):
+    assert command_templates(command) == []
+    assert command_template(command) is None

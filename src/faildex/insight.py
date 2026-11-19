@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 
+from faildex.normalize import NOMATCH_SIG
+
 RECOVERY_HOPS = 5
 # A warning must be worth the interruption: the failure has to account for at
 # least this share of the command's runs. Otherwise every `ls` would carry one.
@@ -179,10 +181,21 @@ def warnings_for_line(
 
     A compound line is looked up part by part, so `ls && git status` warns for git.
     """
-    from faildex.normalize import command_templates
+    from faildex.normalize import command_templates, has_unquoted_glob
 
     templates = command_templates(line)
-    found = [(t, item) for t in templates for item in warnings_for(db, t, min_sessions)]
+    found = [
+        (t, item)
+        for t in templates
+        for item in warnings_for(db, t, min_sessions)
+        if item.sig != NOMATCH_SIG
+    ]
+    if templates and has_unquoted_glob(line):
+        # NOMATCH happens in the shell before any program runs, so pool its evidence.
+        item = failures(db).get(NOMATCH_SIG)
+        if item and len(item.sessions) >= min_sessions:
+            item.commands = Counter({"zsh": item.calls})
+            found.append(("zsh", item))
     return templates, found
 
 
