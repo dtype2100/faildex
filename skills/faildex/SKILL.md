@@ -1,6 +1,6 @@
 ---
 name: faildex
-description: Use when a shell command has just failed, when about to retry a command that failed earlier, or when the user asks which mistakes keep recurring across agent sessions or wants rules written from them.
+description: When a command fails, read this skill before retrying it. Use when a shell command has just failed, when about to retry a command that failed earlier, or when the user asks which mistakes keep recurring across agent sessions or wants rules written from them.
 ---
 
 # faildex

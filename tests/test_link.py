@@ -23,7 +23,7 @@ def test_link_wires_both_agents_and_is_idempotent(tmp_path):
     home = _home(tmp_path)
     rules = tmp_path / "rules.md"
     first = {s.agent: s.status for s in RULES(link(rules, home))}
-    assert first == {"Claude Code": "linked", "Antigravity": "linked", "Codex": "skipped"}
+    assert first == {"Claude Code": "linked", "Antigravity": "linked"}
     claude = (home / ".claude" / "CLAUDE.md").read_text()
     assert claude == f"@/somewhere/working-rules.md\n@{rules.resolve()}\n"
     agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"

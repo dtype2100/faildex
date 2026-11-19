@@ -10,10 +10,7 @@ going wrong). This module wires both in, and takes them out again:
 - Antigravity: a plugin at `~/.gemini/config/plugins/faildex-rules/` whose
   `rules/AGENTS.md` is a link to the file and whose `skills/faildex/SKILL.md` is
   the skill (Antigravity loads plugin rules and skills in every workspace).
-- Codex: the skill at `~/.codex/skills/faildex/SKILL.md`. The rules are reported,
-  not changed: its single `~/.codex/AGENTS.md` has no import syntax.
-- Cursor: the skill at `~/.cursor/skills/faildex/SKILL.md`. Its global rules live
-  in Cursor's settings, not in a file, so they are reported, not changed.
+- Codex and Cursor: the skill and two user hooks for session rules and shell warnings.
 
 Every change is idempotent: running it twice changes nothing the second time.
 Files that are not faildex's own are never replaced.
@@ -204,25 +201,16 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
             _write_manifest(plugin, rules)
         steps.append(_install_skill("Antigravity", plugin / "skills" / "faildex", dry_run))
 
-    steps.append(
-        Step(
-            "Codex",
-            "skipped",
-            home / ".codex" / "AGENTS.md",
-            "no import syntax; copy the rule lines in yourself if you want them there",
-        )
-    )
+    from faildex.agent_hooks import configure
+
+    for agent, folder in (("Codex", ".codex"), ("Cursor", ".cursor")):
+        if (home / folder).is_dir():
+            path = home / folder / "hooks.json"
+            status, note = configure(agent.lower(), path, rules, False, dry_run)
+            steps.append(Step(agent, status, path, note, "hooks"))
     if (home / ".codex").is_dir():
         steps.append(_install_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
     if (home / ".cursor").is_dir():
-        steps.append(
-            Step(
-                "Cursor",
-                "skipped",
-                home / ".cursor",
-                "global rules live in Cursor's settings; paste the rule lines there if you want them",
-            )
-        )
         steps.append(_install_skill("Cursor", home / ".cursor" / "skills" / "faildex", dry_run))
     return steps
 
@@ -231,6 +219,13 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
     home = home or Path.home()
     rules = rules.expanduser().resolve()
     steps: list[Step] = []
+    from faildex.agent_hooks import configure
+
+    for agent, folder in (("Codex", ".codex"), ("Cursor", ".cursor")):
+        path = home / folder / "hooks.json"
+        if path.exists():
+            status, note = configure(agent.lower(), path, rules, True, dry_run)
+            steps.append(Step(agent, status, path, note, "hooks"))
 
     claude = _claude_md(home)
     line = f"@{rules}"

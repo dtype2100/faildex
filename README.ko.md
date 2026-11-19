@@ -202,7 +202,7 @@ make serve     # http://localhost:8765
 faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 cd ~ && faildex rules --approve 1 3   # 원하는 규칙만 ~/faildex-rules.md에 기록
-faildex link      # faildex 스킬(가능한 곳엔 규칙 파일도)을 Claude Code, Antigravity, Codex, Cursor에 설치. --remove로 되돌림
+faildex link      # 스킬·규칙 및 Codex/Cursor 세션·셸 훅 설치. --remove로 되돌림
 ```
 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
@@ -227,6 +227,11 @@ MCP 클라이언트에서 쓰기:
 에이전트에게 이 도구를 언제 부를지 알려 주는 스킬은
 [`skills/faildex/SKILL.md`](skills/faildex/SKILL.md)에 있습니다. `faildex link`가 Claude Code(`~/.claude/skills/faildex/`),
 Antigravity(`faildex-rules` 플러그인 안), Codex(`~/.codex/skills/faildex/`), Cursor(`~/.cursor/skills/faildex/`)에 설치하고, `faildex link --remove`가 지웁니다.
+
+Codex와 Cursor의 사용자 `hooks.json`에는 세션 시작 시 근거 줄을 뺀 규칙을
+불러오는 훅과 셸 실행 전 알려진 실패를 경고하는 훅을 등록합니다. 기존 훅은
+보존하고 변경 전에 백업하며, 제거 시 faildex 항목만 뺍니다. Codex는 `/hooks`에서
+새 명령을 검토·신뢰한 뒤 새 세션을 시작해야 합니다. [훅 설정](docs/agent-hooks.md)을 참고하세요.
 
 ## 데이터는 어디에 있나
 

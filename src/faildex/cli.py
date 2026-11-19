@@ -1,6 +1,7 @@
 """faildex: find the failures coding agents keep repeating."""
 
 import argparse
+import base64
 from pathlib import Path
 
 from faildex import __version__
@@ -87,7 +88,16 @@ def _hook(args: argparse.Namespace) -> int:
 
     from faildex.hook import respond
 
-    out = respond(sys.stdin.read(), args.store, args.min_sessions, args.log, args.top)
+    out = respond(
+        sys.stdin.read(),
+        args.store,
+        args.min_sessions,
+        args.log,
+        args.top,
+        agent=args.agent,
+        event=args.event,
+        rules=args.encoded_rules or args.rules,
+    )
     if out:
         print(out)
     return 0
@@ -261,7 +271,16 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("command_line", help="the command about to run, quoted")
     check.set_defaults(run=_check)
 
-    hook = commands.add_parser("hook", help="Claude Code PreToolUse hook (JSON on stdin)")
+    hook = commands.add_parser("hook", help="agent session and shell hooks (JSON on stdin)")
+    hook.add_argument("--agent", choices=("claude", "codex", "cursor"), default="claude")
+    hook.add_argument("--event", choices=("session-start", "pre-shell"), default="pre-shell")
+    hook.add_argument("--rules", type=Path, default=Path("~/faildex-rules.md"))
+    hook.add_argument(
+        "--rules-encoded",
+        dest="encoded_rules",
+        help=argparse.SUPPRESS,
+        type=lambda value: Path(base64.urlsafe_b64decode(value).decode("utf-8")),
+    )
     hook.add_argument("--log", type=Path, default=None, help="append one line per warning given")
     hook.set_defaults(run=_hook)
 

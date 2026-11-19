@@ -81,25 +81,61 @@ def _log(path: Path, payload: dict, context: str) -> None:
 
 
 def respond(
-    raw: str, store: Path, min_sessions: int = 2, log: Path | None = None, top: int = MAX_WARNINGS
+    raw: str,
+    store: Path,
+    min_sessions: int = 2,
+    log: Path | None = None,
+    top: int = MAX_WARNINGS,
+    *,
+    agent: str = "claude",
+    event: str = "pre-shell",
+    rules: Path | None = None,
 ) -> str:
     """Hook stdout for one stdin payload; empty when there is nothing to say."""
+    quiet = json.dumps({"permission": "allow"}) if agent == "cursor" else ""
     try:
+        if event == "session-start":
+            text = (rules or Path("~/faildex-rules.md")).expanduser().read_text(encoding="utf-8")
+            text = "".join(
+                line
+                for line in text.splitlines(keepends=True)
+                if not line.lstrip().lower().startswith("evidence:")
+            )
+            if agent == "cursor":
+                return json.dumps({"additional_context": text})
+            return json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "SessionStart",
+                        "additionalContext": text,
+                    }
+                }
+            )
         from faildex.store import open_store
 
         payload = json.loads(raw)
+        if agent == "cursor" and isinstance(payload, dict):
+            payload = {"tool_name": "Bash", "tool_input": {"command": payload.get("command")}}
         db = open_store(store)
         try:
             template, found = _lookup(db, payload, min_sessions, top)
         finally:
             db.close()
         if not found:
-            return ""
+            return quiet
         context = _context(template, found)
         if log:
             _log(log, payload, context)
     except Exception:  # noqa: BLE001 - see module docstring
-        return ""
+        return json.dumps({}) if event == "session-start" and agent == "cursor" else quiet
+    if agent == "cursor":
+        return json.dumps(
+            {
+                "permission": "allow",
+                "user_message": notice_for(found),
+                "agent_message": context,
+            }
+        )
     return json.dumps(
         {
             "systemMessage": notice_for(found),
