@@ -116,20 +116,28 @@ def test_link_installs_the_skill_for_every_agent_and_remove_takes_it_out(tmp_pat
 
     home = _home(tmp_path)
     (home / ".codex").mkdir()
+    (home / ".cursor").mkdir()
     rules = tmp_path / "rules.md"
     skills = {s.agent: s.status for s in link(rules, home) if s.what == "skill"}
-    assert skills == {"Claude Code": "installed", "Antigravity": "installed", "Codex": "installed"}
+    assert skills == {
+        "Claude Code": "installed",
+        "Antigravity": "installed",
+        "Codex": "installed",
+        "Cursor": "installed",
+    }
     text = skill_source().read_text()
     for path in (
         home / ".claude/skills/faildex/SKILL.md",
         home / ".gemini/config/plugins/faildex-rules/skills/faildex/SKILL.md",
         home / ".codex/skills/faildex/SKILL.md",
+        home / ".cursor/skills/faildex/SKILL.md",
     ):
         assert path.read_text() == text
     assert {s.status for s in link(rules, home) if s.what == "skill"} == {"already"}
     unlink(rules, home)
     assert not (home / ".claude/skills/faildex").exists()
     assert not (home / ".codex/skills/faildex").exists()
+    assert not (home / ".cursor/skills/faildex").exists()
     assert not (home / ".gemini/config/plugins/faildex-rules").exists()
 
 

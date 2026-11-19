@@ -12,6 +12,8 @@ going wrong). This module wires both in, and takes them out again:
   the skill (Antigravity loads plugin rules and skills in every workspace).
 - Codex: the skill at `~/.codex/skills/faildex/SKILL.md`. The rules are reported,
   not changed: its single `~/.codex/AGENTS.md` has no import syntax.
+- Cursor: the skill at `~/.cursor/skills/faildex/SKILL.md`. Its global rules live
+  in Cursor's settings, not in a file, so they are reported, not changed.
 
 Every change is idempotent: running it twice changes nothing the second time.
 Files that are not faildex's own are never replaced.
@@ -212,6 +214,16 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
     )
     if (home / ".codex").is_dir():
         steps.append(_install_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
+    if (home / ".cursor").is_dir():
+        steps.append(
+            Step(
+                "Cursor",
+                "skipped",
+                home / ".cursor",
+                "global rules live in Cursor's settings; paste the rule lines there if you want them",
+            )
+        )
+        steps.append(_install_skill("Cursor", home / ".cursor" / "skills" / "faildex", dry_run))
     return steps
 
 
@@ -234,6 +246,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
 
     steps.append(_remove_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run))
     steps.append(_remove_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
+    steps.append(_remove_skill("Cursor", home / ".cursor" / "skills" / "faildex", dry_run))
 
     plugin = _plugin(home)
     if not plugin.exists():

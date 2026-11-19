@@ -168,7 +168,7 @@ make serve     # http://localhost:8765
 faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 cd ~ && faildex rules --approve 1 3   # 원하는 규칙만 ~/faildex-rules.md에 기록
-faildex link      # faildex 스킬과 그 규칙 파일을 Claude Code, Antigravity, Codex에 설치 (--remove로 되돌림)
+faildex link      # faildex 스킬(가능한 곳엔 규칙 파일도)을 Claude Code, Antigravity, Codex, Cursor에 설치. --remove로 되돌림
 ```
 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
@@ -192,7 +192,7 @@ MCP 클라이언트에서 쓰기:
 
 에이전트에게 이 도구를 언제 부를지 알려 주는 스킬은
 [`skills/faildex/SKILL.md`](skills/faildex/SKILL.md)에 있습니다. `faildex link`가 Claude Code(`~/.claude/skills/faildex/`),
-Antigravity(`faildex-rules` 플러그인 안), Codex(`~/.codex/skills/faildex/`)에 설치하고, `faildex link --remove`가 지웁니다.
+Antigravity(`faildex-rules` 플러그인 안), Codex(`~/.codex/skills/faildex/`), Cursor(`~/.cursor/skills/faildex/`)에 설치하고, `faildex link --remove`가 지웁니다.
 
 ## 데이터는 어디에 있나
 

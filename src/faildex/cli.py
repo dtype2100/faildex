@@ -245,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
 
     linker = commands.add_parser(
         "link",
-        help="install the faildex skill and your approved rules into Claude Code, Antigravity and Codex",
+        help="install the faildex skill and your approved rules into Claude Code, Antigravity, Codex and Cursor",
     )
     linker.add_argument(
         "--rules",

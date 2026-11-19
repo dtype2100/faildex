@@ -173,7 +173,7 @@ Index your own logs. They stay on your machine, in `~/.faildex/store`:
 faildex ingest    # reads every default folder it finds; or pass --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 cd ~ && faildex rules --approve 1 3   # write the ones you want to ~/faildex-rules.md
-faildex link      # install the faildex skill and that rules file into Claude Code, Antigravity and Codex (--remove undoes it)
+faildex link      # install the faildex skill (and that rules file where possible) into Claude Code, Antigravity, Codex and Cursor; --remove undoes it
 ```
 
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
@@ -197,8 +197,8 @@ Use it from any MCP client:
 
 An agent skill that tells the agent when to call these is in
 [`skills/faildex/SKILL.md`](skills/faildex/SKILL.md). `faildex link` installs it for Claude Code
-(`~/.claude/skills/faildex/`), Antigravity (inside its `faildex-rules` plugin) and Codex
-(`~/.codex/skills/faildex/`); `faildex link --remove` takes it out again.
+(`~/.claude/skills/faildex/`), Antigravity (inside its `faildex-rules` plugin) Codex
+(`~/.codex/skills/faildex/`) and Cursor (`~/.cursor/skills/faildex/`); `faildex link --remove` takes it out again.
 
 ## Where the data lives
 
