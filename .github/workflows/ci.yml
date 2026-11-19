@@ -15,14 +15,34 @@ jobs:
       - run: uv run pytest -q -rs
       - run: make demo
 
-  # Windows: install and run the CLI (the browser demo build needs make and is skipped).
+  # Windows: GNU make is not on the runner, so the site target is inlined in
+  # PowerShell. Node is set up so pytest can run site/check.mjs instead of skipping.
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: uv sync
       - run: uv run ruff check .
+      - name: Build site
+        shell: pwsh
+        run: |
+          uv run faildex export-web --out site/data.json
+          New-Item -ItemType Directory -Force -Path site/vendor, .tmp/npm | Out-Null
+          Push-Location .tmp/npm
+          npm pack --silent @relate/relate-wasm@1.0.1
+          if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+          tar -xzf relate-relate-wasm-1.0.1.tgz
+          if ($LASTEXITCODE -ne 0) { throw "tar extract failed" }
+          Pop-Location
+          Copy-Item .tmp/npm/package/relate.js, .tmp/npm/package/relate_bg.wasm -Destination site/vendor/
+          if (Test-Path .tmp/npm/package/snippets) {
+            Copy-Item -Recurse .tmp/npm/package/snippets -Destination site/vendor/
+          }
+      - run: node site/check.mjs
       - run: uv run pytest -q -rs
       - run: uv run faildex demo
       - run: ./install.ps1
