@@ -135,6 +135,41 @@ run it again after approving new rules.
 `faildex demo` needs no download, no API key and no setup: the public store ships
 inside the package. It takes a few seconds.
 
+#### Windows (PowerShell)
+
+Use PowerShell 5.1 or 7 with internet access. The one-line installer above installs
+uv if needed; uv manages Python (faildex needs Python 3.10 or later). Git is not
+needed for the ZIP method. If git is installed, the `git+https://...` command above
+works on Windows too. Add `--force` after `uv tool install` when reinstalling or
+switching between methods.
+
+In a new PowerShell window, check the installation:
+
+```powershell
+Get-Command faildex
+faildex --help
+faildex demo
+faildex sources
+faildex ingest
+```
+
+`ingest` finds agent logs under your Windows user profile and writes the private
+store to `~/.faildex/store`. If no default log folders exist, it prints
+`no agent logs in the default folders` and exits with code 1; pass an existing
+folder with `--claude`, `--codex-sessions`, `--cursor` or `--antigravity`.
+
+If a new window still cannot find `faildex`, run `uv tool update-shell` and reopen
+PowerShell. For the current window, use `$env:Path = "$(uv tool dir --bin);$env:Path"`.
+PowerShell 5.1's `>` writes UTF-16; use `| Set-Content -Encoding UTF8` when saving
+UTF-8 output (with a BOM on PowerShell 5.1).
+Check `$LASTEXITCODE` immediately after a native command;
+`| Select-Object -First N` can cut its output and produce a nonzero exit code.
+
+Tested on Windows 10 22H2 with PowerShell 5.1, uv 0.9.10 and Python 3.13.5
+(uv, Python and git were already installed):
+all three installation methods, CLI checks, default ingest and isolated
+`link`/`link --remove` passed. See [commands, results and limits](docs/windows-install-verification.md).
+
 ### From a checkout
 
 Requirements: Python 3.10 or later and uv. Tested on macOS and Linux in CI.

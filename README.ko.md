@@ -130,6 +130,40 @@ CI에서 macOS, Linux, Windows 모두 설치하고 실행합니다. Windows에�
 `faildex demo`는 다운로드, API 키, 설정이 필요 없습니다. 공개 스토어가 패키지에
 들어 있습니다. 몇 초면 끝납니다.
 
+#### Windows (PowerShell)
+
+인터넷에 연결된 PowerShell 5.1 또는 7에서 실행하세요. 위 한 줄 설치는 uv가 없으면
+먼저 설치합니다. uv가 Python을 관리하며, faildex에는 Python 3.10 이상이 필요합니다.
+ZIP 방식은 git이 필요 없습니다. git이 있다면 위 `git+https://...` 명령도 Windows에서
+동작합니다. 재설치하거나 설치 방식을 바꿀 때는 `uv tool install` 뒤에 `--force`를 붙이세요.
+
+새 PowerShell 창에서 설치를 확인하세요.
+
+```powershell
+Get-Command faildex
+faildex --help
+faildex demo
+faildex sources
+faildex ingest
+```
+
+`ingest`는 Windows 사용자 프로필 아래의 에이전트 기록을 찾아 개인 스토어를
+`~/.faildex/store`에 저장합니다. 기본 기록 폴더가 없으면
+`no agent logs in the default folders`를 출력하고 종료 코드 1을 반환합니다.
+`--claude`, `--codex-sessions`, `--cursor`, `--antigravity`로 실제 폴더를 지정하세요.
+
+새 창에서도 `faildex`를 못 찾으면 `uv tool update-shell`을 실행하고 PowerShell을
+다시 여세요. 현재 창에만 적용하려면 `$env:Path = "$(uv tool dir --bin);$env:Path"`를
+실행하세요. PowerShell 5.1의 `>`는 UTF-16으로 저장하므로 UTF-8 도구에 넘길 출력은
+`| Set-Content -Encoding UTF8`로 저장하세요(PowerShell 5.1에서는 BOM 포함).
+외부 명령 직후 `$LASTEXITCODE`를 확인하세요.
+`| Select-Object -First N`은 출력을 중간에 끊어 종료 코드가 0이 아니게 만들 수 있습니다.
+
+uv·Python·git이 이미 설치된 Windows 10 22H2, PowerShell 5.1, uv 0.9.10,
+Python 3.13.5 환경에서 세 가지 설치 방식,
+CLI 확인, 기본 경로 적재, 임시 프로필의 `link`·`link --remove`가 통과했습니다.
+[명령·결과·검증 범위](docs/windows-install-verification.md)를 참고하세요.
+
 ### 저장소에서 직접
 
 필요한 것: Python 3.10 이상과 uv. CI에서 macOS와 Linux로 시험합니다.
