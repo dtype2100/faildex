@@ -1,7 +1,10 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from faildex.cli import main
-from faildex.link import link, unlink
+from faildex.link import COPY, link, skill_source, unlink
 
 
 def RULES(steps):
@@ -174,3 +177,221 @@ def test_an_old_faildex_skill_is_updated(tmp_path):
         if s.what == "skill" and s.agent == "Claude Code"
     )
     assert step.status == "updated"
+
+
+# Per-editor round trips (issue #24). Each case uses a throwaway home under tmp_path
+# and never Path.home(), so a bug cannot write into the real ~/.claude or ~/.cursor.
+
+_REAL_HOME = Path.home().resolve()
+_EDITORS = (
+    pytest.param("Claude Code", id="claude-code"),
+    pytest.param("Antigravity", id="antigravity"),
+    pytest.param("Cursor", id="cursor"),
+)
+_BUSY = {"linked", "installed", "updated", "copied"}
+
+
+def _no_real_home():
+    """Sentinel so a missing `home=` argument fails the test instead of touching ~."""
+    raise AssertionError("link/unlink must use the fake home, not Path.home()")
+
+
+def _snapshot(root: Path) -> dict[str, tuple[str, str]]:
+    """Walk `root` without following directory symlinks: relpath -> (kind, payload)."""
+    found: dict[str, tuple[str, str]] = {}
+
+    def walk(folder: Path) -> None:
+        for child in sorted(folder.iterdir(), key=lambda p: p.name):
+            rel = str(child.relative_to(root))
+            if child.is_symlink():
+                found[rel] = ("symlink", str(child.readlink()))
+            elif child.is_dir():
+                found[rel] = ("dir", "")
+                walk(child)
+            elif child.is_file():
+                found[rel] = ("file", child.read_text())
+
+    if root.exists():
+        walk(root)
+    return found
+
+
+def _editor_home(tmp_path: Path, editor: str) -> Path:
+    """A fake home that already has that editor's user files, and only that editor."""
+    home = tmp_path / "home"
+    home.mkdir()
+    if editor == "Claude Code":
+        claude = home / ".claude"
+        claude.mkdir()
+        (claude / "CLAUDE.md").write_text("# my instructions\n")
+        (claude / "settings.json").write_text('{"hooks": {}}\n')
+        other = claude / "skills" / "my-skill"
+        other.mkdir(parents=True)
+        (other / "SKILL.md").write_text("---\nname: my-skill\n---\nkeep me\n")
+    elif editor == "Antigravity":
+        cli = home / ".gemini" / "antigravity-cli"
+        cli.mkdir(parents=True)
+        (cli / "user.txt").write_text("session-log\n")
+        other = home / ".gemini" / "config" / "plugins" / "other-plugin"
+        (other / "rules").mkdir(parents=True)
+        (other / "plugin.json").write_text('{"name": "other-plugin"}\n')
+        (other / "rules" / "AGENTS.md").write_text("other rules\n")
+    elif editor == "Cursor":
+        cursor = home / ".cursor"
+        cursor.mkdir()
+        (cursor / "argv.json").write_text('{"version": 1}\n')
+        (cursor / "mcp.json").write_text('{"mcpServers": {}}\n')
+        other = cursor / "skills" / "my-skill"
+        other.mkdir(parents=True)
+        (other / "SKILL.md").write_text("---\nname: my-skill\n---\nkeep me\n")
+    else:
+        raise ValueError(f"unknown editor: {editor}")
+    return home
+
+
+def _absolute(path: Path) -> Path:
+    """Absolute path without following a final symlink (rules links point outside home)."""
+    return path if path.is_absolute() else Path.cwd() / path
+
+
+def _assert_confined(steps, home: Path) -> None:
+    """Every reported path must sit inside the fake home, never the real one."""
+    home = _absolute(home)
+    assert home != _REAL_HOME
+    for step in steps:
+        where = _absolute(Path(step.where))
+        assert where == home or home in where.parents, (step.agent, step.where)
+        if where == _REAL_HOME or _REAL_HOME in where.parents:
+            assert home == _REAL_HOME or _REAL_HOME in home.parents
+
+
+def _assert_user_files_preserved(
+    home: Path,
+    original: dict[str, tuple[str, str]],
+    extra_ok: frozenset[str] = frozenset(),
+) -> None:
+    """Pre-existing paths remain. Contents match, except files we are allowed to append to."""
+    for rel, (kind, payload) in original.items():
+        path = home / rel
+        assert path.exists(), rel
+        if kind == "symlink":
+            assert path.is_symlink() and str(path.readlink()) == payload
+        elif kind == "file":
+            assert path.is_file() and not path.is_symlink()
+            now = path.read_text()
+            if rel in extra_ok:
+                for line in payload.splitlines():
+                    assert line in now.splitlines()
+            else:
+                assert now == payload
+        else:
+            assert path.is_dir()
+
+
+def _editor_artifacts(editor: str, home: Path) -> list[Path]:
+    """Files `faildex link` should write for this editor (rules and/or skill)."""
+    if editor == "Claude Code":
+        return [
+            home / ".claude" / "CLAUDE.md",
+            home / ".claude" / "skills" / "faildex" / "SKILL.md",
+        ]
+    if editor == "Antigravity":
+        plugin = home / ".gemini" / "config" / "plugins" / "faildex-rules"
+        return [
+            plugin / "rules" / "AGENTS.md",
+            plugin / "skills" / "faildex" / "SKILL.md",
+        ]
+    return [home / ".cursor" / "skills" / "faildex" / "SKILL.md"]
+
+
+def _assert_editor_linked(editor: str, home: Path, rules: Path) -> None:
+    """The editor-specific install landed: skill text, and rules where this editor has them."""
+    text = skill_source().read_text()
+    skill = next(p for p in _editor_artifacts(editor, home) if p.name == "SKILL.md")
+    assert skill.is_file() and skill.read_text() == text
+    if editor == "Claude Code":
+        assert f"@{rules.resolve()}" in (home / ".claude" / "CLAUDE.md").read_text().splitlines()
+    elif editor == "Antigravity":
+        agents = home / ".gemini" / "config" / "plugins" / "faildex-rules" / "rules" / "AGENTS.md"
+        if agents.is_symlink():
+            assert agents.resolve() == rules.resolve()
+        else:
+            assert agents.read_text().startswith(COPY.format(rules.resolve()))
+
+
+@pytest.fixture
+def no_real_home(monkeypatch):
+    """Fail the test if link/unlink fall back to Path.home()."""
+    monkeypatch.setattr(Path, "home", staticmethod(_no_real_home))
+
+
+@pytest.mark.parametrize("editor", _EDITORS)
+def test_link_then_unlink_returns_to_the_original_state(tmp_path, editor, no_real_home):
+    home = _editor_home(tmp_path, editor)
+    original = _snapshot(home)
+    rules = tmp_path / "rules.md"
+    first = link(rules, home)
+    _assert_confined(first, home)
+    _assert_user_files_preserved(home, original, extra_ok=frozenset({".claude/CLAUDE.md"}))
+    _assert_editor_linked(editor, home, rules)
+    removed = unlink(rules, home)
+    _assert_confined(removed, home)
+    assert _snapshot(home) == original
+    _assert_user_files_preserved(home, original)
+
+
+@pytest.mark.parametrize("editor", _EDITORS)
+def test_preexisting_user_files_survive_link_and_unlink(tmp_path, editor, no_real_home):
+    home = _editor_home(tmp_path, editor)
+    original = _snapshot(home)
+    rules = tmp_path / "rules.md"
+    link(rules, home)
+    _assert_user_files_preserved(home, original, extra_ok=frozenset({".claude/CLAUDE.md"}))
+    unlink(rules, home)
+    assert _snapshot(home) == original
+
+
+@pytest.mark.parametrize("editor", _EDITORS)
+def test_copy_install_is_removed_by_unlink(tmp_path, editor, monkeypatch, no_real_home):
+    def refuse(self, target):
+        raise OSError("symlinks need Developer Mode")
+
+    monkeypatch.setattr(Path, "symlink_to", refuse)
+    home = _editor_home(tmp_path, editor)
+    original = _snapshot(home)
+    rules = tmp_path / "rules.md"
+    first = link(rules, home)
+    _assert_confined(first, home)
+    _assert_user_files_preserved(home, original, extra_ok=frozenset({".claude/CLAUDE.md"}))
+    _assert_editor_linked(editor, home, rules)
+    for path in _editor_artifacts(editor, home):
+        assert path.exists() and not path.is_symlink()
+    if editor == "Antigravity":
+        rules_step = next(s for s in first if s.agent == editor and s.what == "rules")
+        assert rules_step.status == "copied"
+    after_first = _snapshot(home)
+    second = link(rules, home)
+    _assert_confined(second, home)
+    assert _snapshot(home) == after_first
+    unlink(rules, home)
+    assert _snapshot(home) == original
+    for path in _editor_artifacts(editor, home):
+        if path not in {home / rel for rel in original}:
+            assert not path.exists()
+
+
+@pytest.mark.parametrize("editor", _EDITORS)
+def test_link_twice_is_safe(tmp_path, editor, no_real_home):
+    home = _editor_home(tmp_path, editor)
+    original = _snapshot(home)
+    rules = tmp_path / "rules.md"
+    first = link(rules, home)
+    _assert_confined(first, home)
+    _assert_editor_linked(editor, home, rules)
+    after_first = _snapshot(home)
+    second = [s for s in link(rules, home) if s.agent == editor]
+    _assert_confined(second, home)
+    assert not any(s.status in _BUSY for s in second)
+    assert _snapshot(home) == after_first
+    unlink(rules, home)
+    assert _snapshot(home) == original

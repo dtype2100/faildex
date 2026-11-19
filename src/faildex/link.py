@@ -99,7 +99,36 @@ def _install_skill(agent: str, folder: Path, dry_run: bool) -> Step:
     return Step(agent, status, dest, what="skill")
 
 
-def _remove_skill(agent: str, folder: Path, dry_run: bool) -> Step:
+# Agent folders that already existed before `faildex link`. Empty parents inside
+# them can go, but the folder itself stays (Cursor/Codex/Gemini are detected by it).
+# `.claude` is created on demand, so an empty leftover is removed.
+_KEEP_ROOTS = (".cursor", ".codex", ".gemini")
+
+
+def _prune_empty(start: Path, stop: Path) -> None:
+    """Remove empty directories from `start` up to, but not including, `stop`.
+
+    `Path.rmdir()` only succeeds on an empty directory, so user files stop the walk.
+    Agent roots in `_KEEP_ROOTS` are never deleted even if empty.
+    """
+    try:
+        start.relative_to(stop)
+    except ValueError:
+        return
+    path = start
+    while path != stop:
+        if path.name in _KEEP_ROOTS and path.parent == stop:
+            return
+        try:
+            parent = path.parent
+            path.rmdir()
+        except OSError:
+            return
+        path = parent
+
+
+def _remove_skill(agent: str, folder: Path, dry_run: bool, home: Path) -> Step:
+    """Delete `folder` when it holds the faildex skill, then prune empty parents."""
     dest = folder / "SKILL.md"
     if not dest.exists():
         return Step(agent, "absent", dest, what="skill")
@@ -108,6 +137,7 @@ def _remove_skill(agent: str, folder: Path, dry_run: bool) -> Step:
     if dry_run:
         return Step(agent, "would remove", dest, what="skill")
     shutil.rmtree(folder)
+    _prune_empty(folder.parent, home)
     return Step(agent, "removed", dest, what="skill")
 
 
@@ -241,12 +271,21 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
     elif dry_run:
         steps.append(Step("Claude Code", "would remove", claude, line))
     else:
-        claude.write_text("".join(kept))
+        leftover = "".join(kept)
+        if leftover:
+            claude.write_text(leftover)
+        else:
+            # link created the file with only our import line; drop it so unlink
+            # restores a home that had no CLAUDE.md.
+            claude.unlink()
+            _prune_empty(claude.parent, home)
         steps.append(Step("Claude Code", "removed", claude, line))
 
-    steps.append(_remove_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run))
-    steps.append(_remove_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run))
-    steps.append(_remove_skill("Cursor", home / ".cursor" / "skills" / "faildex", dry_run))
+    steps.append(
+        _remove_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run, home)
+    )
+    steps.append(_remove_skill("Codex", home / ".codex" / "skills" / "faildex", dry_run, home))
+    steps.append(_remove_skill("Cursor", home / ".cursor" / "skills" / "faildex", dry_run, home))
 
     plugin = _plugin(home)
     if not plugin.exists():
@@ -257,6 +296,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
         steps.append(Step("Antigravity", "would remove", plugin))
     else:
         shutil.rmtree(plugin)
+        _prune_empty(plugin.parent, home)
         steps.append(Step("Antigravity", "removed", plugin, "rules and skill"))
     return steps
 
