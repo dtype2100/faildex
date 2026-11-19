@@ -1,6 +1,6 @@
 import pytest
 
-from faildex.normalize import command_template, error_signature
+from faildex.normalize import command_template, command_templates, error_signature
 
 COMMANDS = [
     ("git status", "git status"),
@@ -46,6 +46,15 @@ COMMANDS = [
     ("uv run ./scripts/secret-name.py", "uv run"),
     ("python -m /Users/alice/x", "python -m"),
     ("if [ -f a ]; then\n  git status\nfi", "git status"),
+    ("for f in *.x; do ls README*; done", "ls"),
+    ("for d in a b; do ( ls README* ); done", "ls"),
+    ("( ls README* readme* )", "ls"),
+    ("cd /tmp && ( ls README* )", "ls"),
+    ("f=$(ls README* readme* | head -1)", "ls"),
+    ('echo "$(ls README*)"', "ls"),
+    ("echo '$(ls README*)'", "echo"),
+    ("git status # $(ls README*)", "git status"),
+    ('cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done', "git log"),
     ("cat <<'EOF' > notes\nplain words here\nEOF\ngit add notes", "cat"),
     ("gh 2>/dev/null", "gh"),
     ("$roots = @(\n'arch294_loading03',\n'arch295_press'\n)\nGet-Item $roots", "Get-Item"),
@@ -77,6 +86,10 @@ SIGNATURES = [
     ),
     ("src/app.cs:12: throw new InvalidOperationException(x);", None),
     ('12: Console.Error.WriteLine("usage error: needs [start]', None),
+    ("(eval):1: no matches found: README*", "no matches found: <glob>"),
+    ("(eval):3: no matches found: --include=*.py", "no matches found: <glob>"),
+    ("zsh:1: no matches found: .aider*", "no matches found: <glob>"),
+    ("zsh:12: no matches found: src/*.yaml", "no matches found: <glob>"),
     ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
     ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
     (
@@ -139,6 +152,59 @@ def test_empty_output_has_no_signature():
 
 def test_plain_output_is_not_a_signature():
     assert error_signature("sites/findings.md:12: - it is a mere backend selector") is None
+
+
+COMPOUND_GLOBS = [
+    (
+        "for f in *.x; do ls README*; done",
+        ["ls"],
+    ),
+    (
+        "for d in a b; do ( ls README* ); done",
+        ["ls"],
+    ),
+    (
+        "( ls README* readme* )",
+        ["ls"],
+    ),
+    (
+        "cd /tmp && ( ls README* )",
+        ["ls"],
+    ),
+    (
+        "f=$(ls README* readme* | head -1)",
+        ["ls"],
+    ),
+    (
+        'echo "$(ls README*)"',
+        ["ls"],
+    ),
+    (
+        "echo '$(ls README*)'",
+        ["echo"],
+    ),
+    (
+        "git status # $(ls README*)",
+        ["git status"],
+    ),
+    (
+        'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
+        ["git log", "ls"],
+    ),
+]
+
+
+@pytest.mark.parametrize(("command", "expected"), COMPOUND_GLOBS)
+def test_command_templates_open_for_subshell_and_substitution(command, expected):
+    """A glob inside a loop, a `( … )` group, or `$(…)` is still a command to look up."""
+    assert command_templates(command) == expected
+
+
+def test_zsh_glob_failures_share_one_signature():
+    """Literal globs must not split the same zsh NOMATCH error across keys."""
+    eval_sig = error_signature("(eval):1: no matches found: README*")
+    zsh_sig = error_signature("zsh:1: no matches found: --include=*.py")
+    assert eval_sig == zsh_sig == "no matches found: <glob>"
 
 
 def test_compound_means_several_different_programs():
