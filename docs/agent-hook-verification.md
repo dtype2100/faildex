@@ -55,9 +55,61 @@ After approval for additional experiments:
 Until the interaction is resolved, keep other integrations installed and use
 faildex's skill, explicit `faildex check` calls and the documented CLI rule sources.
 
+## Fifth round: three additional bisection checks
+
+All three checks used the same CLI version, model and original configuration
+in a shared outside-repository workspace. Each fresh print-mode session executed `ls -d .`
+exactly once, completed its tool call, and exited 0. The two installed faildex
+hooks were retained in all three temporary configurations. Recorders were appended
+to the selected entries; they stored only the event name and input key names.
+
+| Check | Other integrations included | Recorder events | Elapsed |
+| --- | --- | --- | --- |
+| 1 | integration A's 8 entries, approximately half of the original 17 other entries | `sessionStart`, `preToolUse`, `beforeShellExecution`, `postToolUse`, `sessionEnd` | 20.51 s |
+| 2 | 5 of the remaining 9 entries, all from integration B | None | 15.86 s |
+| 3 | Same 5 integration B commands/events as check 2, temporarily omitting their `type: "command"` and empty `matcher` fields | None | 16.35 s |
+
+The five candidate entries are:
+
+| Integration | Cursor event |
+| --- | --- |
+| integration B | `beforeSubmitPrompt` |
+| integration B | `postToolUse` |
+| integration B | `postToolUseFailure` |
+| integration B | `preToolUse` |
+| integration B | `sessionStart` |
+
+This reproduces missing recorder events with that five-entry group, while the
+integration A subset and faildex hooks coexist with working recorders. It does **not** prove
+that every integration B entry fails, identify a single responsible entry, or establish
+which product is defective. Removing the two optional fields together did not
+restore execution, so their mere presence is insufficient as an explanation.
+The CLI sessions did not reach the probe driver's 90-second timeout; individual
+hook failures, internal timeouts, output handling and cross-entry interactions
+were not isolated.
+
+**The new three-check limit was reached.** Further splitting of these five entries
+and an unchanged full-configuration control remain unperformed. No faildex code
+change or permanent change to any other integration is justified by these results.
+
+For reproduction after approval for more checks, start from a byte backup of the
+local configuration. Keep faildex's two entries, copy only the candidate group
+above in its original order, and append recorders that return nonblocking JSON.
+Compare with the integration A-only subset, using the same fresh workspace and one harmless
+shell command. To repeat check 3, omit only `type` and `matcher` on the five selected
+entries; leave their commands and event names unchanged. Restore the original
+bytes in a `finally` block after each run, including failures and timeouts.
+
+Each fifth-round run restored the original SHA-256
+`de5983607204f25069f103504e77f9425e3e87e16b8e3bc7234bb79aca2e601b`.
+The local results and key-only records are saved under
+`/private/tmp/faildex-r5-hook-probes/` as `1-result.json` through `3-result.json`;
+only check 1 produced `1-events.jsonl`. Private configuration backups are
+not committed. No additional hook experiments were run for this documentation.
+
 ## Codex interactive session
 
-A fresh Herdr worker ran Codex `0.170.0` outside the repository. `/hooks` showed
+A fresh worker ran Codex `0.170.0` outside the repository. `/hooks` showed
 both faildex commands enabled and **Trusted** in the user configuration:
 
 - `SessionStart`: `faildex hook --agent codex --event session-start --rules-encoded …`
