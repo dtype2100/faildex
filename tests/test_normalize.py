@@ -289,3 +289,23 @@ def test_nomatch_without_line_number_masks_the_entire_glob(prefix):
 def test_unrecognized_heredocs_fail_closed(command):
     assert command_templates(command) == []
     assert command_template(command) is None
+
+
+@pytest.mark.parametrize("delimiter", ["EOF", "'EOF'", '"EOF"'])
+@pytest.mark.parametrize(
+    "operator, indent",
+    [("<<", " "), ("<<", "\t"), ("<<", " \t"), ("<<-", " "), ("<<-", "\t ")],
+)
+def test_heredoc_terminator_indentation_keeps_private_body_hidden(delimiter, operator, indent):
+    command = f"cat {operator}{delimiter}\nbody\n{indent}EOF\n$(private_customer_command)\nEOF\ngit status"
+    assert command_templates(command) == ["cat", "git status"]
+
+
+def test_plain_heredoc_indented_first_line_is_not_the_terminator():
+    assert command_templates("cat <<EOF\n EOF\n$(private_customer_command)\nEOF") == ["cat"]
+
+
+@pytest.mark.parametrize("delimiter", ["EOF", "'EOF'", '"EOF"'])
+def test_dash_heredoc_accepts_tab_indented_final_terminator(delimiter):
+    command = f"cat <<-{delimiter}\n$(private_customer_command)\n\t\tEOF\ngit status"
+    assert command_templates(command) == ["cat", "git status"]

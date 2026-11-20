@@ -146,7 +146,11 @@ _FUNCTION_DEF = re.compile(r"^(?:[A-Za-z_][\w\-]*\s*\(\)|function\s)")
 _FUNCTION_HEAD = re.compile(r"^(?:function\s+)?[A-Za-z_][\w-]*(?:\s*\(\))?\s*$")
 _WRAPPER_ARG = re.compile(r"^(-.*|\d+(\.\d+)?[smhd]?)$")
 # A here-document or PowerShell here-string body is data, not commands.
-_HEREDOC = re.compile(r"(<<-?\s*(['\"]?)([^\s'\";<>]+)\2[^\n]*)\n.*?\n[ \t]*\3(?=\n|$)", re.DOTALL)
+_HEREDOC = re.compile(
+    r"(<<(?P<tabs>-)?[ \t]*(['\"]?)([^\s'\";<>]+)\3[^\n]*)"
+    r"\n(?:.*?\n)?(?(tabs)\t*)\4(?=\n|$)",
+    re.DOTALL,
+)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
 _PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
 _EXCEPTION = re.compile(r"^(?:[A-Za-z_][\w.]*)?(Error|Exception|Exit|Interrupt|Warning)\s*(:|$)")
