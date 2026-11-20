@@ -18,6 +18,7 @@ GLOB_CASES = [
     "for f in *.x; do ls README*; done",
     "( ls README* readme* )",
     "f=$(ls README* readme* | head -1)",
+    "cat <<EOF | ls README*\n$(private_customer_command)\nEOF",
 ]
 
 

@@ -62,7 +62,7 @@ COMMANDS = [
     ("gh 2>/dev/null", "gh"),
     ("$roots = @(\n'arch294_loading03',\n'arch295_press'\n)\nGet-Item $roots", "Get-Item"),
     ("$rows = @{\n  diamond = 'a'\n}\n$rows.diamond", "<script>"),
-    ("$text = @'\nimport math\nprint(1)\n'@\n$text | python -", "<script>"),
+    ("$text = @'\nimport math\nprint(1)\n'@\n$text | python -", "python"),
 ]
 
 SIGNATURES = [
@@ -176,7 +176,7 @@ COMPOUND_GLOBS = [
     ),
     (
         "f=$(ls README* readme* | head -1)",
-        ["ls"],
+        ["ls", "head"],
     ),
     (
         'echo "$(ls README*)"',
@@ -192,7 +192,7 @@ COMPOUND_GLOBS = [
     ),
     (
         'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
-        ["git log", "ls"],
+        ["git log", "ls", "head"],
     ),
 ]
 
@@ -215,7 +215,7 @@ def test_compound_means_several_different_programs():
 
     assert is_compound("git status && python -c 'raise ValueError()'")
     assert not is_compound("cd repo && git status")
-    assert not is_compound("git status | head -3")
+    assert is_compound("git status | head -3")
     assert is_compound("python pass.py; python fail.py")
     assert is_compound("git push || echo ignored")
     assert is_compound("ROOT=$(pwd) git status; pytest -q")
@@ -230,6 +230,8 @@ def test_compound_means_several_different_programs():
     "command, expected",
     [
         ("cat <<'EOF'\n$(private_customer_command)\nEOF", ["cat"]),
+        ("cat <<\\EOF\n$(private_customer_command)\nEOF", ["cat"]),
+        ("cat <<'END DATA'\n$(private_customer_command)\nEND DATA", ["cat"]),
         ("cat <<EOF\n$(private_customer_command)\nEOF\ngit status", ["cat", "git status"]),
         ("private_function() { value=$(private_customer_command); }", []),
         (
@@ -281,8 +283,6 @@ def test_nomatch_without_line_number_masks_the_entire_glob(prefix):
     "command",
     [
         "cat <<A <<B\nfirst\nA\n$(private_customer_command)\nB",
-        "cat <<\\EOF\n$(private_customer_command)\nEOF",
-        "cat <<'END DATA'\n$(private_customer_command)\nEND DATA",
         "cat <<EOF\n$(private_customer_command)",
     ],
 )
@@ -309,3 +309,44 @@ def test_plain_heredoc_indented_first_line_is_not_the_terminator():
 def test_dash_heredoc_accepts_tab_indented_final_terminator(delimiter):
     command = f"cat <<-{delimiter}\n$(private_customer_command)\n\t\tEOF\ngit status"
     assert command_templates(command) == ["cat", "git status"]
+
+
+@pytest.mark.parametrize(
+    "opener, misleading, delimiter",
+    [
+        (r"\EOF", r"\EOF", "EOF"),
+        ("E'OF'", "E", "EOF"),
+        ('E"OF"', "E", "EOF"),
+        ('"E O F"', "E", "E O F"),
+        ("'E O F'", "E", "E O F"),
+        (r'"E\$OF"', r"E\$OF", "E$OF"),
+        (r'"E\`OF"', r"E\`OF", "E`OF"),
+    ],
+)
+def test_shell_quote_removal_prevents_premature_heredoc_end(opener, misleading, delimiter):
+    command = f"cat <<{opener}\n{misleading}\n$(private_customer_command)\n{delimiter}\ngit status"
+    assert command_templates(command) == ["cat", "git status"]
+
+
+@pytest.mark.parametrize(
+    "suffix, expected",
+    [
+        ("| grep x", ["cat", "grep"]),
+        ("&& next", ["cat", "next"]),
+        ("; ls README*", ["cat", "ls"]),
+        ("| grep x && git status", ["cat", "grep", "git status"]),
+    ],
+)
+def test_heredoc_preserves_other_commands_on_its_opening_line(suffix, expected):
+    command = f"cat <<EOF {suffix}\n$(private_customer_command)\nEOF"
+    assert command_templates(command) == expected
+
+
+def test_literal_heredoc_markers_do_not_discard_executable_commands():
+    assert command_templates("git status <<'EOF'\nhello\nEOF\necho 'still << here'") == [
+        "git status"
+    ]
+    assert command_templates("cat <<EOF # <<\n$(private_customer_command)\nEOF\ngit status") == [
+        "cat",
+        "git status",
+    ]

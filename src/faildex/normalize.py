@@ -146,11 +146,6 @@ _FUNCTION_DEF = re.compile(r"^(?:[A-Za-z_][\w\-]*\s*\(\)|function\s)")
 _FUNCTION_HEAD = re.compile(r"^(?:function\s+)?[A-Za-z_][\w-]*(?:\s*\(\))?\s*$")
 _WRAPPER_ARG = re.compile(r"^(-.*|\d+(\.\d+)?[smhd]?)$")
 # A here-document or PowerShell here-string body is data, not commands.
-_HEREDOC = re.compile(
-    r"(<<(?P<tabs>-)?[ \t]*(['\"]?)([^\s'\";<>]+)\3[^\n]*)"
-    r"\n(?:.*?\n)?(?(tabs)\t*)\4(?=\n|$)",
-    re.DOTALL,
-)
 _HERE_STRING = re.compile(r"@(['\"]).*?\n\1@", re.DOTALL)
 _PS_SCRIPT = re.compile(r"^\s*(\$[\w:]+\s*=|@['\"({]|\[)")
 _EXCEPTION = re.compile(r"^(?:[A-Za-z_][\w.]*)?(Error|Exception|Exit|Interrupt|Warning)\s*(:|$)")
@@ -279,7 +274,7 @@ def _subcommand(program: str, args: list[str]) -> str | None:
 
 
 def _segments(command: str) -> list[str]:
-    """Split a command line at `;`, `&&`, `||` and newlines that are really separators.
+    """Split at `;`, `|`, `&&`, `||` and newlines that are really separators.
 
     A separator inside quotes, a `$( )` substitution, parentheses or braces
     belongs to an argument or a block, not to the sequence of commands: text
@@ -293,6 +288,8 @@ def _segments(command: str) -> list[str]:
                 i += 1
             elif char == quote:
                 quote = None
+        elif char == "\\":
+            i += 1
         elif char in "'\"`":
             # A quote right after a letter is an apostrophe in prose, not a string.
             if not (char == "'" and i and command[i - 1].isalnum()):
@@ -309,7 +306,7 @@ def _segments(command: str) -> list[str]:
         elif char in ")}":
             depth = max(0, depth - 1)
         elif depth == 0:
-            width = 2 if command[i : i + 2] in ("&&", "||") else 1 if char in ";\n" else 0
+            width = 2 if command[i : i + 2] in ("&&", "||") else 1 if char in ";|\n" else 0
             if width and char == "\n":
                 head = command[start:i].strip()
                 if _FUNCTION_DEF.match(head) and _FUNCTION_HEAD.fullmatch(head):
@@ -438,12 +435,87 @@ def _commands(command: str) -> list[str]:
     return out
 
 
+def _heredoc_word(command: str, start: int) -> tuple[str, int] | None:
+    """Read one shell word with quote removal, without performing expansions."""
+    word, quote, i = [], None, start
+    while i < len(command):
+        char = command[i]
+        if char == "\n" or (quote is None and char in " \t;|&<>()"):
+            break
+        if char == "\\" and quote != "'":
+            if i + 1 == len(command) or command[i + 1] == "\n":
+                return None
+            if quote != '"' or command[i + 1] in '$`"\\':
+                i += 1
+            word.append(command[i])
+        elif char == quote:
+            quote = None
+        elif quote is None and char in "'\"":
+            quote = char
+        else:
+            word.append(char)
+        i += 1
+    return ("".join(word), i) if i > start and quote is None else None
+
+
+def _strip_heredocs(command: str) -> str | None:
+    """Remove only heredoc operators and bodies, keeping the rest of each header."""
+    out, quote, pending, i = [], None, None, 0
+    while i < len(command):
+        char = command[i]
+        if char == "\\" and quote != "'":
+            out.append(command[i : i + 2])
+            i += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in "'\"`":
+            quote = char
+        elif char == "#" and (i == 0 or command[i - 1].isspace()):
+            end = command.find("\n", i)
+            end = len(command) if end < 0 else end
+            out.append(command[i:end])
+            i = end
+            continue
+        elif command[i : i + 2] == "<<":
+            # shortcut: multiple documents per header and here-strings skip the script.
+            if pending is not None or command[i : i + 3] == "<<<":
+                return None
+            tabs = command[i + 2 : i + 3] == "-"
+            start = i + 2 + tabs
+            while start < len(command) and command[start] in " \t":
+                start += 1
+            word = _heredoc_word(command, start)
+            if word is None:
+                return None
+            delimiter, i = word
+            pending = delimiter, tabs
+            out.append(" ")
+            continue
+        elif char == "\n" and pending is not None:
+            delimiter, tabs = pending
+            start = i + 1
+            while start <= len(command):
+                end = command.find("\n", start)
+                end = len(command) if end < 0 else end
+                line = command[start:end]
+                if (line.lstrip("\t") if tabs else line) == delimiter:
+                    i, pending = end + 1, None
+                    break
+                start = end + 1
+            if pending is not None:
+                return None
+            out.append("\n")
+            continue
+        out.append(char)
+        i += 1
+    return "".join(out) if pending is None else None
+
+
 def _executable_segments(command: str) -> list[str]:
-    if any(match.group(1).count("<<") > 1 for match in _HEREDOC.finditer(command)):
-        return []
-    command = _HERE_STRING.sub("", _HEREDOC.sub("", command))
-    # shortcut: unsupported heredocs skip the script; extend parsing if indexing them is needed.
-    if "<<" in command:
+    command = _strip_heredocs(_HERE_STRING.sub("", command))
+    if command is None:
         return []
     command = _COMMENT_LINE.sub("", command)
     return [segment for segment in _commands(command) if not _FUNCTION_DEF.match(segment)]
