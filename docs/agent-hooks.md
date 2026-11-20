@@ -29,6 +29,12 @@ machine whose failure index knows that command. Confirm that the warning appears
 before the shell result. Cursor should read the faildex skill after a failed
 command and before retrying. Hooks need the installed `faildex` on the agent's PATH.
 
+Cursor CLI hook execution can depend on the other entries in the configuration.
+On `2026.11.19-f005e9d`, our existing configuration produced no probe events,
+whereas a minimal probe configuration invoked session, shell, failure and file-read
+hooks. This is an unresolved interaction, not evidence that CLI hooks are unsupported.
+See [the three checks, restored configuration and remaining work](agent-hook-verification.md).
+
 Official protocol references, checked 2026-11-19:
 
 - [Codex hooks](https://learn.chatgpt.com/docs/hooks): configuration, trust, input and output.

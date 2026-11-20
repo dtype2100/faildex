@@ -241,6 +241,12 @@ failure warnings. Existing hooks are preserved and backed up before changes;
 removal deletes only faildex hook entries. In Codex, review and trust the new
 commands with `/hooks` before opening a new session. See [hook setup](docs/agent-hooks.md).
 
+Cursor CLI supports hooks, but in our check of `2026.11.19-f005e9d`, no hooks ran
+with the existing configuration containing other integrations. A minimal probe
+configuration did run hooks; the conflicting entry remains unidentified. Keep
+other integrations intact and use the installed skill and [CLI rules](https://cursor.com/docs/cli/using#rules)
+while investigating. See [results and verification steps](docs/agent-hook-verification.md).
+
 ## Where the data lives
 
 - **`store/`** is the persisted Relate store: 422 sessions, 14,328 tool calls,
