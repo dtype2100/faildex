@@ -79,6 +79,13 @@ def _is_faildex_skill(path: Path) -> bool:
     return any(line.strip() == "name: faildex" for line in head.splitlines())
 
 
+def _resolved(path: Path) -> Path | None:
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):
+        return None
+
+
 def _symlink_path(path: Path, home: Path) -> bool:
     """Do not write through user links, including links used as parent folders."""
     while path != home:
@@ -138,9 +145,9 @@ def _install_skill(agent: str, folder: Path, dry_run: bool, home: Path) -> Step:
 
 
 def _remove_file(path: Path, home: Path, owned: dict[str, list[str]] | None) -> bool:
-    if _symlink_path(path.parent, home):
+    if owned is None or _symlink_path(path.parent, home):
         return False
-    if owned is not None and path.relative_to(home).as_posix() not in owned["files"]:
+    if path.relative_to(home).as_posix() not in owned["files"]:
         return False
     path.unlink()
     return True
@@ -223,6 +230,8 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
     # Antigravity: a plugin whose rules file is a link to ours.
     plugin = _plugin(home)
     target = plugin / "rules" / "AGENTS.md"
+    target_rel = target.relative_to(home).as_posix()
+    target_owned = owned is not None and target_rel in owned["files"]
     if not _has_antigravity(home):
         steps.append(
             Step(
@@ -238,19 +247,25 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
         steps.append(
             Step("Antigravity", "skipped", plugin, "a different plugin already uses this folder")
         )
-    elif target.is_symlink() and target.resolve() == rules:
-        steps.append(Step("Antigravity", "already", target, f"-> {rules}"))
-    elif _symlink_path(target.parent, home) or target.is_symlink():
+    elif _symlink_path(target.parent, home):
         steps.append(Step("Antigravity", "skipped", target, "a symlink is there; left alone"))
-    elif target.exists() and not _is_copy(target, rules):
+    elif target.is_symlink() and _resolved(target) == rules:
+        steps.append(Step("Antigravity", "already", target, f"-> {rules}"))
+    elif target.is_symlink() and not target_owned:
+        steps.append(Step("Antigravity", "skipped", target, "a symlink is there; left alone"))
+    elif not target.is_symlink() and target.exists() and not _is_copy(target, rules):
         steps.append(
             Step("Antigravity", "skipped", target, "a regular file is there; not replaced")
         )
     elif dry_run:
-        steps.append(Step("Antigravity", "would link", target, f"-> {rules}"))
+        status = "would update" if target.is_symlink() else "would link"
+        steps.append(Step("Antigravity", status, target, f"-> {rules}"))
     else:
+        updating = target.is_symlink()
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_manifest(plugin, rules)
+        if updating:
+            target.unlink()
         copied = target.exists()
         if not copied:
             try:
@@ -268,7 +283,8 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
                 )
             )
         else:
-            steps.append(Step("Antigravity", "linked", target, f"-> {rules}"))
+            status = "updated" if updating else "linked"
+            steps.append(Step("Antigravity", status, target, f"-> {rules}"))
 
     if (
         _has_antigravity(home)
@@ -361,8 +377,9 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
         steps.append(Step("Antigravity", "would remove", plugin))
     else:
         target = plugin / "rules" / "AGENTS.md"
+        target_rel = target.relative_to(home).as_posix()
         if not _symlink_path(target.parent, home) and (
-            (target.is_symlink() and target.resolve() == rules)
+            (target.is_symlink() and target_rel in owned["files"])
             or (not target.is_symlink() and _is_copy(target, rules))
         ):
             _remove_file(target, home, owned)

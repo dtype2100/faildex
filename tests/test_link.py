@@ -547,3 +547,138 @@ def test_invalid_ownership_is_rejected_before_changes(tmp_path, payload, no_real
         unlink(rules, home)
     assert _snapshot(home) == original
     assert not rules.exists()
+
+
+def test_relinking_with_new_rules_retargets_tracked_antigravity_symlink(tmp_path, no_real_home):
+    home = _editor_home(tmp_path, "Antigravity")
+    old_rules = tmp_path / "old-rules.md"
+    new_rules = tmp_path / "new-rules.md"
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    if not hasattr(agents, "symlink_to"):
+        pytest.skip("symlinks unavailable")
+    first = {s.agent: s.status for s in RULES(link(old_rules, home))}
+    if first["Antigravity"] == "copied":
+        pytest.skip("symlinks unavailable")
+    assert first["Antigravity"] == "linked"
+    assert agents.is_symlink() and agents.resolve() == old_rules.resolve()
+
+    dry = {s.agent: s.status for s in RULES(link(new_rules, home, dry_run=True))}
+    assert dry["Antigravity"] == "would update"
+    assert agents.resolve() == old_rules.resolve()
+    assert not new_rules.exists()
+
+    relinked = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert relinked["Antigravity"] == "updated"
+    assert agents.is_symlink() and agents.resolve() == new_rules.resolve()
+
+    again = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert again["Antigravity"] == "already"
+
+    unlink(new_rules, home)
+    assert not (home / ".gemini/config/plugins/faildex-rules").exists()
+
+
+def test_relinking_retargets_broken_tracked_antigravity_symlink(tmp_path, no_real_home):
+    home = _editor_home(tmp_path, "Antigravity")
+    old_rules = tmp_path / "old-rules.md"
+    new_rules = tmp_path / "new-rules.md"
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    first = {s.agent: s.status for s in RULES(link(old_rules, home))}
+    if first["Antigravity"] == "copied":
+        pytest.skip("symlinks unavailable")
+    old_rules.unlink()
+    assert agents.is_symlink() and not agents.exists()
+
+    relinked = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert relinked["Antigravity"] == "updated"
+    assert agents.is_symlink() and agents.resolve() == new_rules.resolve()
+
+
+def test_user_antigravity_symlink_is_skipped_on_relink_and_preserved_by_unlink(
+    tmp_path, no_real_home
+):
+    home = _home(tmp_path)
+    old_rules = tmp_path / "old-rules.md"
+    new_rules = tmp_path / "new-rules.md"
+    old_rules.write_text("# user rules\n")
+    target = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    target.parent.mkdir(parents=True)
+    (target.parent.parent / "plugin.json").write_text('{"name": "faildex-rules"}\n')
+    try:
+        target.symlink_to(old_rules)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+
+    already = {s.agent: s.status for s in RULES(link(old_rules, home))}
+    assert already["Antigravity"] == "already"
+
+    skipped = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert skipped["Antigravity"] == "skipped"
+    assert target.is_symlink() and target.resolve() == old_rules.resolve()
+
+    unlink(old_rules, home)
+    assert target.is_symlink() and target.resolve() == old_rules.resolve()
+
+
+def test_relink_regular_file_and_copy_fallback_behavior(tmp_path, monkeypatch, no_real_home):
+    home = _editor_home(tmp_path, "Antigravity")
+    old_rules = tmp_path / "old-rules.md"
+    new_rules = tmp_path / "new-rules.md"
+    target = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+
+    first = {s.agent: s.status for s in RULES(link(old_rules, home))}
+    if first["Antigravity"] == "linked":
+
+        def refuse(self, dest):
+            raise OSError("symlinks disabled")
+
+        monkeypatch.setattr(Path, "symlink_to", refuse)
+        fallback = {s.agent: s.status for s in RULES(link(new_rules, home))}
+        assert fallback["Antigravity"] == "copied"
+        assert not target.is_symlink() and target.read_text().startswith(
+            COPY.format(new_rules.resolve())
+        )
+        unlink(new_rules, home)
+        assert not target.exists()
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("my manual rules\n")
+    skipped = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert skipped["Antigravity"] == "skipped"
+    assert target.read_text() == "my manual rules\n"
+    unlink(new_rules, home)
+    assert target.read_text() == "my manual rules\n"
+
+
+def test_windows_copy_with_different_rules_path_keeps_existing_copy_skipped(
+    tmp_path, monkeypatch, no_real_home
+):
+    def refuse(self, dest):
+        raise OSError("symlinks need Developer Mode")
+
+    monkeypatch.setattr(Path, "symlink_to", refuse)
+    home = _home(tmp_path)
+    old_rules = tmp_path / "old-rules.md"
+    new_rules = tmp_path / "new-rules.md"
+    assert {s.agent: s.status for s in RULES(link(old_rules, home))}["Antigravity"] == "copied"
+    target = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    before = target.read_text()
+
+    second = {s.agent: s.status for s in RULES(link(new_rules, home))}
+    assert second["Antigravity"] == "skipped"
+    assert target.read_text() == before
+
+
+def test_unlink_with_other_rules_removes_tracked_antigravity_symlink(tmp_path, no_real_home):
+    home = _editor_home(tmp_path, "Antigravity")
+    old_rules = tmp_path / "old-rules.md"
+    other_rules = tmp_path / "other-rules.md"
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    first = {s.agent: s.status for s in RULES(link(old_rules, home))}
+    if first["Antigravity"] == "copied":
+        pytest.skip("symlinks unavailable")
+    assert agents.is_symlink()
+
+    unlink(other_rules, home)
+    assert not agents.exists() and not agents.is_symlink()
+    assert not (home / ".faildex-link.json").exists()

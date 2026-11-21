@@ -232,8 +232,11 @@ Use it from any MCP client:
 
 An agent skill that tells the agent when to call these is in
 [`skills/faildex/SKILL.md`](skills/faildex/SKILL.md). `faildex link` installs it for Claude Code
-(`~/.claude/skills/faildex/`), Antigravity (inside its `faildex-rules` plugin) Codex
-(`~/.codex/skills/faildex/`) and Cursor (`~/.cursor/skills/faildex/`); `faildex link --remove` takes it out again.
+(`~/.claude/skills/faildex/`), Antigravity (inside its `faildex-rules` plugin,
+retargeting faildex-owned rules symlinks when `--rules` changes and leaving user
+files alone), Codex (`~/.codex/skills/faildex/`) and Cursor
+(`~/.cursor/skills/faildex/`); `faildex link --remove` takes only faildex-owned
+entries out again.
 
 Codex and Cursor also receive two hooks in their user `hooks.json`: session start
 loads approved rules without evidence lines, and shell execution receives known

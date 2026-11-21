@@ -226,7 +226,10 @@ MCP 클라이언트에서 쓰기:
 
 에이전트에게 이 도구를 언제 부를지 알려 주는 스킬은
 [`skills/faildex/SKILL.md`](skills/faildex/SKILL.md)에 있습니다. `faildex link`가 Claude Code(`~/.claude/skills/faildex/`),
-Antigravity(`faildex-rules` 플러그인 안), Codex(`~/.codex/skills/faildex/`), Cursor(`~/.cursor/skills/faildex/`)에 설치하고, `faildex link --remove`가 지웁니다.
+Antigravity(`faildex-rules` 플러그인 안; `--rules` 경로를 바꾸어 다시 실행하면
+faildex가 만든 심볼릭 링크를 새 경로로 다시 걸고 사용자 파일은 그대로 둠),
+Codex(`~/.codex/skills/faildex/`), Cursor(`~/.cursor/skills/faildex/`)에 설치하고,
+`faildex link --remove`가 faildex가 만든 항목만 지웁니다.
 
 Codex와 Cursor의 사용자 `hooks.json`에는 세션 시작 시 근거 줄을 뺀 규칙을
 불러오는 훅과 셸 실행 전 알려진 실패를 경고하는 훅을 등록합니다. 기존 훅은

@@ -13,7 +13,10 @@ while preserving other hooks and the backups.
 | Cursor | `~/.cursor/hooks.json` | `sessionStart` → `additional_context` | `beforeShellExecution` → `agent_message` and `user_message`, with permission `allow` |
 
 The rules default to `~/faildex-rules.md`; `faildex link --rules PATH` selects
-another file. Evidence lines are omitted from session context. The generated
+another file. Re-running `faildex link --rules PATH` retargets an existing
+faildex-owned Antigravity rules symlink to the new file (leaving untracked
+symlinks and regular files alone); `faildex link --remove` deletes only
+faildex-owned links and files. Evidence lines are omitted from session context. The generated
 command encodes the path as one shell-safe token, so Windows shell differences
 and spaces or special characters in home directories do not change its meaning.
 This encoding is not encryption. Warnings use the same store selection and
