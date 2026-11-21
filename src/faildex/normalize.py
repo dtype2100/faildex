@@ -222,6 +222,8 @@ def _program(token: str) -> str:
 
 def command_template(command: str) -> str | None:
     """Return "<program>" or "<program> <subcommand>" for the first real command."""
+    if "<<" in command:
+        return None
     found, fallback = _templates(command)
     return found[0] if found else fallback
 
@@ -232,6 +234,8 @@ def command_templates(command: str) -> list[str]:
     `ls && git status` gives ["ls", "git status"], so a pre-run check can look
     up each part, not only the first.
     """
+    if "<<" in command:
+        return []
     found, fallback = _templates(command)
     unique = list(dict.fromkeys(found))
     return unique or ([fallback] if fallback else [])
@@ -243,6 +247,8 @@ def is_compound(command: str) -> bool:
     The log then says only how the whole line ended, not which part failed or
     succeeded. `a || b` and `a; echo done` can even end well while `a` failed.
     """
+    if "<<" in command:
+        return False
     found, fallback = _templates(command)
     return len(found) > 1 or "||" in command or (bool(found) and fallback in OUTPUT_ONLY)
 

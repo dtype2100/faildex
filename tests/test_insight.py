@@ -199,3 +199,23 @@ def test_notice_says_what_happened_and_what_got_past_it():
         "faildex: `cargo build` failed with `linker not found` in 2 earlier sessions; "
         "no recovery on record."
     )
+
+
+def test_warnings_for_line_skips_scripts_containing_double_lt_without_error():
+    from faildex.insight import warnings_for_line
+
+    db = _db()
+    try:
+        assert warnings_for_line(db, "git push")[1] != []
+        for command in [
+            "git push <<'EOF'\nhello\nEOF",
+            "cat <<EOF | git push\n$(private_customer_command)\nEOF",
+            "echo '<<' && git push",
+            "git push # <<",
+            "cat <<< 'hello' && git push",
+            "cat <<-EOF\n\t$(private_customer_command)\n\tEOF\ngit push",
+            "cat <<EOF | grep x",
+        ]:
+            assert warnings_for_line(db, command) == ([], [])
+    finally:
+        db.close()
