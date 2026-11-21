@@ -38,7 +38,7 @@ faildex turns it into three things:
 | You run | You get |
 |---|---|
 | `faildex rules` | Rule proposals for failures that recurred across sessions, each with the recovery on record and pointers to the log lines. Only the ones you approve are written to a rules file. |
-| `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs, and prints nothing otherwise. |
+| `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs (or, for pooled `zsh` `no matches found` glob failures, when the command line has an unquoted glob and the failure recurred across `min_sessions` sessions), and prints nothing otherwise. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. |
 | `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |

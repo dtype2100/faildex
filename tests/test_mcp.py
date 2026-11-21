@@ -52,3 +52,80 @@ def test_server_answers_a_real_mcp_client(tmp_path):
     tools, result = asyncio.run(ask())
     assert tools == ["evidence", "preflight", "recurring"]
     assert "git pull" in str(result)
+
+
+def test_preflight_warns_for_pooled_zsh_glob_even_without_top_level_template(tmp_path):
+    from faildex.schema import CallRecord
+
+    store = tmp_path / "globstore"
+    db = relate.connect(str(store))
+    ingest(
+        db,
+        [
+            CallRecord(
+                "claude-code",
+                "g1",
+                0,
+                "Bash",
+                False,
+                command="ls",
+                error_sig="no matches found: <glob>",
+            ),
+            CallRecord(
+                "claude-code",
+                "g2",
+                0,
+                "Bash",
+                False,
+                command="rg",
+                error_sig="no matches found: <glob>",
+            ),
+        ],
+    )
+    db.commit()
+    db.flush()
+    db.close()
+
+    res = mcp_server.preflight(store, "for f in *.x; do ls README*; done")
+    assert res["command"] == "zsh"
+    assert res["known_failures"][0]["failure"] == "no matches found: <glob>"
+    assert mcp_server.preflight(store, "ls '*.x'")["known_failures"] == []
+
+
+def test_evidence_resolves_legacy_nomatch_signature_keys(tmp_path):
+    from faildex.schema import CallRecord
+
+    store = tmp_path / "legacystore"
+    db = relate.connect(str(store))
+    ingest(
+        db,
+        [
+            CallRecord(
+                "claude-code",
+                "g1",
+                0,
+                "Bash",
+                False,
+                command="ls",
+                error_sig="(eval):<n>: no matches found: *.py",
+            ),
+            CallRecord(
+                "claude-code",
+                "g2",
+                0,
+                "Bash",
+                False,
+                command="rg",
+                error_sig="zsh:<n>: no matches found: <path>*",
+            ),
+        ],
+    )
+    db.commit()
+    db.flush()
+    db.close()
+
+    ev = mcp_server.evidence(store, "zsh:<n>: no matches found: *.py")
+    assert ev["found"] is True
+    assert ev["failure"] == "no matches found: <glob>"
+    assert ev["sessions"] == 2
+    assert ev["calls"] == 2

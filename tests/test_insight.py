@@ -215,7 +215,80 @@ def test_warnings_for_line_skips_scripts_containing_double_lt_without_error():
             "cat <<< 'hello' && git push",
             "cat <<-EOF\n\t$(private_customer_command)\n\tEOF\ngit push",
             "cat <<EOF | grep x",
+            "echo $\\\n'don\\'t; git push'",
+            "((\ngit push\n))",
         ]:
             assert warnings_for_line(db, command) == ([], [])
     finally:
         db.close()
+
+
+def test_nomatch_combines_sessions_across_commands_only_for_unquoted_globs():
+    from faildex.insight import warnings_for_line
+
+    db = relate.connect(":memory:")
+    sig = "no matches found: <glob>"
+    records = [_call(f"ok{n}", 0, command="ls") for n in range(98)]
+    records += [
+        _call("a", 0, ok=False, command="ls", sig=sig),
+        _call("b", 0, ok=False, command="rg", sig=sig),
+        _call("c", 0, ok=False, command="grep", sig=sig),
+    ]
+    ingest(db, records)
+    for command in [
+        "ls README*",
+        "find *.py",
+        "for f in *.x; do ls README*; done",
+        "( ls README* readme* )",
+        "f=$(ls README* readme* | head -1)",
+        'echo "$(ls README*)"',
+        "ls *.py; rg *.txt",
+        'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
+    ]:
+        _, pairs = warnings_for_line(db, command)
+        assert len(pairs) == 1, command
+        _, warning = pairs[0]
+        assert warning.sig == sig
+        assert warning.sessions == {"claude_code:a", "claude_code:b", "claude_code:c"}
+        assert warning.calls == 3
+        assert warning.recovered == 0
+    for command in [
+        "git status",
+        "ls -la",
+        "ls '*.py'",
+        'ls "*.py"',
+        r"ls \*.py",
+        'echo "a \\"*.private"',
+        "[ -f a ] && git status",
+        "cat <<'EOF'\n$(ls *.py)\nEOF",
+        "cat <<EOF | ls *.py\n$(ls *.py)\nEOF",
+        "f() { ls *.py; }",
+    ]:
+        assert warnings_for_line(db, command)[1] == [], command
+    db.close()
+
+
+def test_legacy_unpooled_nomatch_keys_in_existing_stores_still_pool_on_query():
+    from faildex.insight import warnings_for_line
+
+    db = relate.connect(":memory:")
+    ingest(
+        db,
+        [
+            _call(
+                "a", 0, ok=False, command="grep", sig="(eval):<n>: no matches found: --include=*.py"
+            ),
+            _call("b", 0, ok=False, command="ls", sig="(eval):<n>: no matches found: <path>*/"),
+            _call("c", 0, ok=False, command="rg", sig="zsh:<n>: no matches found: <path>*"),
+        ],
+    )
+    _, pairs = warnings_for_line(db, "ls README* readme*")
+    assert len(pairs) == 1
+    cmd, warning = pairs[0]
+    assert cmd == "zsh"
+    assert warning.sig == "no matches found: <glob>"
+    assert warning.calls == 3
+    assert len(warning.sessions) == 3
+    # A non-glob grep command must not emit a warning from the legacy NOMATCH key.
+    assert warnings_for_line(db, "grep foo bar.py")[1] == []
+    db.close()

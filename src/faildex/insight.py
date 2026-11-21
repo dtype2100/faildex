@@ -128,11 +128,14 @@ class Failure:
 
 def failures(db, command: str | None = None) -> dict[str, Failure]:
     """Failure keys with their recoveries: all of them, or those of one command."""
+    from faildex.normalize import NOMATCH_SIG, is_nomatch_sig
+
     scope = _FOR_COMMAND if command else _ALL
     params = {"command": command} if command else {}
     found: dict[str, Failure] = {}
     for row in db.execute(scope + _FAILURES, params):
-        item = found.setdefault(row["sig"], Failure(row["sig"], row["kind"] or "text"))
+        sig = NOMATCH_SIG if is_nomatch_sig(row["sig"]) else row["sig"]
+        item = found.setdefault(sig, Failure(sig, row["kind"] or "text"))
         item.calls += 1
         fresh = row["session"] not in item.sessions
         item.sessions.add(row["session"])
@@ -145,7 +148,8 @@ def failures(db, command: str | None = None) -> dict[str, Failure]:
         if row["path"] and fresh and len(item.evidence) < 3 and pointer not in item.evidence:
             item.evidence.append(pointer)
     for row in db.execute(scope + _RECOVERIES, params):
-        item = found.get(row["sig"])
+        sig = NOMATCH_SIG if is_nomatch_sig(row["sig"]) else row["sig"]
+        item = found.get(sig)
         if item is None:
             continue
         item.recovered += 1
@@ -179,10 +183,21 @@ def warnings_for_line(
 
     A compound line is looked up part by part, so `ls && git status` warns for git.
     """
-    from faildex.normalize import command_templates
+    from faildex.normalize import NOMATCH_SIG, command_templates, has_unquoted_glob, is_nomatch_sig
 
     templates = command_templates(line)
-    found = [(t, item) for t in templates for item in warnings_for(db, t, min_sessions)]
+    found = [
+        (t, item)
+        for t in templates
+        for item in warnings_for(db, t, min_sessions)
+        if not is_nomatch_sig(item.sig)
+    ]
+    if has_unquoted_glob(line):
+        # NOMATCH happens in the shell before any program runs, so pool its evidence.
+        item = failures(db).get(NOMATCH_SIG)
+        if item and len(item.sessions) >= min_sessions:
+            item.commands = Counter({"zsh": item.calls})
+            found.append(("zsh", item))
     return templates, found
 
 

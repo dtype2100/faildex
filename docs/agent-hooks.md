@@ -17,7 +17,15 @@ another file. Evidence lines are omitted from session context. The generated
 command encodes the path as one shell-safe token, so Windows shell differences
 and spaces or special characters in home directories do not change its meaning.
 This encoding is not encryption. Warnings use the same store selection and
-thresholds as `faildex check`. Lookup errors do not block shell execution.
+thresholds as `faildex check`: per-command warnings fire when a failure spans
+at least `min_sessions` (default `2`) and accounts for at least `MIN_RATE`
+(`0.03`, 3%) of that command's recorded runs. Shell-level `zsh` glob failures
+(`(eval):<n>: no matches found: <glob>` and `zsh:<n>: no matches found: <glob>`)
+are pooled across commands under `no matches found: <glob>` and warn before any
+command line containing an unquoted glob once seen in at least `min_sessions`
+sessions; `MIN_RATE` is not applied to that shell-level count because there is no
+`zsh` command node in the graph and unquoted-glob detection gates when it fires.
+Lookup errors do not block shell execution.
 
 Codex requires new or changed hooks to be reviewed and trusted in `/hooks`.
 Trust the two faildex commands, then start a new session. A session started before

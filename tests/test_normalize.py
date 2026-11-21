@@ -1,6 +1,12 @@
 import pytest
 
-from faildex.normalize import command_template, command_templates, error_signature, is_compound
+from faildex.normalize import (
+    command_template,
+    command_templates,
+    error_signature,
+    has_unquoted_glob,
+    is_compound,
+)
 
 COMMANDS = [
     ("git status", "git status"),
@@ -77,6 +83,10 @@ SIGNATURES = [
     ),
     ("src/app.cs:12: throw new InvalidOperationException(x);", None),
     ('12: Console.Error.WriteLine("usage error: needs [start]', None),
+    ("(eval):1: no matches found: README*", "no matches found: <glob>"),
+    ("(eval):3: no matches found: --include=*.py", "no matches found: <glob>"),
+    ("zsh:1: no matches found: .aider*", "no matches found: <glob>"),
+    ("zsh:12: no matches found: src/*.yaml", "no matches found: <glob>"),
     ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
     ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
     (
@@ -467,3 +477,190 @@ def test_heredoc_does_not_mark_compound():
 
 def test_error_signature_keeps_double_lt_in_failure_output():
     assert error_signature("error: conflict marker << found") == "error: conflict marker << found"
+
+
+def test_zsh_glob_failures_share_one_signature():
+    """Literal globs must not split the same zsh NOMATCH error across keys."""
+    eval_sig = error_signature("(eval):1: no matches found: README*")
+    zsh_sig = error_signature("zsh:1: no matches found: --include=*.py")
+    assert eval_sig == zsh_sig == "no matches found: <glob>"
+
+
+@pytest.mark.parametrize("prefix", ["zsh:", "zsh:12:", "(eval):", "(eval):3:"])
+def test_nomatch_without_line_number_masks_the_entire_glob(prefix):
+    assert (
+        error_signature(f"{prefix} no matches found: private-customer-*")
+        == "no matches found: <glob>"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ls README* readme*",
+        "for f in *.x; do ls README*; done",
+        "for d in a b; do ( ls README* ); done",
+        "( ls README* readme* )",
+        "f=$(ls README* readme* | head -1)",
+        'echo "$(ls README*)"',
+        "echo `ls README*`",
+        'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done',
+        "ls a[0]",
+        'echo "a \\\\"*.private',
+        "ls \\\n*.py",
+        "ls ${x:-$(ls *.private)}",
+        "[[ $(ls *.private) == x ]]",
+        "[[ `ls *.private` == x ]]",
+        "echo $(( $(ls *.private) + 1 ))",
+        "(( x = $(ls *.private) ))",
+        "[[ $(( $(ls *.private) + 1 )) == 0 ]]",
+        r"Get-ChildItem C:\foo\*.cs",
+    ],
+)
+def test_has_unquoted_glob_detects_active_unquoted_globs(command):
+    assert has_unquoted_glob(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status",
+        "ls '*.py'",
+        'ls "*.py"',
+        r"ls \*.py",
+        r"ls \?.txt",
+        "echo '$(ls README*)'",
+        'echo "a \\"*.private"',
+        "[ -f a ] && git status",
+        "[[ -f a ]] && git status",
+        "[[ $x == *.py ]] && git status",
+        "echo $(( 2 * 3 ))",
+        "(( x = 2 * 3 ))",
+        "echo ${arr[0]} ${arr[*]}",
+        "git status # ls *.py",
+        "f() { ls *.py; }",
+        '"f" () { ls *.py; }',
+        "f ( ) { ls *.py; }",
+        "for x in a; do f() { ls *.py; }; done",
+        "for x in a; do public.helper()\n{\nls *.private\n}; done",
+        "ls prefix'*.private'",
+        r'echo "C:\foo" \*.private',
+        "cat <<'EOF'\n$(ls *.py)\nEOF",
+        "echo @'\n*.private\n'@",
+    ],
+)
+def test_has_unquoted_glob_avoids_false_positives(command):
+    assert not has_unquoted_glob(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # Issue #32 case 1: function definitions with prefixes, quoted names, spaced parens, multiline bodies
+        "time private_customer_function() { value=$(private_customer_command); }",
+        '"private_customer_function" () { value=$(private_customer_command); }',
+        "private_customer_function ( ) { value=$(private_customer_command); }",
+        "time private_customer_function ( ) { value=$(private_customer_command); }",
+        "private_customer_function()\n{\nprivate_customer_command\n}",
+        "function private_customer_function\n{\nprivate_customer_command\n}",
+        '"public.helper" ()\n{\nprivate_customer_secret\n}',
+        '"public".helper()\n{\nprivate_customer_secret\n}',
+        "public.helper \\\n()\n{\nprivate_customer_secret\n}",
+        "time -p private_customer_function()\n{\nprivate_customer_secret\n}",
+        "private_customer_function() \\\n{\nprivate_customer_secret\n}",
+        "(( private_customer_secret * other ))",
+        # Issue #32 case 3: line-continuation split ANSI-C $'...' strings
+        "echo $\\\n'don\\'t; private_customer_secret; \\'x'",
+        "echo $\\\r\n'don\\'t; private_customer_secret; \\'x'",
+        "echo $\\\n\\\n'don\\'t; private_customer_secret; \\'x'",
+        # Issue #32 case 4: multiline (( ... )) and $(( ... ))
+        "((\nprivate_customer_secret * other\n))",
+        "echo $((\nprivate_customer_secret * other\n))",
+        'echo "$((\nprivate_customer_secret * other\n))"',
+        "((\n(a + b)\nprivate_customer_secret\n))",
+    ],
+)
+def test_issue32_blocked_or_function_inputs_never_leak(command):
+    assert command_template(command) is None
+    assert command_templates(command) == []
+    assert not is_compound(command)
+    assert not has_unquoted_glob(command)
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # Issue #32 case 2: PowerShell here-strings as command arguments
+        ("echo @'\nIt's private; private_customer_secret\n'@", "echo"),
+        ('Write-Output @"\n"; private_customer_secret\n"@', "Write-Output"),
+        # Single-line ANSI-C $'...' and escaped \$'...' never leak later words
+        ("echo $'don\\'t; private_customer_secret; \\'x'", "echo"),
+        (r'''echo \$'a\'"b' ; private_customer_secret; 'c"''', "echo"),
+        (r'''echo "C:\foo" \$'a\'"b' ; private_customer_secret; 'c"''', "echo"),
+        # Normal line continuations are not blocked by the ANSI-C continuation guard
+        ("git status \\\n--short", "git status"),
+        ("ls \\\n*.py", "ls"),
+        # Quoted multiline (( is data, not arithmetic
+        ('echo "((\nprivate_customer_secret\n))"', "echo"),
+    ],
+)
+def test_issue32_argument_strings_and_normal_continuations_preserve_only_program(command, expected):
+    assert command_template(command) == expected
+    assert command_templates(command) == [expected]
+    assert not is_compound(command)
+
+
+def test_quoted_or_operator_is_not_compound():
+    assert not is_compound("git status 'a || b'")
+    assert not is_compound('git status "a || b"')
+    assert not is_compound('git status "a \\"|| b"')
+    assert not is_compound("git status # a || b")
+    assert is_compound("cd a || git status")
+    assert is_compound('git status "$(ls a || ls b)"')
+
+
+ADVERSARIAL_LONG_INPUTS = [
+    "a" * 12000,
+    "a.b-" * 3000,
+    "time -p " + "a" * 12000,
+    "a \\\n" * 3000,
+    "env \\\n" * 2000 + "ls",
+    "A=1 " * 3000 + "ls",
+    r"\a" * 5000 + " *.x",
+    "foo() " + "\\\n" * 5000 + "{\necho x\n}",
+    "( (" * 1800 + "ls *.x" + ") )" * 1800,
+    "a'b" * 4000,
+    "a'" + "x" * 12000,
+    r'echo "a \"b" ' * 1000,
+    r"echo \$'a' " * 1200,
+    "echo $'\\'' " * 1500,
+    "$(" * 5500,
+    "$((" * 3500,
+    "((\n" * 3500,
+    "${" * 5500,
+    "((" * 5500,
+    "[" * 12000,
+    "`" * 12000,
+    "( " * 5500,
+    "# comment\n" * 1500,
+    (" " * 10 + "\n") * 1500,
+    "@'\n" * 4000,
+]
+
+
+@pytest.mark.parametrize("text", ADVERSARIAL_LONG_INPUTS)
+def test_normalize_linear_time_on_adversarial_10k_inputs(text):
+    import time
+
+    assert len(text) >= 10000
+    for fn in (
+        command_template,
+        command_templates,
+        is_compound,
+        has_unquoted_glob,
+        error_signature,
+    ):
+        started = time.monotonic()
+        fn(text)
+        elapsed = time.monotonic() - started
+        assert elapsed < 0.5, f"{fn.__name__} took {elapsed:.3f}s on len={len(text)}"

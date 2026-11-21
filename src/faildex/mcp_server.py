@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from faildex.insight import Failure, failures, proposals, warnings_for_line
-from faildex.normalize import command_templates
+from faildex.normalize import NOMATCH_SIG, command_templates, has_unquoted_glob, is_nomatch_sig
 from faildex.store import open_store
 
 
@@ -38,7 +38,7 @@ def _summary(item: Failure) -> dict:
 
 def preflight(store: Path, command: str, min_sessions: int = 2) -> dict:
     templates = command_templates(command)
-    if not templates:
+    if not templates and not has_unquoted_glob(command):
         return {"command": None, "commands": [], "known_failures": []}
     db = open_store(store)
     try:
@@ -46,16 +46,19 @@ def preflight(store: Path, command: str, min_sessions: int = 2) -> dict:
     finally:
         db.close()
     return {
-        "command": pairs[0][0] if pairs else templates[0],
+        "command": pairs[0][0] if pairs else (templates[0] if templates else None),
         "commands": templates,
         "known_failures": [{**_summary(item), "command": t} for t, item in pairs[:5]],
     }
 
 
 def evidence(store: Path, failure: str) -> dict:
+    key = failure.strip().lower()
+    if is_nomatch_sig(key):
+        key = NOMATCH_SIG
     db = open_store(store)
     try:
-        item = failures(db).get(failure.strip().lower()) or failures(db).get(failure)
+        item = failures(db).get(key) or failures(db).get(failure)
     finally:
         db.close()
     if item is None:
