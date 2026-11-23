@@ -18,6 +18,9 @@ happened before it, so nothing from the scored period leaks into what was
 
 Every number comes from Cypher over the committed store, so `make eval` gives
 the same table on any machine.
+
+A private store made by `faildex ingest` has no public datasets, so its sessions
+are grouped by agent instead and split the same way, one agent at a time.
 """
 
 from __future__ import annotations
@@ -29,6 +32,12 @@ RECOVERY_HOPS = 5
 
 _SESSIONS = """
 MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)
+WHERE s.started_at IS NOT NULL
+RETURN s.id AS id, s.started_at AS started ORDER BY started, id
+"""
+
+_AGENT_SESSIONS = """
+MATCH (s:Session {agent: $source})
 WHERE s.started_at IS NOT NULL
 RETURN s.id AS id, s.started_at AS started ORDER BY started, id
 """
@@ -67,6 +76,9 @@ RETURN e.sig AS sig ORDER BY sig
 """
 
 _SOURCES = "MATCH (d:Source) RETURN d.name AS name ORDER BY name"
+_AGENTS = (
+    "MATCH (s:Session) WHERE s.agent IS NOT NULL RETURN DISTINCT s.agent AS name ORDER BY name"
+)
 
 
 @dataclass(frozen=True)
@@ -99,8 +111,18 @@ def split(sessions: list[tuple[str, str]]) -> tuple[list[str], list[str], str] |
     return ids[:index], ids[index:], sessions[index][1]
 
 
-def evaluate_source(db, source: str, kinds: tuple[str, ...] = ("text", "exit")) -> Result | None:
-    rows = db.execute(_SESSIONS, {"source": source})
+def groups(db) -> tuple[str, list[str]]:
+    """("dataset", public dataset names), or ("agent", agent names) for a store without any."""
+    names = [row["name"] for row in db.execute(_SOURCES)]
+    if names:
+        return "dataset", names
+    return "agent", [row["name"] for row in db.execute(_AGENTS)]
+
+
+def evaluate_source(
+    db, source: str, kinds: tuple[str, ...] = ("text", "exit"), by: str = "dataset"
+) -> Result | None:
+    rows = db.execute(_AGENT_SESSIONS if by == "agent" else _SESSIONS, {"source": source})
     parts = split([(row["id"], row["started"]) for row in rows])
     if parts is None:
         return None
@@ -152,8 +174,8 @@ def total(results: list[Result]) -> Result:
 
 
 def evaluate(db, kinds: tuple[str, ...] = ("text", "exit")) -> list[Result]:
-    names = [row["name"] for row in db.execute(_SOURCES)]
-    results = [r for r in (evaluate_source(db, name, kinds) for name in names) if r]
+    by, names = groups(db)
+    results = [r for r in (evaluate_source(db, name, kinds, by) for name in names) if r]
     return [*results, total(results)] if results else []
 
 
@@ -167,9 +189,9 @@ def shared_keys(db) -> list[str]:
     return [row["sig"] for row in db.execute(_SHARED)]
 
 
-def _table(results: list[Result]) -> list[str]:
+def _table(results: list[Result], by: str = "dataset") -> list[str]:
     head = (
-        f"{'dataset':<20}{'sessions':>10}{'failures':>10}{'recurring':>11}"
+        f"{by:<20}{'sessions':>10}{'failures':>10}{'recurring':>11}"
         f"{'recurrence':>12}{'warnable':>10}{'of recurring':>14}"
     )
     lines = [head, "-" * len(head)]
@@ -182,21 +204,37 @@ def _table(results: list[Result]) -> list[str]:
     return lines
 
 
-def report(db) -> str:
+def report(db, report_command: str = "faildex report") -> str:
+    by, names = groups(db)
     both = evaluate(db)
     text_only = evaluate(db, kinds=("text",))
-    lines = [
+    lines = []
+    if by == "agent":
+        lines.append("No public dataset in this store, so sessions are grouped by agent.")
+    lines += [
         (
-            f"Split: first {EARLIER_SHARE:.0%} of each dataset's sessions by start time "
+            f"Split: first {EARLIER_SHARE:.0%} of each {by}'s sessions by start time "
             "= earlier, the rest = later."
         ),
         "sessions = earlier/later; failures = later-period failed calls with a failure key.",
+    ]
+    if not both:
+        lines += [
+            "",
+            (
+                f"Nothing to score: no {by} has 2 or more sessions with a start time"
+                f" ({len(names)} {by}{'' if len(names) == 1 else 's'} found)."
+                f" For counts per failure, run: {report_command}"
+            ),
+        ]
+        return "\n".join(lines)
+    lines += [
         "",
         "All failure keys (failure text, or command + exit code when nothing usable was printed)",
-        *_table(both),
+        *_table(both, by),
         "",
         "Failure text only",
-        *_table(text_only),
+        *_table(text_only, by),
     ]
     if both:
         keys = both[-1]

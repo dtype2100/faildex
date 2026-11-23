@@ -39,7 +39,7 @@ faildex는 이것을 다음 도구로 바꿉니다.
 | `faildex rules` | 세션을 넘어 되풀이된 실패에 대한 규칙 제안. 각 제안에는 기록된 복구 방법과 로그 위치가 붙습니다. 승인한 것만 규칙 파일에 기록됩니다. |
 | `faildex hook` | Claude Code `PreToolUse` 훅. 되풀이된 실패가 알려진 명령을 실행하기 전에 세션에 한 줄 알림을 띄우고, Claude에게 앞선 세션이 배운 내용을 전달합니다. 그 실패가 해당 명령 실행의 3% 이상이거나(명령을 합쳐 묶은 `zsh` `no matches found` 글롭 실패는 `min_sessions` 세션 이상에서 반복되고 명령줄에 따옴표 없는 글롭이 있을 때) 말하고, 그 밖에는 아무것도 출력하지 않습니다. |
 | `faildex mcp` | MCP 도구 `preflight`, `evidence`, `recurring`. 어떤 MCP 에이전트든 실행 전에 물어볼 수 있습니다. |
-| `faildex eval` | 위 수치를 저장소의 스토어로 다시 계산합니다. |
+| `faildex eval` | 위 수치를 저장소의 스토어로 다시 계산합니다. 공개 데이터셋이 없는 내 스토어(`--store ~/.faildex/store`)에서는 같은 분할을 에이전트별로 합니다. |
 | `faildex ingest` | 내 Claude Code, Codex CLI, Cursor, Antigravity 기록을 내 컴퓨터의 개인 스토어(`~/.faildex/store`)에 적재합니다. 위의 모든 명령이 이 스토어를 씁니다. |
 | `faildex report` | 내 스토어에서 날짜 전후의 건수를 셉니다: 호출, 실패, 고른 실패 하나, 훅이 보낸 경고. |
 

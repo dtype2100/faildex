@@ -57,6 +57,7 @@ are test functions under `tests/`.
 | The same call is never counted twice | `test_adapter_claude.py::test_a_call_logged_twice_is_one_call`, `test_adapter_codex.py::test_an_event_exported_into_two_files_is_counted_once`, `test_schema.py::test_duplicate_and_partial_loads_keep_one_next_chain` |
 | No-match exits of search tools are not failures | `test_schema.py::test_failure_key_skips_no_match_exits_and_unknown_commands` |
 | No raw text or local path reaches the graph | `test_adapter_claude.py::test_no_raw_command_text_or_output_in_records`, `test_schema.py::test_a_shared_store_refuses_local_paths`, `test_normalize.py` |
+| A private store without public datasets is split per agent; one that cannot be split says so and points to `faildex report` | `test_evaluate.py::test_a_private_store_without_datasets_is_scored_per_agent`, `test_evaluate.py::test_report_explains_an_unscorable_store_instead_of_an_empty_table` |
 | The documents show what `make eval` prints | `test_docs.py::test_readme_table_matches_the_committed_store` |
 | A second engine build reaches the same numbers | `test_docs.py::test_relate_webassembly_reaches_the_same_numbers` |
 

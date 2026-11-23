@@ -28,7 +28,10 @@ def _eval(args: argparse.Namespace) -> int:
     except FileNotFoundError as err:
         print(f"error: {err}")
         return 1
-    print(report(db))
+    command = "faildex report"
+    if getattr(args, "store_given", False):
+        command += f" --store {_shell_path(args.store)}"
+    print(report(db, command))
     db.close()
     return 0
 

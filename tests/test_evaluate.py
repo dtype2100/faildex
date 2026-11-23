@@ -139,3 +139,67 @@ def test_a_later_compound_failure_is_recurring_but_not_warnable():
     records += [replace(_call("s8", 8, 0, ok=False, sig="timed out"), compound=True)]
     records += [_call("s9", 9, 0, ok=False, sig="timed out"), _call("s10", 10, 0)]
     assert _scored(records) == (2, 2, 1)
+
+
+def _no_sources(records):
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    return db
+
+
+def test_a_private_store_without_datasets_is_scored_per_agent():
+    """`faildex ingest` stores carry no Source nodes; the same split runs per agent."""
+    records = [
+        _call("s1", 1, 0, ok=False, sig="rejected: non-fast-forward"),
+        _call("s1", 1, 1, command="git pull"),
+        _call("s1", 1, 2),
+        _call("s2", 2, 0, ok=False, command="npm run", sig="missing script"),
+        *[_call(f"s{n}", n, 0) for n in range(3, 8)],
+        _call("s8", 8, 0, ok=False, sig="rejected: non-fast-forward"),
+        _call("s9", 9, 0, ok=False, command="npm run", sig="missing script"),
+        _call("s10", 10, 0, ok=False, command="cargo build", sig="linker not found"),
+    ]
+    # A second agent with too few sessions to split is left out, not scored as empty.
+    records.append(_call("c1", 1, 0, ok=False, agent="codex", sig="missing script"))
+    db = _no_sources(records)
+    by_agent = {r.source: r for r in evaluate(db)}
+    assert set(by_agent) == {"claude_code", "all"}
+    mine = by_agent["claude_code"]
+    assert (mine.earlier_sessions, mine.later_sessions) == (7, 3)
+    assert (mine.later_failures, mine.recurring, mine.warnable) == (3, 2, 1)
+    text = report(db)
+    assert text.startswith("No public dataset in this store, so sessions are grouped by agent.")
+    assert "each agent's sessions" in text
+    assert "\nagent " in text and "claude_code" in text
+
+
+def test_report_explains_an_unscorable_store_instead_of_an_empty_table():
+    db = _no_sources([_call("s1", 1, 0, ok=False, sig="missing script")])
+    text = report(db)
+    assert (
+        "Nothing to score: no agent has 2 or more sessions with a start time (1 agent found)."
+        in text
+    )
+    assert "faildex report" in text
+    assert "recurrence" not in text
+
+
+def test_public_datasets_keep_the_dataset_table():
+    text = report(_graph())
+    assert text.startswith("Split: first 70% of each dataset's sessions")
+    assert "grouped by agent" not in text
+    assert "\ndataset " in text
+
+
+def test_the_unscorable_hint_keeps_the_store_the_reader_chose(tmp_path, capsys):
+    from faildex.cli import _shell_path, main
+
+    store = tmp_path / "one session"
+    db = relate.connect(str(store))
+    ingest(db, [_call("s1", 1, 0, ok=False, sig="missing script")])
+    db.commit()
+    db.flush()
+    db.close()
+    assert main(["eval", "--store", str(store)]) == 0
+    out = capsys.readouterr().out
+    assert f"run: faildex report --store {_shell_path(store)}" in out
