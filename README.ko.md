@@ -228,11 +228,14 @@ Write a rule: faildex rules --approve 1 2 --to ~/faildex-rules.md
 숫자는 실패 하나를 기준으로, 그 실패를 겪은 모든 명령을 합친 값입니다(`+4 more commands`).
 "recovered within 5 calls"는 실패한 호출 뒤 5번 안에 같은 명령이 성공한 횟수이고,
 "21 of 38 recoveries"는 그 복구 가운데 Action 줄의 방법을 쓴 횟수입니다.
+Action은 저절로 풀리는 실패(시간 초과, 연결 거부나 재설정, 요청 한도와 서버 오류, 잠금)에만
+"retry"라고 쓰고, 다른 실패에는 원인을 고친 뒤 다시 실행하라고 씁니다. zsh 글롭이나 `=` 실패에는
+정해진 해결(그 단어를 따옴표로 감싸기)을 붙입니다.
 `--evidence`는 근거 위치(세션 최대 3개)를 줄이지 않고 보여 줍니다.
 
 `--store`가 없으면 명령은 `FAILDEX_STORE` 환경 변수가 가리키는 스토어를, 없으면 `./store`(저장소 안),
 `~/.faildex/store`, 공개 데모 스토어 순으로 씁니다. `report`는 `./store`보다 `~/.faildex/store`를 먼저 찾고,
-`ingest`는 언제나 `~/.faildex/store`에 쓰며, `export-web`은 `./store`나 공개 데모 스토어를 읽고 다른 스토어는 `--store`로 넘길 때만 내보냅니다.
+`ingest`는 언제나 `~/.faildex/store`에 쓰며, `export-web`은 `./store`나 공개 데모 스토어를 읽되 그 스토어에 내 기록이 있으면 쓰지 않고 멈추며, 다른 스토어는 `--store`로 넘길 때만 내보냅니다.
 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
 `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.

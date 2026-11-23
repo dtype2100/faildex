@@ -234,14 +234,18 @@ Write a rule: faildex rules --approve 1 2 --to ~/faildex-rules.md
 Counts are per failure, across every command that hit it (`+4 more commands`).
 "Recovered within 5 calls" counts failed calls after which the same command succeeded
 within the next 5 calls; "21 of 38 recoveries" says how many of those took the step in
-the Action line. `--evidence` prints the evidence pointers (up to 3 sessions) in full.
+the Action line. The Action says "retry" only for failures that pass on their own
+(timeouts, refused or reset connections, rate limits and server errors, locks); for any
+other failure it says to fix the cause before running the command again. A zsh glob or
+`=` failure gets its fixed cure: quote the word.
+`--evidence` prints the evidence pointers (up to 3 sessions) in full.
 
 Without `--store`, commands read the store named by the `FAILDEX_STORE`
 environment variable when it is set, then `./store` (inside a checkout), then
 `~/.faildex/store`, then the public demo store. `report` tries `~/.faildex/store`
 before `./store`; `ingest` always writes `~/.faildex/store`; `export-web` reads
-`./store` or the public demo store and exports any other store only when you pass
-it with `--store`.
+`./store` or the public demo store, stops without writing when that store holds your
+own logs, and exports any other store only when you pass it with `--store`.
 
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
 `~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.

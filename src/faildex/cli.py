@@ -304,7 +304,8 @@ def _export_web(args: argparse.Namespace) -> int:
     from faildex.export import write
     from faildex.store import public_store
 
-    if getattr(args, "store", None) is None:
+    chosen = getattr(args, "store", None) is None
+    if chosen:
         if (Path("store") / "manifest.json").is_file():
             args.store = Path("store")
         else:
@@ -313,7 +314,6 @@ def _export_web(args: argparse.Namespace) -> int:
     if db is None:
         return 1
     try:
-        size = write(db, args.out)
         local = next(
             iter(
                 db.execute(
@@ -321,6 +321,14 @@ def _export_web(args: argparse.Namespace) -> int:
                 )
             )
         )["n"]
+        if local and chosen:
+            print(
+                f"error: {args.store} holds {local:,} session(s) from your own logs, with local "
+                "file paths, so nothing was written. Run this outside that folder to export the "
+                "public store, or pass `--store` to export a store on purpose."
+            )
+            return 1
+        size = write(db, args.out)
     finally:
         db.close()
     print(f"wrote {args.out} ({size / 1e6:.2f} MB) from {args.store}")

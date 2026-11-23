@@ -498,3 +498,141 @@ def test_zsh_equals_expansion_pools_across_commands_and_legacy_keys():
         assert warnings_for_line(db, command)[1] == [], command
     assert [p.sig for p in proposals(db)] == ["=<word> not found"]
     db.close()
+
+
+def _retried(sig, command="python3"):
+    """Two sessions where the same command failed, then worked on the next call."""
+    records = []
+    for session in ("r1", "r2"):
+        records += [
+            _call(session, 0, ok=False, command=command, sig=sig),
+            _call(session, 1, command=command),
+        ]
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    item = proposals(db)[0]
+    db.close()
+    return item
+
+
+def test_retry_is_advised_only_for_failures_that_pass_on_their_own():
+    from faildex.insight import _action_line, is_transient
+
+    for sig in (
+        "command timed out after <n> milliseconds",
+        "curl: (<n>) failed to connect: connection refused",
+        "error: too many requests",
+        "fatal: unable to create <s>: file exists. another git process seems to be running",
+        "database is locked",
+        "resource temporarily unavailable",
+        "http <n> service unavailable",
+    ):
+        assert is_transient(sig), sig
+    for sig in (
+        "modulenotfounderror: no module named <s>",
+        "no such file or directory",
+        "permission denied",
+        "rg: regex parse error:",
+        "clock skew detected",
+        "error: lockfile is out of date",
+        "invalid timeout value: <s>",
+    ):
+        assert not is_transient(sig), sig
+
+    flaky = _retried("command timed out after <n> milliseconds", command="npm test")
+    assert flaky.fix == RETRY
+    assert _action_line(flaky) == "retry `npm test`; a later try worked in 2 of 2 recoveries."
+    assert "retry it; a later try of the same command worked (2 of 2 recoveries)" in flaky.rule()
+    assert flaky.notice().endswith("it worked again on a later try.")
+
+    missing = _retried("modulenotfounderror: no module named <s>")
+    assert missing.fix == RETRY
+    action = _action_line(missing)
+    assert action.startswith("fix the cause, then run `python3` again;") and "retry" not in action
+    assert "a later, changed call of the same command worked in 2 of 2 recoveries" in action
+    rule = missing.rule()
+    assert "fix the cause, then run it again" in rule and "retry it" not in rule
+    assert missing.notice().endswith("so fix the cause before running it again.")
+
+
+def test_pooled_shell_failures_get_their_fixed_cure_not_the_next_step():
+    from faildex.insight import _action_line
+
+    records = []
+    for session in ("g1", "g2"):
+        records += [
+            _call(session, 0, ok=False, command="ls", sig="zsh:1: no matches found: probe-*"),
+            _call(session, 1, command="cat"),
+            _call(session, 2, command="ls"),
+        ]
+    for session in ("e1", "e2"):
+        records += [
+            _call(session, 0, ok=False, command="cat", sig="(eval):<n>: ===== not found"),
+            _call(session, 1, command="echo"),
+            _call(session, 2, command="cat"),
+        ]
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    items = {item.sig: item for item in proposals(db)}
+    db.close()
+    glob, equals = items["no matches found: <glob>"], items["=<word> not found"]
+    assert glob.fix == "cat" and equals.fix == "echo"  # the step on record, not the cure
+    from faildex.insight import SHELL_FIXES
+    from faildex.normalize import has_unquoted_equals, has_unquoted_glob
+
+    # The example the cure gives must itself pass the check that fired.
+    good_glob = SHELL_FIXES[glob.sig].split("`")[1]
+    good_equals = SHELL_FIXES[equals.sig].split("`")[3]
+    assert not has_unquoted_glob(good_glob) and not has_unquoted_equals(good_equals)
+    for item, cure in ((glob, "quote the glob"), (equals, "quote words that start with `=`")):
+        for text in (_action_line(item), item.rule(), item.notice()):
+            assert cure in text, text
+            assert f"`{item.fix}` first" not in text, text
+
+
+def test_approve_dedupes_on_the_failure_key_not_the_wording(tmp_path):
+    items = proposals(_db())
+    path = tmp_path / "rules.md"
+    # The same failure, written by an older faildex in other words.
+    path.write_text(
+        "# Rules learned from recurring failures (faildex)\n\n"
+        f"- When `git push` fails with `{REJECTED}` (seen in 3 sessions, 3 calls): "
+        "the same command succeeded on a later try in the same session (1 of 3 recoveries).\n"
+        "  Evidence: demo/s1.jsonl:1\n"
+    )
+    assert approve(items, [1], path) == []
+    assert len(approve(items, [2, 2], path)) == 1
+    assert path.read_text().count("linker not found") == 1
+
+    fresh = tmp_path / "fresh.md"
+    assert len(approve(items, [1, 1], fresh)) == 1
+    assert fresh.read_text().count(REJECTED) == 1
+
+
+def test_approve_knows_a_legacy_raw_shell_key_is_the_pooled_one(tmp_path):
+    records = [
+        _call(s, 0, ok=False, command="cat", sig="(eval):<n>: ===== not found") for s in ("a", "b")
+    ]
+    db = relate.connect(":memory:")
+    ingest(db, records)
+    items = proposals(db)
+    db.close()
+    path = tmp_path / "rules.md"
+    path.write_text(
+        "- When `cat` fails with `(eval):<n>: ===== not found` (seen in 10 sessions, 10 calls):"
+        " no recovery on record yet; stop and check before retrying.\n"
+    )
+    assert approve(items, [1], path) == []
+
+
+def test_a_command_past_a_pipe_is_checked_too(tmp_path):
+    import json
+
+    from faildex.hook import respond
+    from faildex.insight import warnings_for_line
+
+    templates, pairs = warnings_for_line(_db(), "git log | git push origin main")
+    assert templates == ["git log", "git push"]
+    assert [(t, w.sig) for t, w in pairs] == [("git push", REJECTED)]
+    out = json.loads(respond(_payload("ls | git push origin main"), _store(tmp_path)))
+    assert "git pull" in out["hookSpecificOutput"]["additionalContext"]

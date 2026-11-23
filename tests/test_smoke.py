@@ -68,6 +68,14 @@ def test_export_web_never_picks_your_own_logs_unasked(tmp_path, monkeypatch, cap
     assert main(["export-web", "--store", str(private), "--out", str(tmp_path / "p.json")]) == 0
     assert "do not publish" in capsys.readouterr().out
 
+    # Inside ~/.faildex, ./store is your own store: refuse before writing anything.
+    monkeypatch.chdir(private.parent)
+    out_file = tmp_path / "inside.json"
+    assert main(["export-web", "--out", str(out_file)]) == 1
+    out = capsys.readouterr().out
+    assert not out_file.exists()
+    assert "your own logs" in out and "--store" in out and "nothing was written" in out
+
 
 def test_report_honours_faildex_store_before_your_own_store(tmp_path, monkeypatch, capsys):
     from faildex.schema import CallRecord, ingest

@@ -726,3 +726,55 @@ def test_secrets_never_reach_a_signature(text):
     assert sig and "<secret>" in sig
     for leaked in ("fakedemo", "ghp_abc", "hunter2", "akiaabc", "eyjhbg", "xoxb-123"):
         assert leaked not in sig
+
+
+@pytest.mark.parametrize(
+    ("command", "templates", "compound"),
+    [
+        ("git log | head -5", ["git log", "head"], False),
+        ("rg foo src | sort | uniq -c", ["rg", "sort", "uniq"], False),
+        ("ls 2>&1 | tee out.log", ["ls", "tee"], False),
+        ("make |& grep error", ["make", "grep"], False),
+        ("Get-ChildItem | Select-Object Name", ["Get-ChildItem", "Select-Object"], False),
+        ("Get-ChildItem | select-object Name", ["Get-ChildItem", "select-object"], False),
+        ("ls | git status", ["ls", "git status"], True),
+        ("ls | xargs rm", ["ls", "xargs"], True),
+        ("cat x.json | python3 -m json.tool", ["cat", "python3 -m json.tool"], True),
+        ("ls 'a | b'", ["ls"], False),
+        ("echo x >| out.txt", ["echo"], False),
+        ("n=$(ls | wc -l)", [], False),
+        ("a || b", ["a", "b"], True),
+        ("git push | true", ["git push"], True),
+        ("git push | echo done", ["git push"], True),
+        ("git log $'don\\'t | git push origin main'", ["git log"], False),
+        ("ls [ | git push origin main", ["ls", "git push"], True),
+        ("git log | (git push origin main)", ["git log", "git push"], True),
+        ("git log | { head -5; }", ["git log", "head"], False),
+    ],
+)
+def test_pipes_are_looked_up_part_by_part_and_compound_only_past_a_filter(
+    command, templates, compound
+):
+    assert command_templates(command) == templates
+    assert is_compound(command) is compound
+    if templates and "|" in command and "||" not in command:
+        assert command_template(command) == templates[0]  # the first command is unchanged
+
+
+@pytest.mark.parametrize(
+    ("command", "template"),
+    [
+        ("time -p python3 x.py", "python3"),
+        ("sudo -n make", "make"),
+        ("sudo -E -H make", "make"),
+        ("sudo -u root make", "make"),
+        ("nice -n 5 make", "make"),
+        ("timeout -s KILL 10 pytest", "pytest"),
+        ("env -i make", "make"),
+        ("command -p make", "make"),
+        ("stdbuf -o L make", "make"),
+        ("time -o out.txt make", "make"),
+    ],
+)
+def test_wrapper_options_without_a_value_are_not_the_program(command, template):
+    assert command_template(command) == template

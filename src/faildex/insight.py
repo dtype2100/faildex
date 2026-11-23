@@ -13,7 +13,9 @@ retry.
 from __future__ import annotations
 
 import os
+import re
 import sys
+import textwrap
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +27,29 @@ MIN_RATE = 0.03
 
 _RUNS = "MATCH (:Command {template: $command})<-[:RAN]-(c:Call) RETURN count(c) AS n"
 RETRY = "retry"
+# Only these get better by running the same thing again; everything else needs a change.
+# Digits are masked in signatures, so status codes are matched by their reason phrase.
+_TRANSIENT = re.compile(
+    r"timed out|\btimeout(?:error| error| expired| exceeded)\b|deadline exceeded"
+    r"|connection (?:refused|reset|aborted)|econn(?:refused|reset)"
+    r"|too many requests|rate.?limit|service unavailable|bad gateway|internal server error"
+    r"|overloaded|temporarily unavailable|try again later|resource busy"
+    r"|\b(?:database|file|resource|table) is locked\b|(?:acquire|obtain|get) (?:the |a )?lock\b"
+    r"|index\.lock|another \S+ process seems to be running|\b(?:429|5\d\d)\b",
+    re.IGNORECASE,
+)
+# Shell failures pooled across commands come with a fixed cure; the step that happened to
+# follow them in a session is not one.
+SHELL_FIXES = {
+    "no matches found: <glob>": "quote the glob, star included (`--include='*.py'`, not `--include=*.py`)",
+    "=<word> not found": "quote words that start with `=` (`echo '===='`, not `echo ====`)",
+}
+
+
+def is_transient(sig: str) -> bool:
+    """A failure that the very same call can get past: timeouts, refused links, locks, 429, 5xx."""
+    return bool(_TRANSIENT.search(sig))
+
 
 # With a command, every count, recovery and rule is about that command alone.
 _ALL = """
@@ -99,10 +124,14 @@ class Failure:
             if self.kind == "text"
             else f"exited with code {self.sig.rsplit(' ', 1)[-1]} and no useful output"
         )
-        if not self.fix:
+        if self.sig in SHELL_FIXES:
+            after = SHELL_FIXES[self.sig]
+        elif not self.fix:
             after = "no recovery on record"
-        elif self.fix == RETRY:
+        elif self.fix == RETRY and is_transient(self.sig):
             after = "it worked again on a later try"
+        elif self.fix == RETRY:
+            after = "a later, changed call worked, so fix the cause before running it again"
         else:
             after = f"sessions got past it by running `{self.fix}` first"
         return f"faildex: {subject} {what} in {len(self.sessions)} earlier sessions; {after}."
@@ -118,15 +147,25 @@ class Failure:
         seen = f"seen in {len(self.sessions)} sessions, {self.calls} calls"
         if self.runs:
             seen += f", {self.calls / self.runs:.0%} of this command's {self.runs} runs"
+        if self.sig in SHELL_FIXES:
+            return f"{head} ({seen}): the shell stops before the command runs; {SHELL_FIXES[self.sig]}."
         if not self.fix:
             return f"{head} ({seen}): no recovery on record yet; stop and check before retrying."
-        how = (
-            "the same command succeeded on a later try in the same session"
-            if self.fix == RETRY
-            else f"earlier sessions got past it by running `{self.fix}` first"
-        )
         top = self.fixes.most_common(1)[0][1]
-        return f"{head} ({seen}): {how} ({top} of {self.recovered} recoveries)."
+        share = f"{top} of {self.recovered} recoveries"
+        if self.fix == RETRY and is_transient(self.sig):
+            return f"{head} ({seen}): retry it; a later try of the same command worked ({share})."
+        if self.fix == RETRY:
+            return (
+                f"{head} ({seen}): fix the cause, then run it again; a later, changed call "
+                f"of the same command worked ({share})."
+            )
+        return f"{head} ({seen}): earlier sessions got past it by running `{self.fix}` first ({share})."
+
+    @property
+    def key(self) -> str:
+        """The failure key a rules file is deduplicated on, whatever the rule's wording."""
+        return self.sig
 
 
 def failures(db, command: str | None = None) -> dict[str, Failure]:
@@ -366,6 +405,8 @@ def _recovery_summary(item: Failure) -> str:
 
 def _action_line(item: Failure) -> str:
     """What to do, and how many of the recoveries back it (the `top of recovered` share)."""
+    if item.sig in SHELL_FIXES:
+        return f"{SHELL_FIXES[item.sig]}; the shell stops before any command runs."
     if not item.fix:
         return "stop and check before retrying; no recovery on record yet."
     top = item.fixes.most_common(1)[0][1]
@@ -373,7 +414,13 @@ def _action_line(item: Failure) -> str:
     if item.fix == RETRY:
         # Counts cover every command that hit this failure, so name one only when it is alone.
         what = f"`{_subject(item)}`" if len(item.commands) <= 1 else "the same command"
-        return f"retry {what}; a later try worked in {share}."
+        if is_transient(item.sig):
+            return f"retry {what}; a later try worked in {share}."
+        what = what if len(item.commands) <= 1 else "it"
+        return (
+            f"fix the cause, then run {what} again; a later, changed call of the same "
+            f"command worked in {share}."
+        )
     return f"run `{item.fix}` first; {share} did that."
 
 
@@ -418,9 +465,17 @@ def render(
         rec = _recovery_summary(item)
         rec_styled = style(rec, "32" if item.recovered else "31")
         stats = f"   {counts} {dot} {rec_styled}"
-        action = f"   {style('Action:', '1;36')} {_action_line(item)}"
+        # Wrap the action under itself so every line stays within LINE_WIDTH columns.
+        action = textwrap.wrap(
+            f"   Action: {_action_line(item)}",
+            LINE_WIDTH,
+            subsequent_indent=" " * len("   Action: "),
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        action[0] = action[0].replace("Action:", style("Action:", "1;36"), 1)
 
-        lines = [head, stats, action]
+        lines = [head, stats, *action]
         if item.evidence:
             if show_evidence:
                 ev_head = f"   evidence ({len(item.evidence)}):"
@@ -435,16 +490,37 @@ def render(
     return "\n\n".join(blocks)
 
 
+_RULE_TEXT = re.compile(r"^- When `[^`\n]*` fails with `(.*?)` \(seen", re.MULTILINE)
+_RULE_EXIT = re.compile(r"^- When `(.*?)` exits with code (\S+) and prints nothing", re.MULTILINE)
+
+
+def _rule_keys(text: str) -> set[str]:
+    """Failure keys of the rules already in a file, older wordings and raw shell keys included."""
+    from faildex.normalize import shell_sig
+
+    keys = {shell_sig(sig) or sig for sig in _RULE_TEXT.findall(text)}
+    keys |= {f"{command} exited {code}" for command, code in _RULE_EXIT.findall(text)}
+    return keys
+
+
 def approve(items: list[Failure], numbers: list[int], path) -> list[str]:
-    """Append the chosen proposals to a rules file. Nothing is written unasked."""
-    chosen = [items[n - 1] for n in numbers if 0 < n <= len(items)]
+    """Append the chosen proposals to a rules file. Nothing is written unasked.
+
+    A failure that already has a rule is skipped, even when the wording has changed since.
+    """
     existing = path.read_text() if path.exists() else ""
-    added = [item.rule() for item in chosen if item.rule() not in existing]
-    if added:
+    seen = _rule_keys(existing)
+    chosen = []
+    for n in numbers:
+        if 0 < n <= len(items) and items[n - 1].key not in seen:
+            seen.add(items[n - 1].key)
+            chosen.append(items[n - 1])
+    if chosen:
         with path.open("a") as out:
             if not existing:
                 out.write("# Rules learned from recurring failures (faildex)\n\n")
+            elif not existing.endswith("\n"):
+                out.write("\n")
             for item in chosen:
-                if item.rule() in added:
-                    out.write(f"- {item.rule()}\n  Evidence: {', '.join(item.evidence)}\n")
-    return added
+                out.write(f"- {item.rule()}\n  Evidence: {', '.join(item.evidence)}\n")
+    return [item.rule() for item in chosen]

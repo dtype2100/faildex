@@ -68,34 +68,31 @@ WRAPPERS = frozenset(
     ["sudo", "time", "env", "nohup", "command", "timeout", "setsid", "nice", "stdbuf"]
 )
 # Wrapper options that take a value: the next word is a user, a directory, a signal.
-WRAPPER_VALUE_FLAGS = frozenset(
-    [
-        "-u",
-        "-g",
-        "-C",
-        "-n",
-        "-k",
-        "-s",
-        "-p",
-        "-h",
-        "-r",
-        "-t",
-        "-T",
-        "-i",
-        "-o",
-        "-e",
-        "-D",
-        "-U",
-        "--user",
-        "--group",
-        "--chdir",
-        "--signal",
-        "--kill-after",
-        "--host",
-        "--role",
-        "--type",
+# Per wrapper, because `-n` takes a value for nice but not for sudo, and `-p` takes
+# one for sudo (a prompt) but not for time or command.
+WRAPPER_VALUE_FLAGS = {
+    "sudo": frozenset(
+        ["-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D", "-T", "-R"]
+        + ["--user", "--group", "--close-from", "--host", "--prompt", "--role", "--type"]
+        + ["--other-user", "--chdir", "--command-timeout", "--chroot"]
+    ),
+    "time": frozenset(["-o", "-f", "--output", "--format"]),
+    "env": frozenset(["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]),
+    "timeout": frozenset(["-s", "-k", "--signal", "--kill-after"]),
+    "nice": frozenset(["-n", "--adjustment"]),
+    "stdbuf": frozenset(["-i", "-o", "-e", "--input", "--output", "--error"]),
+}
+# After a `|`, these only shape the output of what came before; any other program
+# makes the line compound, since the log cannot say which side failed.
+OUTPUT_FILTERS = frozenset(
+    name.lower()
+    for name in [
+        "head", "tail", "grep", "rg", "sort", "uniq", "wc", "cat", "cut", "tr", "sed", "awk",
+        "jq", "tee", "less", "Select-Object", "Select-String", "Where-Object", "ForEach-Object",
+        "Sort-Object", "Format-Table", "Format-List", "Out-String", "Out-Null", "Measure-Object",
+        "ConvertTo-Json", "ConvertTo-Csv",
     ]
-)
+)  # fmt: skip
 # Shell and script syntax that can open a line without being a program.
 KEYWORDS = frozenset(
     [
@@ -906,20 +903,20 @@ def command_template(command: str) -> str | None:
     """Return "<program>" or "<program> <subcommand>" for the first real command."""
     if _skip_command(command):
         return None
-    found, fallback = _templates(command)
+    found, fallback, _ = _templates(command)
     return found[0] if found else fallback
 
 
 def command_templates(command: str) -> list[str]:
     """Every distinct program template a command line runs, in order.
 
-    `ls && git status` gives ["ls", "git status"], so a pre-run check can look
-    up each part, not only the first.
+    `ls && git status` and `ls | git status` give ["ls", "git status"], so a pre-run
+    check can look up each part, not only the first.
     """
     if _skip_command(command):
         return []
-    found, fallback = _templates(command)
-    unique = list(dict.fromkeys(found))
+    found, fallback, piped = _templates(command)
+    unique = list(dict.fromkeys(found + [t for t in piped if t not in OUTPUT_ONLY]))
     return unique or ([fallback] if fallback else [])
 
 
@@ -927,12 +924,19 @@ def is_compound(command: str) -> bool:
     """True when the command line runs more than one program in sequence.
 
     The log then says only how the whole line ended, not which part failed or
-    succeeded. `a || b` and `a; echo done` can even end well while `a` failed.
+    succeeded. `a || b` and `a; echo done` can even end well while `a` failed. A pipe
+    counts only when a program past the `|` does more than filter output: `git log | head`
+    is one command, `ls | xargs rm` is two.
     """
     if _skip_command(command):
         return False
-    found, fallback = _templates(command)
-    return len(found) > 1 or _has_unquoted_or(command) or (bool(found) and fallback in OUTPUT_ONLY)
+    found, fallback, piped = _templates(command)
+    return (
+        len(found) > 1
+        or _has_unquoted_or(command)
+        or (bool(found) and fallback in OUTPUT_ONLY)
+        or any(t.split()[0].lower() not in OUTPUT_FILTERS for t in piped)
+    )
 
 
 def _subcommand(program: str, args: list[str]) -> str | None:
@@ -1071,61 +1075,126 @@ def _commands(command: str) -> list[str]:
     return out
 
 
-def _templates(command: str) -> tuple[list[str], str | None]:
+def _segment_template(segment: str, script: bool) -> tuple[str | None, str | None]:
+    """(template, skipped setup program) of one simple command; both None when it runs nothing."""
+    if _is_function_def(segment):
+        return None, None  # `name() {...}` defines a function; it runs nothing
+    tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
+    while tokens and _program(tokens[0]) in WRAPPERS:
+        takes_value = WRAPPER_VALUE_FLAGS.get(_program(tokens[0]), frozenset())
+        tokens = tokens[1:]
+        # Options of the wrapper, with their values, are not the program.
+        while tokens:
+            if tokens[0] in takes_value:
+                tokens = tokens[2:]
+            elif _WRAPPER_ARG.match(tokens[0]) or _ASSIGNMENT.match(tokens[0]):
+                tokens = tokens[1:]
+            else:
+                break
+    if (
+        not tokens
+        or tokens[0].startswith(("#", "$"))
+        or tokens[1:2] == ["()"]
+        or tokens[1:3] == ["(", ")"]
+        or tokens[0] == "function"
+    ):
+        return None, None  # comment, function definition, or PowerShell variable use
+    program = _program(tokens[0])
+    if not _COMMAND_NAME.match(program) or _DATA_FILE.search(program):
+        return None, None  # a file name or expression, not a command
+    if program in KEYWORDS:
+        return None, None
+    if script and not (_CMDLET.match(program) or program in SCRIPT_PROGRAMS):
+        return None, None  # inside a script most lines are data
+    if program in SKIP_PROGRAMS:
+        return None, program
+    args = _positional(tokens[1:])
+    if program in ("python", "python3", "py") and "-m" in tokens:
+        index = tokens.index("-m")
+        module = tokens[index + 1] if index + 1 < len(tokens) else ""
+        module = module if module in MODULES else ""
+        return f"{program} -m {module}".strip(), None
+    if program == "uv" and args[:1] == ["run"] and len(args) > 1:
+        inner = _program(args[1])
+        return (f"uv run {inner}" if inner in RUNNERS else "uv run"), None
+    if _subcommand(program, args):
+        return f"{program} {_subcommand(program, args)}", None
+    return program, None
+
+
+def _pipe_parts(segment: str) -> list[str]:
+    """Split one command at top-level `|` (not `||`), outside quotes and groups."""
+    windows = bool(_WINDOWS_PATH.search(segment))
+    parts: list[str] = []
+    start = depth = 0
+    quote: str | None = None
+    ansi = False
+    i, n = 0, len(segment)
+    while i < n:
+        char = segment[i]
+        if quote:
+            if char == "\\" and (quote == '"' or ansi):
+                i += 1
+            elif char == quote:
+                quote, ansi = None, False
+        elif char == "\\" and not windows:
+            i += 1
+        elif segment[i : i + 2] == "$'":
+            quote, ansi = "'", True
+            i += 1
+        elif char in "'\"`":
+            if not (char == "'" and i and segment[i - 1].isalnum()):
+                quote = char
+        elif char in "({":
+            depth += 1
+        elif char in ")}":
+            depth = max(0, depth - 1)
+        elif char == "|" and depth == 0:
+            if segment[i : i + 2] == "||" or (i and segment[i - 1] == "|"):
+                i += 2 if segment[i : i + 2] == "||" else 1
+                continue
+            if i and segment[i - 1] == ">":
+                i += 1  # `>|` forces a redirect; it is no pipe
+                continue
+            parts.append(segment[start:i])
+            start = i + (2 if segment[i : i + 2] == "|&" else 1)
+            i = start
+            continue
+        i += 1
+    parts.append(segment[start:])
+    return [part.strip() for part in parts]
+
+
+def _templates(command: str) -> tuple[list[str], str | None, list[str]]:
+    """(first program of each command, setup fallback, programs on the far side of a `|`).
+
+    The first program is read off the whole command, as before pipes were split, so
+    stored templates keep their meaning; the piped ones are looked up on their own.
+    """
     found: list[str] = []
+    piped: list[str] = []
     fallback = None
     script = bool(_PS_SCRIPT.match(command))
     if script and "\n" in command.strip():
         fallback = SCRIPT
     command = _COMMENT_LINE.sub("", _strip_here_strings(command))
     for segment in _commands(command):
-        if _is_function_def(segment):
-            continue  # `name() {...}` defines a function; it runs nothing
-        tokens = [t for t in _tokens(segment) if not _ASSIGNMENT.match(t)]
-        while tokens and _program(tokens[0]) in WRAPPERS:
-            tokens = tokens[1:]
-            # Options of the wrapper, with their values, are not the program.
-            while tokens:
-                if tokens[0] in WRAPPER_VALUE_FLAGS:
-                    tokens = tokens[2:]
-                elif _WRAPPER_ARG.match(tokens[0]) or _ASSIGNMENT.match(tokens[0]):
-                    tokens = tokens[1:]
-                else:
-                    break
-        if (
-            not tokens
-            or tokens[0].startswith(("#", "$"))
-            or tokens[1:2] == ["()"]
-            or tokens[1:3] == ["(", ")"]
-            or tokens[0] == "function"
+        template, skipped = _segment_template(segment, script)
+        if template:
+            found.append(template)
+        # An output-only program outranks pure setup, so is_compound can see it.
+        elif skipped and (
+            fallback is None or (skipped in OUTPUT_ONLY and fallback not in OUTPUT_ONLY)
         ):
-            continue  # comment, function definition, or PowerShell variable assignment / invocation
-        program = _program(tokens[0])
-        if not _COMMAND_NAME.match(program) or _DATA_FILE.search(program):
-            continue  # a file name or expression, not a command
-        if program in KEYWORDS:
-            continue
-        if script and not (_CMDLET.match(program) or program in SCRIPT_PROGRAMS):
-            continue  # inside a script most lines are data
-        if program in SKIP_PROGRAMS:
-            # An output-only program outranks pure setup, so is_compound can see it.
-            if fallback is None or (program in OUTPUT_ONLY and fallback not in OUTPUT_ONLY):
-                fallback = program if fallback != SCRIPT else fallback
-            continue
-        args = _positional(tokens[1:])
-        if program in ("python", "python3", "py") and "-m" in tokens:
-            index = tokens.index("-m")
-            module = tokens[index + 1] if index + 1 < len(tokens) else ""
-            module = module if module in MODULES else ""
-            found.append(f"{program} -m {module}".strip())
-        elif program == "uv" and args[:1] == ["run"] and len(args) > 1:
-            inner = _program(args[1])
-            found.append(f"uv run {inner}" if inner in RUNNERS else "uv run")
-        elif _subcommand(program, args):
-            found.append(f"{program} {_subcommand(program, args)}")
-        else:
-            found.append(program)
-    return found, fallback
+            fallback = skipped if fallback != SCRIPT else fallback
+        if "|" in segment:
+            for part in _pipe_parts(segment)[1:]:
+                # `a | (b; c)` runs b and c; `a | true` hides how a ended, like `a; true`.
+                for sub in _commands(part):
+                    template, skipped = _segment_template(sub, script)
+                    if template or skipped in OUTPUT_ONLY:
+                        piped.append(template or skipped)
+    return found, fallback, piped
 
 
 def _is_failure_line(line: str) -> bool:
