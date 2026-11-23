@@ -459,6 +459,7 @@ def test_rules_mark_failures_shared_by_several_commands():
 
 
 def test_rules_quote_a_store_path_with_spaces_in_the_next_step(tmp_path, capsys):
+    import os
     import shlex
 
     store = tmp_path / "my logs"
@@ -469,6 +470,9 @@ def test_rules_quote_a_store_path_with_spaces_in_the_next_step(tmp_path, capsys)
     db.close()
     assert main(["rules", "--store", str(store)]) == 0
     last = capsys.readouterr().out.splitlines()[-1]
-    assert f"--store {shlex.quote(str(store))} --to" in last
-    words = shlex.split(last.split(": ", 1)[1])
-    assert words[words.index("--store") + 1] == str(store)
+    if os.name == "nt":
+        assert f'--store "{store}" --to' in last
+    else:
+        assert f"--store {shlex.quote(str(store))} --to" in last
+        words = shlex.split(last.split(": ", 1)[1])
+        assert words[words.index("--store") + 1] == str(store)

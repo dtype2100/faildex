@@ -51,8 +51,13 @@ def _display_store_path(store: Path) -> str:
 
 def _shell_path(store: Path) -> str:
     """A store path the reader can paste back into a shell, `~` kept unquoted."""
+    import os
     import shlex
 
+    if os.name == "nt":
+        # cmd.exe expands neither `~` nor single quotes, so keep the path and use double quotes.
+        raw = str(store)
+        return f'"{raw}"' if any(ch.isspace() or ch in "&|<>^()" for ch in raw) else raw
     shown = _display_store_path(store)
     if shown.startswith("~/"):
         return "~/" + shlex.quote(shown[2:])
