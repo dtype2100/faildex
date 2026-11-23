@@ -12,8 +12,11 @@ retry.
 
 from __future__ import annotations
 
+import os
+import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import Path
 
 RECOVERY_HOPS = 5
 # A warning must be worth the interruption: the failure has to account for at
@@ -201,13 +204,220 @@ def warnings_for_line(
     return templates, found
 
 
-def render(items: list[Failure]) -> str:
-    """Numbered proposals with their evidence pointers."""
-    lines = []
+MAX_DISPLAY_SIG = 79
+LINE_WIDTH = 80
+
+
+def _can_encode(text: str, encoding: str) -> bool:
+    try:
+        text.encode(encoding, errors="strict")
+        return True
+    except (UnicodeEncodeError, LookupError):
+        return False
+
+
+def safe_console_text(text: str, stream=None) -> str:
+    """Replace glyphs the target console cannot encode so printing never crashes."""
+    out_stream = stream if stream is not None else sys.stdout
+    encoding = getattr(out_stream, "encoding", None) or "utf-8"
+    if _can_encode(text, encoding):
+        return text
+    replacements = (("—", "--"), ("·", "|"), ("…", "..."), ("→", "->"), ("✓", "ok"), ("✕", "x"))
+    cleaned = text
+    for glyph, fallback in replacements:
+        if glyph in cleaned and not _can_encode(glyph, encoding):
+            cleaned = cleaned.replace(glyph, fallback)
+    if _can_encode(cleaned, encoding):
+        return cleaned
+    try:
+        return cleaned.encode(encoding, errors="replace").decode(encoding, errors="replace")
+    except LookupError:
+        return cleaned.encode("ascii", errors="replace").decode("ascii")
+
+
+def use_color(stream=None) -> bool:
+    """True only when writing to a live terminal without NO_COLOR / dumb TERM."""
+    out_stream = stream if stream is not None else sys.stdout
+    isatty = getattr(out_stream, "isatty", None)
+    if not callable(isatty) or not isatty():
+        return False
+    if os.environ.get("NO_COLOR"):
+        return False
+    return os.environ.get("TERM") != "dumb"
+
+
+def truncate_words(text: str, limit: int = MAX_DISPLAY_SIG, ellipsis: str = "…") -> str:
+    """Shorten failure text at a word boundary without splitting mask tokens like <path>."""
+    if len(text) <= limit and not (text.endswith("<") or _has_unclosed_tag(text)):
+        return text
+    body_limit = max(1, limit - len(ellipsis))
+    head = text[:body_limit]
+    unclosed = _unclosed_tag_start(head)
+    if unclosed is not None:
+        head = head[:unclosed]
+        # Rewind to the previous word boundary when a mask tag was cut in half.
+        cut = max(head.rfind(" "), head.rfind("\t"))
+        if cut >= len(head) // 3:
+            head = head[:cut]
+    elif len(text) > body_limit and not text[body_limit].isspace():
+        cut = max(head.rfind(" "), head.rfind("\t"))
+        if cut >= len(head) // 3:
+            head = head[:cut]
+    head = head.rstrip(" \t.,;:([")
+    if not head:
+        head = text[:body_limit].rstrip()
+    return head + ellipsis
+
+
+def _unclosed_tag_start(text: str) -> int | None:
+    pos = text.rfind("<")
+    if pos >= 0 and text.find(">", pos) == -1:
+        return pos
+    return None
+
+
+def _has_unclosed_tag(text: str) -> bool:
+    return _unclosed_tag_start(text) is not None
+
+
+def tilde_path(path: str | Path) -> str:
+    """Replace a leading home directory path with `~`."""
+    raw = str(path)
+    home = str(Path.home())
+    if not home:
+        return raw
+    if raw == home:
+        return "~"
+    for sep in ("/", "\\"):
+        if raw.startswith(home + sep):
+            return "~" + raw[len(home) :]
+    return raw
+
+
+def short_pointer(pointer: str, max_len: int = 48) -> str:
+    """One compact log pointer (`path:line`) with `~` home prefix."""
+    short = tilde_path(pointer)
+    if len(short) <= max_len:
+        return short
+    path_part, sep, line_part = short.rpartition(":")
+    if not sep or not line_part.isdigit():
+        path_part, suffix = short, ""
+    else:
+        suffix = f":{line_part}"
+    parts = [p for p in path_part.replace("\\", "/").split("/") if p]
+    if len(parts) <= 2:
+        name = parts[-1] if parts else path_part
+        room = max(16, max_len - len(suffix) - 4)
+        if len(name) > room:
+            return f".../{name[:room]}...{suffix}"
+        return f".../{name}{suffix}"
+    if parts[0] == "~":
+        head = f"~/{parts[1]}" if len(parts) >= 3 else "~"
+    elif path_part.startswith("/"):
+        head = f"/{parts[0]}"
+    else:
+        head = parts[0]
+    tail = parts[-1]
+    if len(tail) > 26:
+        stem, dot, ext = tail.rpartition(".")
+        if dot and len(ext) <= 8:
+            tail = f"{stem[:8]}..{dot}{ext}"
+        else:
+            tail = f"{tail[:18]}..."
+    candidate = f"{head}/.../{tail}{suffix}"
+    if len(candidate) <= max_len:
+        return candidate
+    return f".../{tail}{suffix}"
+
+
+def _plural(count: int, word: str) -> str:
+    return word if count == 1 else f"{word}s"
+
+
+def _subject(item: Failure) -> str:
+    if item.command:
+        return item.command
+    if item.kind == "exit" and " exited " in item.sig:
+        return item.sig.rsplit(" exited ", 1)[0]
+    if item.tools:
+        return item.tools.most_common(1)[0][0]
+    return "command"
+
+
+def _recovery_summary(item: Failure) -> str:
+    """Failed calls that the same command later got past, within RECOVERY_HOPS calls."""
+    return f"{item.recovered:,} of {item.calls:,} recovered within {RECOVERY_HOPS} calls"
+
+
+def _action_line(item: Failure) -> str:
+    """What to do, and how many of the recoveries back it (the `top of recovered` share)."""
+    if not item.fix:
+        return "stop and check before retrying; no recovery on record yet."
+    top = item.fixes.most_common(1)[0][1]
+    share = f"{top:,} of {item.recovered:,} {'recovery' if item.recovered == 1 else 'recoveries'}"
+    if item.fix == RETRY:
+        # Counts cover every command that hit this failure, so name one only when it is alone.
+        what = f"`{_subject(item)}`" if len(item.commands) <= 1 else "the same command"
+        return f"retry {what}; a later try worked in {share}."
+    return f"run `{item.fix}` first; {share} did that."
+
+
+def render(
+    items: list[Failure],
+    *,
+    show_evidence: bool = False,
+    color: bool = False,
+    encoding: str | None = None,
+) -> str:
+    """Readable numbered proposals with counts, recovery clarity, action, and evidence."""
+    if not items:
+        return "No failure has recurred across sessions yet."
+
+    enc = encoding or getattr(sys.stdout, "encoding", None) or "utf-8"
+    dash = "—" if _can_encode("—", enc) else "--"
+    dot = "·" if _can_encode("·", enc) else "|"
+    ellip = "…" if _can_encode("…", enc) else "..."
+
+    def style(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if color else text
+
+    blocks = []
     for number, item in enumerate(items, start=1):
-        lines.append(f"{number}. {item.rule()}")
-        lines.append(f"   evidence: {', '.join(item.evidence)}")
-    return "\n".join(lines) if lines else "No failure has recurred across sessions yet."
+        subject = f"`{_subject(item)}`"
+        if len(item.commands) > 1:
+            others = len(item.commands) - 1
+            subject += f" +{others} more {_plural(others, 'command')}"
+        if item.kind == "text":
+            # Keep the whole first line within LINE_WIDTH columns.
+            room = max(40, LINE_WIDTH - len(f"{number}. {subject} {dash} "))
+            what = truncate_words(item.sig, min(room, MAX_DISPLAY_SIG), ellipsis=ellip)
+        else:
+            code = item.sig.rsplit(" ", 1)[-1]
+            what = f"exited with code {code} (no error output)"
+
+        head = f"{style(f'{number}.', '1')} {style(subject, '1')} {dash} {style(what, '31')}"
+        counts = (
+            f"{len(item.sessions):,} {_plural(len(item.sessions), 'session')}, "
+            f"{item.calls:,} failed {_plural(item.calls, 'call')}"
+        )
+        rec = _recovery_summary(item)
+        rec_styled = style(rec, "32" if item.recovered else "31")
+        stats = f"   {counts} {dot} {rec_styled}"
+        action = f"   {style('Action:', '1;36')} {_action_line(item)}"
+
+        lines = [head, stats, action]
+        if item.evidence:
+            if show_evidence:
+                ev_head = f"   evidence ({len(item.evidence)}):"
+                lines.append(style(ev_head, "2"))
+                for ptr in item.evidence:
+                    lines.append(style(f"     {tilde_path(ptr)}", "2"))
+            else:
+                first_ptr = short_pointer(item.evidence[0])
+                more = f", +{len(item.evidence) - 1} more" if len(item.evidence) > 1 else ""
+                lines.append(style(f"   evidence ({len(item.evidence)}): {first_ptr}{more}", "2"))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def approve(items: list[Failure], numbers: list[int], path) -> list[str]:

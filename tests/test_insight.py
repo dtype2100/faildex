@@ -63,7 +63,11 @@ def test_proposals_rank_recurring_failures_and_read_the_fix_off_the_graph():
 def test_evidence_points_into_the_logs():
     push = proposals(_db())[0]
     assert push.evidence[0] == "demo/s1.jsonl:1"
-    assert "evidence: demo/s1.jsonl:1" in render([push])
+    rendered = render([push])
+    assert "evidence (3): demo/s1.jsonl:1, +2 more" in rendered
+    full = render([push], show_evidence=True)
+    assert "demo/s1.jsonl:1" in full and "demo/s2.jsonl:1" in full and "demo/s3.jsonl:1" in full
+    assert "+2 more" not in full
 
 
 def test_warnings_only_for_commands_with_a_known_recurring_failure():
@@ -96,7 +100,16 @@ def test_cli_check_is_silent_for_unknown_commands(tmp_path, capsys):
     assert main(["check", "ls -la", "--store", str(store)]) == 0
     assert capsys.readouterr().out == ""
     assert main(["rules", "--store", str(store)]) == 0
-    assert capsys.readouterr().out.startswith("1. When `git push`")
+    rules_out = capsys.readouterr().out
+    assert "6 sessions, 6 failed calls, 2 recurring" in rules_out
+    assert "1. `git push` — rejected: non-fast-forward" in rules_out
+    assert "3 sessions, 3 failed calls · 3 of 3 recovered within 5 calls" in rules_out
+    assert "Action: run `git pull` first; 2 of 3 recoveries did that." in rules_out
+    assert "full evidence paths: --evidence" in rules_out
+    assert (
+        f"Write a rule: faildex rules --approve 1 2 --store {store} --to ~/faildex-rules.md"
+        in rules_out
+    )
 
 
 def _store(tmp_path):
@@ -292,3 +305,170 @@ def test_legacy_unpooled_nomatch_keys_in_existing_stores_still_pool_on_query():
     # A non-glob grep command must not emit a warning from the legacy NOMATCH key.
     assert warnings_for_line(db, "grep foo bar.py")[1] == []
     db.close()
+
+
+def test_rules_truncate_at_word_boundaries_and_shorten_home(tmp_path, monkeypatch):
+    from faildex.insight import short_pointer, tilde_path, truncate_words
+
+    long_sig = (
+        "rg: <path>: the filename, directory name, or volume label syntax is incorrect. (os error <"
+    )
+    shortened = truncate_words(long_sig, 79)
+    assert (
+        shortened
+        == "rg: <path>: the filename, directory name, or volume label syntax is incorrect…"
+    )
+    assert "(os error <" not in shortened
+
+    mid_word = (
+        "rg: <path>: io error for operation on <path>: the filename, directory name, or volume labe"
+    )
+    shortened_mid = truncate_words(mid_word, 79)
+    assert (
+        shortened_mid
+        == "rg: <path>: io error for operation on <path>: the filename, directory name, or…"
+    )
+    assert "labe" not in shortened_mid
+
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    deep = f"{fake_home}/.claude/projects/-Users-alice-very-long-workspace-name/01234567-89ab-cdef-0123-456789abcdef.jsonl:42"
+    assert tilde_path(deep).startswith("~/.claude/")
+    compact = short_pointer(deep)
+    assert compact.startswith("~/.claude/.../") and compact.endswith(":42")
+    assert len(compact) <= 48
+
+
+def test_rules_output_color_no_color_and_cp1252_safety(tmp_path, monkeypatch, capsys):
+    import io
+    from collections import Counter
+
+    from faildex.insight import Failure, render, safe_console_text, use_color
+
+    store = _store(tmp_path)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+
+    # Non-TTY stdout (pipe / capsys) has no ANSI escape sequences.
+    assert main(["rules", "--store", str(store)]) == 0
+    piped = capsys.readouterr().out
+    assert "\033[" not in piped
+
+    class FakeTTY(io.StringIO):
+        def isatty(self):
+            return True
+
+    tty = FakeTTY()
+    assert use_color(tty) is True
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert use_color(tty) is False
+
+    item = Failure(
+        sig="rg: <path>: io error for operation on <path>: the filename, directory name, or volume labe",
+        kind="text",
+        calls=7,
+        sessions={"s1", "s2"},
+        fixes=Counter({"retry": 6}),
+        recovered=6,
+        evidence=["demo/s1.jsonl:1"],
+    )
+    item.commands["rg"] = 7
+    cp1252_text = safe_console_text(
+        render([item], encoding="ascii") + " → ✓", io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    )
+    cp1252_text.encode("cp1252", errors="strict")
+    assert "->" in cp1252_text and "ok" in cp1252_text and "..." in cp1252_text
+
+
+def test_rules_cli_marks_public_vs_private_store_and_evidence_flag(tmp_path, monkeypatch, capsys):
+    import shutil
+    from pathlib import Path
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    private = home / ".faildex" / "store"
+    db = relate.connect(str(private))
+    ingest(db, _records())
+    db.commit()
+    db.flush()
+    db.close()
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["rules"]) == 0
+    priv_out = capsys.readouterr().out
+    assert priv_out.startswith("Your logs (~/.faildex/store): 6 sessions, 6 failed calls")
+
+    assert main(["rules", "--evidence"]) == 0
+    ev_out = capsys.readouterr().out
+    assert "demo/s1.jsonl:1" in ev_out and "demo/s2.jsonl:1" in ev_out
+    assert "+2 more" not in ev_out and "full evidence paths" not in ev_out
+
+    public_copy = tmp_path / "pub"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "store", public_copy)
+    assert main(["rules", "--store", str(public_copy), "--top", "2"]) == 0
+    pub_out = capsys.readouterr().out
+    assert "Public demo logs (" in pub_out
+    assert "Showing 2 of " in pub_out and "Note: this is demo data." in pub_out
+    assert "faildex rules --store ~/.faildex/store" in pub_out
+    assert f"--approve 1 2 --store {public_copy}" in pub_out
+
+    # A relative `store/` directory with ingested private logs (no Source nodes) is not public.
+    local_priv = tmp_path / "other_proj" / "store"
+    db2 = relate.connect(str(local_priv))
+    ingest(db2, _records())
+    db2.commit()
+    db2.flush()
+    db2.close()
+    monkeypatch.chdir(tmp_path / "other_proj")
+    assert main(["rules", "--store", "store"]) == 0
+    rel_out = capsys.readouterr().out
+    assert rel_out.startswith("Store (store):") and "Public demo" not in rel_out
+
+
+def test_rules_lines_fit_80_columns_on_the_public_store(monkeypatch, capsys):
+    from pathlib import Path
+
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    assert main(["rules", "--store", "store", "--top", "25"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("Public demo logs (./store): 422 sessions")
+    assert [line for line in out if len(line) > 80] == []
+    assert "a later try worked in" in "\n".join(out)
+
+
+def test_rules_mark_failures_shared_by_several_commands():
+    from collections import Counter
+
+    from faildex.insight import Failure, render
+
+    item = Failure(
+        sig="command timed out after <n> milliseconds",
+        kind="text",
+        calls=5,
+        sessions={"s1", "s2", "s3"},
+        commands=Counter({"Get-ChildItem": 3, "rg": 2}),
+        fixes=Counter({"retry": 2}),
+        recovered=2,
+    )
+    out = render([item])
+    assert out.startswith("1. `Get-ChildItem` +1 more command — command timed out")
+    # The counts cover both commands, so the action must not pin them on one.
+    assert "Action: retry the same command; a later try worked in 2 of 2 recoveries." in out
+
+
+def test_rules_quote_a_store_path_with_spaces_in_the_next_step(tmp_path, capsys):
+    import shlex
+
+    store = tmp_path / "my logs"
+    db = relate.connect(str(store))
+    ingest(db, _records())
+    db.commit()
+    db.flush()
+    db.close()
+    assert main(["rules", "--store", str(store)]) == 0
+    last = capsys.readouterr().out.splitlines()[-1]
+    assert f"--store {shlex.quote(str(store))} --to" in last
+    words = shlex.split(last.split(": ", 1)[1])
+    assert words[words.index("--store") + 1] == str(store)

@@ -211,6 +211,31 @@ cd ~ && faildex rules --approve 1 3   # write the ones you want to ~/faildex-rul
 faildex link      # install the skill and rules, including Codex/Cursor session and shell hooks; --remove undoes it
 ```
 
+Example `faildex rules --top 2` output (on the public store):
+
+```text
+Public demo logs (./store): 422 sessions, 627 failed calls, 25 recurring
+Note: this is demo data. Index your own logs with: faildex ingest
+
+1. `Get-ChildItem` +4 more commands — command timed out after <n> milliseconds
+   52 sessions, 81 failed calls · 38 of 81 recovered within 5 calls
+   Action: retry the same command; a later try worked in 21 of 38 recoveries.
+   evidence (3): codex-trajectories/trajectories.train.jsonl:18, +2 more
+
+2. `git status` — fatal: not a git repository (or any of the parent…
+   24 sessions, 25 failed calls · 0 of 25 recovered within 5 calls
+   Action: stop and check before retrying; no recovery on record yet.
+   evidence (3): codex-trajectories/trajectories.train.jsonl:18, +2 more
+
+Showing 2 of 25 recurring (--top 25 for all); full evidence paths: --evidence
+Write a rule: faildex rules --approve 1 2 --to ~/faildex-rules.md
+```
+
+Counts are per failure, across every command that hit it (`+4 more commands`).
+"Recovered within 5 calls" counts failed calls after which the same command succeeded
+within the next 5 calls; "21 of 38 recoveries" says how many of those took the step in
+the Action line. `--evidence` prints the evidence pointers (up to 3 sessions) in full.
+
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
 `~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.
 

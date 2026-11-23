@@ -205,6 +205,31 @@ cd ~ && faildex rules --approve 1 3   # 원하는 규칙만 ~/faildex-rules.md�
 faildex link      # 스킬·규칙 및 Codex/Cursor 세션·셸 훅 설치. --remove로 되돌림
 ```
 
+`faildex rules --top 2` 출력 예시(공개 스토어 기준):
+
+```text
+Public demo logs (./store): 422 sessions, 627 failed calls, 25 recurring
+Note: this is demo data. Index your own logs with: faildex ingest
+
+1. `Get-ChildItem` +4 more commands — command timed out after <n> milliseconds
+   52 sessions, 81 failed calls · 38 of 81 recovered within 5 calls
+   Action: retry the same command; a later try worked in 21 of 38 recoveries.
+   evidence (3): codex-trajectories/trajectories.train.jsonl:18, +2 more
+
+2. `git status` — fatal: not a git repository (or any of the parent…
+   24 sessions, 25 failed calls · 0 of 25 recovered within 5 calls
+   Action: stop and check before retrying; no recovery on record yet.
+   evidence (3): codex-trajectories/trajectories.train.jsonl:18, +2 more
+
+Showing 2 of 25 recurring (--top 25 for all); full evidence paths: --evidence
+Write a rule: faildex rules --approve 1 2 --to ~/faildex-rules.md
+```
+
+숫자는 실패 하나를 기준으로, 그 실패를 겪은 모든 명령을 합친 값입니다(`+4 more commands`).
+"recovered within 5 calls"는 실패한 호출 뒤 5번 안에 같은 명령이 성공한 횟수이고,
+"21 of 38 recoveries"는 그 복구 가운데 Action 줄의 방법을 쓴 횟수입니다.
+`--evidence`는 근거 위치(세션 최대 3개)를 줄이지 않고 보여 줍니다.
+
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
 `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.
 

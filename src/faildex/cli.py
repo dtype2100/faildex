@@ -43,19 +43,126 @@ def _open(args: argparse.Namespace):
         return None
 
 
+def _display_store_path(store: Path) -> str:
+    from faildex.insight import tilde_path
+
+    return tilde_path(store)
+
+
+def _shell_path(store: Path) -> str:
+    """A store path the reader can paste back into a shell, `~` kept unquoted."""
+    import shlex
+
+    shown = _display_store_path(store)
+    if shown.startswith("~/"):
+        return "~/" + shlex.quote(shown[2:])
+    return shlex.quote(shown)
+
+
+def _store_overview(db, store_path: Path) -> tuple[str, bool, int, int]:
+    """(human label for store, is_public, session count, failed call count)."""
+    import os
+
+    from faildex.store import PRIVATE_STORE, _shipped_store
+
+    sessions = next(iter(db.execute("MATCH (s:Session) RETURN count(s) AS n")))["n"]
+    failed = next(iter(db.execute("MATCH (c:Call) WHERE c.ok = false RETURN count(c) AS n")))["n"]
+    sources = next(iter(db.execute("MATCH (d:Source) RETURN count(d) AS n")))["n"]
+
+    resolved = store_path.expanduser().resolve()
+    private_resolved = PRIVATE_STORE.expanduser().resolve()
+    if resolved == private_resolved:
+        return "Your logs (~/.faildex/store)", False, sessions, failed
+
+    shipped = _shipped_store()
+    cache_root = (
+        Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser().resolve() / "faildex"
+    )
+    is_cached_public = resolved.parent == cache_root and resolved.name.startswith("store-")
+    is_public = bool(
+        sources or is_cached_public or (shipped is not None and resolved == shipped.resolve())
+    )
+    if is_public:
+        if is_cached_public:
+            where = "built-in"
+        elif store_path == Path("store"):
+            where = "./store"
+        else:
+            where = _display_store_path(store_path)
+        return f"Public demo logs ({where})", True, sessions, failed
+    return f"Store ({_display_store_path(store_path)})", False, sessions, failed
+
+
 def _rules(args: argparse.Namespace) -> int:
-    from faildex.insight import approve, proposals, render
+    import sys
+
+    from faildex.insight import approve, proposals, render, safe_console_text, use_color
+    from faildex.store import PRIVATE_STORE
 
     db = _open(args)
     if db is None:
         return 1
-    items = proposals(db, args.min_sessions)[: args.top]
-    db.close()
-    if args.approve:
-        added = approve(items, args.approve, args.to)
-        print(f"added {len(added)} rule(s) to {args.to}")
-        return 0
-    print(render(items))
+    try:
+        all_items = proposals(db, args.min_sessions)
+        items = all_items[: args.top]
+        if args.approve:
+            added = approve(items, args.approve, args.to)
+            print(f"added {len(added)} rule(s) to {args.to}")
+            return 0
+        label, is_public, sessions, failed = _store_overview(db, args.store)
+    finally:
+        db.close()
+
+    color = use_color(sys.stdout)
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+
+    def style(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if color else text
+
+    total = len(all_items)
+    recurring = f", {total:,} recurring" if total else ""
+    lines = [style(f"{label}: {sessions:,} sessions, {failed:,} failed calls{recurring}", "1")]
+    if is_public:
+        private = PRIVATE_STORE.expanduser()
+        if (
+            private / "manifest.json"
+        ).is_file() and args.store.expanduser().resolve() != private.resolve():
+            hint = "Your logs: faildex rules --store ~/.faildex/store"
+        else:
+            hint = "Index your own logs with: faildex ingest"
+        lines.append(style(f"Note: this is demo data. {hint}", "33"))
+    lines.append("")
+    lines.append(
+        render(
+            items,
+            show_evidence=args.evidence,
+            color=color,
+            encoding=encoding,
+        )
+    )
+    if items:
+        lines.append("")
+        more = []
+        if len(items) < total:
+            more.append(f"Showing {len(items)} of {total:,} recurring (--top {total} for all)")
+        if not args.evidence and any(len(item.evidence) > 1 for item in items):
+            more.append("full evidence paths: --evidence")
+        if more:
+            lines.append("; ".join(more))
+        picks = "1 3" if len(items) >= 3 else " ".join(str(i) for i in range(1, len(items) + 1))
+        extra = []
+        if getattr(args, "store_given", False):
+            extra.append(f"--store {_shell_path(args.store)}")
+        if args.min_sessions != 2:
+            extra.append(f"--min-sessions {args.min_sessions}")
+        suffix = f" {' '.join(extra)}" if extra else ""
+        lines.append(
+            style(
+                f"Write a rule: faildex rules --approve {picks}{suffix} --to ~/faildex-rules.md",
+                "1",
+            )
+        )
+    print(safe_console_text("\n".join(lines), sys.stdout))
     return 0
 
 
@@ -167,9 +274,10 @@ def _ingest(args: argparse.Namespace) -> int:
         found = counts(db)
     finally:
         db.close()
-    print(f"ingested {written:,} calls into {args.store}")
+    where = _display_store_path(args.store)
+    print(f"ingested {written:,} calls from current logs into {where}")
     print(
-        f"  sessions {found['Session']:,}  calls {found['Call']:,}  "
+        f"  store total: sessions {found['Session']:,}  calls {found['Call']:,}  "
         f"failed {found['failed calls']:,}  failure keys {found['ErrorSig']:,}"
     )
     return 0
@@ -200,15 +308,21 @@ def _report(args: argparse.Namespace) -> int:
 
 def _demo(args: argparse.Namespace) -> int:
     """Rules, a pre-run check and the evaluation, on the public store that ships with faildex."""
+    import sys
+
     from faildex.evaluate import report
     from faildex.hook import notice_for
-    from faildex.insight import proposals, render, warnings_for
+    from faildex.insight import proposals, render, safe_console_text, use_color, warnings_for
     from faildex.store import open_store, public_store
 
+    color = use_color(sys.stdout)
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
     db = open_store(public_store())
     try:
         print("== 1. Failures that came back across sessions, with the recovery on record\n")
-        print(render(proposals(db)[:3]))
+        print(
+            safe_console_text(render(proposals(db)[:3], color=color, encoding=encoding), sys.stdout)
+        )
         print("\n== 2. Before running a command (what the Claude Code hook prints)\n")
         for command in ("git status", "ls"):
             found = warnings_for(db, command)
@@ -251,6 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     rules = commands.add_parser("rules", help="propose rules from recurring failures")
     rules.add_argument("--approve", type=int, nargs="+", metavar="N", help="write these proposals")
     rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help="rules file")
+    rules.add_argument(
+        "--evidence",
+        action="store_true",
+        help="show the evidence log pointers (up to 3 per failure) in full",
+    )
     rules.set_defaults(run=_rules)
 
     linker = commands.add_parser(
@@ -363,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.command:
         parser.print_help()
         return 0
+    args.store_given = getattr(args, "store", None) is not None
     if getattr(args, "store", "set") is None:
         from faildex.store import PRIVATE_STORE, default_store
 
