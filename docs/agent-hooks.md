@@ -28,6 +28,9 @@ are pooled across commands under `no matches found: <glob>` and warn before any
 command line containing an unquoted glob once seen in at least `min_sessions`
 sessions; `MIN_RATE` is not applied to that shell-level count because there is no
 `zsh` command node in the graph and unquoted-glob detection gates when it fires.
+zsh `=` expansion failures (`(eval):<n>: ==== not found`, from an unquoted word
+starting with `==` such as `echo =====` or `[ a == b ]`) are pooled the same way
+under `=<word> not found` and warn before a command line with such a word.
 Lookup errors do not block shell execution.
 
 Codex requires new or changed hooks to be reviewed and trusted in `/hooks`.

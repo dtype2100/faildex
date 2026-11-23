@@ -37,7 +37,7 @@ faildex는 이것을 다음 도구로 바꿉니다.
 | 실행 | 얻는 것 |
 |---|---|
 | `faildex rules` | 세션을 넘어 되풀이된 실패에 대한 규칙 제안. 각 제안에는 기록된 복구 방법과 로그 위치가 붙습니다. 승인한 것만 규칙 파일에 기록됩니다. |
-| `faildex hook` | Claude Code `PreToolUse` 훅. 되풀이된 실패가 알려진 명령을 실행하기 전에 세션에 한 줄 알림을 띄우고, Claude에게 앞선 세션이 배운 내용을 전달합니다. 그 실패가 해당 명령 실행의 3% 이상이거나(명령을 합쳐 묶은 `zsh` `no matches found` 글롭 실패는 `min_sessions` 세션 이상에서 반복되고 명령줄에 따옴표 없는 글롭이 있을 때) 말하고, 그 밖에는 아무것도 출력하지 않습니다. |
+| `faildex hook` | Claude Code `PreToolUse` 훅. 되풀이된 실패가 알려진 명령을 실행하기 전에 세션에 한 줄 알림을 띄우고, Claude에게 앞선 세션이 배운 내용을 전달합니다. 그 실패가 해당 명령 실행의 3% 이상이거나(명령을 합쳐 묶은 `zsh` 셸 실패, 즉 따옴표 없는 글롭의 `no matches found`와 `==`로 시작하는 따옴표 없는 단어의 `=<word> not found`는 `min_sessions` 세션 이상에서 반복되고 명령줄에 그 구문이 있을 때) 말하고, 그 밖에는 아무것도 출력하지 않습니다. |
 | `faildex mcp` | MCP 도구 `preflight`, `evidence`, `recurring`. 어떤 MCP 에이전트든 실행 전에 물어볼 수 있습니다. |
 | `faildex eval` | 위 수치를 저장소의 스토어로 다시 계산합니다. 공개 데이터셋이 없는 내 스토어(`--store ~/.faildex/store`)에서는 같은 분할을 에이전트별로 합니다. |
 | `faildex ingest` | 내 Claude Code, Codex CLI, Cursor, Antigravity 기록을 내 컴퓨터의 개인 스토어(`~/.faildex/store`)에 적재합니다. 위의 모든 명령이 이 스토어를 씁니다. |
@@ -166,7 +166,7 @@ CLI 확인, 기본 경로 적재, 임시 프로필의 `link`·`link --remove`가
 
 ### 저장소에서 직접
 
-필요한 것: Python 3.10 이상과 uv. CI에서 macOS와 Linux로 시험합니다.
+필요한 것: Python 3.10 이상과 uv. CI에서 macOS, Linux, Windows로 시험합니다.
 
 ```bash
 git clone https://github.com/dtype2100/faildex && cd faildex
@@ -229,6 +229,10 @@ Write a rule: faildex rules --approve 1 2 --to ~/faildex-rules.md
 "recovered within 5 calls"는 실패한 호출 뒤 5번 안에 같은 명령이 성공한 횟수이고,
 "21 of 38 recoveries"는 그 복구 가운데 Action 줄의 방법을 쓴 횟수입니다.
 `--evidence`는 근거 위치(세션 최대 3개)를 줄이지 않고 보여 줍니다.
+
+`--store`가 없으면 명령은 `FAILDEX_STORE` 환경 변수가 가리키는 스토어를, 없으면 `./store`(저장소 안),
+`~/.faildex/store`, 공개 데모 스토어 순으로 씁니다. `report`는 `./store`보다 `~/.faildex/store`를 먼저 찾고,
+`ingest`는 언제나 `~/.faildex/store`에 쓰며, `export-web`은 `./store`나 공개 데모 스토어를 읽고 다른 스토어는 `--store`로 넘길 때만 내보냅니다.
 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
 `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.
@@ -321,7 +325,7 @@ PowerShell, 다른 하나는 Linux의 bash라서 둘 다에 나오는 실패가 
 | 기준 | 볼 곳 |
 |---|---|
 | Relate와 연결된 맥락의 활용 | 공유 `Command`/`ErrorSig` 노드가 있는 스키마, `NEXT` 경로로 읽는 복구, 제약, 커밋된 디렉터리 스토어, 쓰는 쪽 옆의 읽기 전용 읽는 쪽, 브라우저 데모의 Relate WebAssembly에서 도는 같은 그래프와 질의, 실패마다 그려지는 이웃 |
-| 기능 | 한 줄 설치와 `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; Relate WebAssembly 브라우저 데모; macOS·Linux CI |
+| 기능 | 한 줄 설치와 `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; Relate WebAssembly 브라우저 데모; macOS·Linux·Windows CI |
 | 유용성 | 뒤 기간 실패의 68%가 이미 그래프에 있었음; 실제 Claude Code 세션에서 Claude가 훅의 알림을 근거로 재시도하지 않음; 되풀이된 실패에만 경고하고 나머지에는 침묵; 작성자 기록에서 세 에이전트가 공유한 실패 키 12개 |
 | 문서와 재현성 | 이 파일, `docs/schema.md`, `docs/evaluation.md`(방법의 각 규칙을 지키는 테스트와 짝지음); 모든 수치는 커밋된 스토어에서 `make eval`로 나오고, 문서가 다르면 테스트가 실패하며, WebAssembly 빌드도 같은 수치에 도달 |
 | 창의성 | 한 에이전트가 배운 실패가 다음 세션의 규칙과 경고가 되고, 로그 위치가 근거로 붙음 |

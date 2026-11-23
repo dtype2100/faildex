@@ -21,6 +21,8 @@ OPTIONAL MATCH (c)-[:FAILED_WITH]->(e:ErrorSig)
 RETURN s.agent AS agent, s.id AS session, substring(c.ts, 0, 10) AS day, c.ok AS ok, e.sig AS sig
 """
 
+_UNDATED = "MATCH (c:Call) WHERE c.ts IS NULL RETURN count(c) AS n"
+
 _SHARED = """
 MATCH (a:Session)-[:HAS_CALL]->(:Call)-[:FAILED_WITH]->(e:ErrorSig)
 WITH e, collect(DISTINCT a.agent) AS agents
@@ -101,18 +103,24 @@ def render(db, split: str | None, key: str | None, hook_log: Path | None = None)
     shared = next(iter(db.execute(_SHARED)))["n"]
     lines += [f"failure keys seen under more than one agent: {shared}", ""]
 
-    label = f'failed with "{key}"' if key else "matched"
-    head = (
-        f"{'period':<20}{'days':>6}{'sessions':>10}{'calls':>9}{'failed':>8}"
-        f"{'per 1000':>10}  {label:>30}{'per 1000':>10}"
-    )
+    head = f"{'period':<20}{'days':>6}{'sessions':>10}{'calls':>9}{'failed':>8}{'per 1000':>10}"
+    if key:  # the matched column means nothing without --key
+        label = f'failed with "{key}"'
+        head += f"  {label:>30}{'per 1000':>10}"
     with_log = hook_log is not None
     lines.append(head + (f"{'hook warnings':>15}" if with_log else ""))
     for p in periods(db, split, key, hook_log):
         row = (
             f"{p.name:<20}{len(p.days):>6}{len(p.sessions):>10,}{p.calls:>9,}{p.failed:>8,}"
-            f"{p.rate(p.failed):>10}  {p.matched:>30,}{p.rate(p.matched):>10}"
+            f"{p.rate(p.failed):>10}"
         )
+        if key:
+            row += f"  {p.matched:>30,}{p.rate(p.matched):>10}"
         lines.append(row + (f"{p.warnings:>15,}" if with_log else ""))
     lines.append("per 1000 = per thousand calls. An observation, not a controlled comparison.")
+    undated = next(iter(db.execute(_UNDATED)))["n"]
+    if undated:
+        lines.append(f"{undated:,} call(s) without a timestamp are not counted above.")
+    if split:
+        lines.append("A session with calls on both sides of the split counts in both periods.")
     return "\n".join(lines)

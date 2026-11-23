@@ -87,8 +87,11 @@ SIGNATURES = [
     ("(eval):3: no matches found: --include=*.py", "no matches found: <glob>"),
     ("zsh:1: no matches found: .aider*", "no matches found: <glob>"),
     ("zsh:12: no matches found: src/*.yaml", "no matches found: <glob>"),
-    ("Exit code 1\n(eval):1: ==== not found", "(eval):<n>: ==== not found"),
-    ("(eval):3: ===== not found", "(eval):<n>: ===== not found"),
+    ("Exit code 1\n(eval):1: ==== not found", "=<word> not found"),
+    ("(eval):3: ===== not found", "=<word> not found"),
+    ("zsh:1: = not found", "=<word> not found"),
+    ("(eval):2: =tests not found", "=<word> not found"),
+    ("(eval):1: command not found: foo", "(eval):<n>: command not found: foo"),
     (
         "Traceback (most recent call last):\n  File \"/a/b.py\", line 3\nKeyError: 'name'",
         "keyerror: <s>",
@@ -664,3 +667,62 @@ def test_normalize_linear_time_on_adversarial_10k_inputs(text):
         fn(text)
         elapsed = time.monotonic() - started
         assert elapsed < 0.5, f"{fn.__name__} took {elapsed:.3f}s on len={len(text)}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo =====",
+        "cat x; echo ====",
+        '[ "$a" == b ] && echo y',
+        "echo $(echo ====)",
+        "(echo ==tests)",
+    ],
+)
+def test_unquoted_double_equals_words_are_found(command):
+    from faildex.normalize import has_unquoted_equals
+
+    assert has_unquoted_equals(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo '====='",
+        'echo "====="',
+        r"echo \=====",
+        "FOO==1 make",
+        "git log --format==%h",
+        "[[ $a == b ]]",
+        "echo a==b",
+        "# =====",
+        "echo =foo",
+        "printf '%s' prefix\\ ====",
+        "printf '%s' prefix\\ ==== 'C:\\temp\\x'",
+        "cat <<EOF\n=====\nEOF",
+        "ls",
+    ],
+)
+def test_quoted_or_mid_word_equals_are_not(command):
+    from faildex.normalize import has_unquoted_equals
+
+    assert not has_unquoted_equals(command)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Token-shaped strings are assembled so the source holds none for secret scanners.
+        "error: api_key=" + "sk_" + "live_FAKEDEMO1234567890",
+        "fatal: token: ghp_ABCDEFGHIJKLMNOPQRSTuvwxyz0123",
+        "Error: invalid password=hunter2hunter2",
+        "error: " + "AKIA" + "ABCDEFGHIJKLMNOP rejected",
+        "error: bad header Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc",
+        "error: slack xoxb-1234567890-abcdefghij failed",
+    ],
+)
+def test_secrets_never_reach_a_signature(text):
+    sig = error_signature(text)
+    assert sig and "<secret>" in sig
+    for leaked in ("fakedemo", "ghp_abc", "hunter2", "akiaabc", "eyjhbg", "xoxb-123"):
+        assert leaked not in sig

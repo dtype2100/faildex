@@ -131,13 +131,13 @@ class Failure:
 
 def failures(db, command: str | None = None) -> dict[str, Failure]:
     """Failure keys with their recoveries: all of them, or those of one command."""
-    from faildex.normalize import NOMATCH_SIG, is_nomatch_sig
+    from faildex.normalize import shell_sig
 
     scope = _FOR_COMMAND if command else _ALL
     params = {"command": command} if command else {}
     found: dict[str, Failure] = {}
     for row in db.execute(scope + _FAILURES, params):
-        sig = NOMATCH_SIG if is_nomatch_sig(row["sig"]) else row["sig"]
+        sig = shell_sig(row["sig"]) or row["sig"]
         item = found.setdefault(sig, Failure(sig, row["kind"] or "text"))
         item.calls += 1
         fresh = row["session"] not in item.sessions
@@ -151,7 +151,7 @@ def failures(db, command: str | None = None) -> dict[str, Failure]:
         if row["path"] and fresh and len(item.evidence) < 3 and pointer not in item.evidence:
             item.evidence.append(pointer)
     for row in db.execute(scope + _RECOVERIES, params):
-        sig = NOMATCH_SIG if is_nomatch_sig(row["sig"]) else row["sig"]
+        sig = shell_sig(row["sig"]) or row["sig"]
         item = found.get(sig)
         if item is None:
             continue
@@ -186,21 +186,36 @@ def warnings_for_line(
 
     A compound line is looked up part by part, so `ls && git status` warns for git.
     """
-    from faildex.normalize import NOMATCH_SIG, command_templates, has_unquoted_glob, is_nomatch_sig
+    from faildex.normalize import (
+        EQUALS_SIG,
+        NOMATCH_SIG,
+        command_templates,
+        has_unquoted_equals,
+        has_unquoted_glob,
+        shell_sig,
+    )
 
     templates = command_templates(line)
     found = [
         (t, item)
         for t in templates
         for item in warnings_for(db, t, min_sessions)
-        if not is_nomatch_sig(item.sig)
+        if shell_sig(item.sig) is None
     ]
-    if has_unquoted_glob(line):
-        # NOMATCH happens in the shell before any program runs, so pool its evidence.
-        item = failures(db).get(NOMATCH_SIG)
-        if item and len(item.sessions) >= min_sessions:
-            item.commands = Counter({"zsh": item.calls})
-            found.append(("zsh", item))
+    # NOMATCH and `=` expansion happen in the shell before any program runs, so
+    # their evidence is pooled across commands and gated on the line itself.
+    shell = [
+        sig
+        for sig, present in ((NOMATCH_SIG, has_unquoted_glob), (EQUALS_SIG, has_unquoted_equals))
+        if present(line)
+    ]
+    if shell:
+        pooled = failures(db)
+        for sig in shell:
+            item = pooled.get(sig)
+            if item and len(item.sessions) >= min_sessions:
+                item.commands = Counter({"zsh": item.calls})
+                found.append(("zsh", item))
     return templates, found
 
 

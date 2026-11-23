@@ -12,7 +12,9 @@ failure, and what the session did next that worked.
 
 Run `faildex check "<the command>"`. Each line it prints is a failure this
 command has hit in at least two earlier sessions, with the recovery on record.
-No output means nothing is known; proceed normally.
+It stays silent for failures that are under 3% of the command's recorded runs,
+so no output means nothing frequent is known, not that the command never failed;
+proceed normally. `faildex rules` lists every recurring failure.
 
 If the MCP server is connected, call `preflight` with the command instead, and
 `evidence` with a failure key to see the sessions and log lines behind it.

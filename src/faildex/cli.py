@@ -182,6 +182,10 @@ def _link(args: argparse.Namespace) -> int:
     if not args.remove and not args.dry_run:
         where = str(args.rules.expanduser().resolve()).replace(str(Path.home()), "~", 1)
         print(f"rules file: {where}  (new sessions read it and use the skill)")
+        print(
+            "Claude Code warnings before each command: add `faildex hook` as a PreToolUse "
+            "hook in ~/.claude/settings.json (see the README)"
+        )
     return 0
 
 
@@ -292,20 +296,50 @@ def _ingest(args: argparse.Namespace) -> int:
 
 
 def _export_web(args: argparse.Namespace) -> int:
-    from faildex.export import write
+    """The browser demo is meant to be published, so it never picks your own logs unasked.
 
+    Without `--store` it ignores FAILDEX_STORE too: only an explicit option exports a store
+    that may hold your own logs.
+    """
+    from faildex.export import write
+    from faildex.store import public_store
+
+    if getattr(args, "store", None) is None:
+        if (Path("store") / "manifest.json").is_file():
+            args.store = Path("store")
+        else:
+            args.store = public_store()
     db = _open(args)
     if db is None:
         return 1
-    size = write(db, args.out)
-    db.close()
-    print(f"wrote {args.out} ({size / 1e6:.2f} MB)")
+    try:
+        size = write(db, args.out)
+        local = next(
+            iter(
+                db.execute(
+                    "MATCH (s:Session) WHERE NOT (s)-[:FROM]->(:Source) RETURN count(s) AS n"
+                )
+            )
+        )["n"]
+    finally:
+        db.close()
+    print(f"wrote {args.out} ({size / 1e6:.2f} MB) from {args.store}")
+    if local:
+        print(
+            f"note: {local:,} session(s) come from your own logs, with local file paths; "
+            "do not publish this file"
+        )
     return 0
 
 
 def _report(args: argparse.Namespace) -> int:
     from faildex.report import render
 
+    if args.hook_log is not None and not args.hook_log.is_file():
+        print(
+            f"error: no hook log at {args.hook_log}; it is the file given to `faildex hook --log`"
+        )
+        return 1
     db = _open(args)
     if db is None:
         return 1
@@ -354,6 +388,26 @@ def _sources(args: argparse.Namespace) -> int:
     for source in SOURCES:
         print(source.name, source.repo, source.revision)
     return 0
+
+
+def _positive(value: str) -> int:
+    number = int(value) if value.lstrip("-").isdigit() else None
+    if number is None or number < 1:
+        raise argparse.ArgumentTypeError(f"expected a whole number of 1 or more, got {value!r}")
+    return number
+
+
+def _day(value: str) -> str:
+    """A YYYY-MM-DD day; the report compares it as text with the stored dates."""
+    import re
+    from datetime import date
+
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return date.fromisoformat(value).isoformat()
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError(f"expected a day as YYYY-MM-DD, got {value!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -415,7 +469,9 @@ def main(argv: list[str] | None = None) -> int:
         "report", help="counts before and after a date, for your own store"
     )
     report.add_argument("--store", type=Path, default=None, help="store directory")
-    report.add_argument("--split", metavar="YYYY-MM-DD", help="compare before and from this day")
+    report.add_argument(
+        "--split", metavar="YYYY-MM-DD", type=_day, help="compare before and from this day"
+    )
     report.add_argument("--key", help="count failures whose key contains this text")
     report.add_argument("--hook-log", type=Path, default=None, help="the file given to hook --log")
     report.set_defaults(run=_report)
@@ -426,8 +482,10 @@ def main(argv: list[str] | None = None) -> int:
 
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
         sub.add_argument("--store", type=Path, default=None, help="store directory")
-        sub.add_argument("--min-sessions", type=int, default=2, help="sessions a failure must span")
-        sub.add_argument("--top", type=int, default=top, help="how many to show")
+        sub.add_argument(
+            "--min-sessions", type=_positive, default=2, help="sessions a failure must span"
+        )
+        sub.add_argument("--top", type=_positive, default=top, help="how many to show")
 
     ingest = commands.add_parser(
         "ingest", help="read your own agent logs into a private store on this machine"
@@ -477,7 +535,12 @@ def main(argv: list[str] | None = None) -> int:
 
     web = commands.add_parser("export-web", help="write the store as JSON for the browser demo")
     web.add_argument("--out", type=Path, default=Path("site/data.json"), help="output file")
-    web.add_argument("--store", type=Path, default=None, help="store directory")
+    web.add_argument(
+        "--store",
+        type=Path,
+        default=argparse.SUPPRESS,
+        help="store directory (default: ./store or the public demo store; FAILDEX_STORE is ignored)",
+    )
     web.set_defaults(run=_export_web)
 
     demo = commands.add_parser("demo", help="see faildex work on the public logs it ships with")
@@ -492,12 +555,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args.store_given = getattr(args, "store", None) is not None
     if getattr(args, "store", "set") is None:
+        import os
+
         from faildex.store import PRIVATE_STORE, default_store
 
         private = PRIVATE_STORE.expanduser()
         if args.command == "ingest":
             args.store = private
-        elif args.command == "report" and (private / "manifest.json").is_file():
+        elif (
+            args.command == "report"
+            and not os.environ.get("FAILDEX_STORE")
+            and (private / "manifest.json").is_file()
+        ):
             args.store = private  # report is about your own logs, even inside a checkout
         else:
             args.store = default_store()

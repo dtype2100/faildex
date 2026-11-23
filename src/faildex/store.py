@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import relate
@@ -26,7 +27,9 @@ def open_store(path: str | Path, read_only: bool = True):
     """Connect to the store at `path`. Raises FileNotFoundError when there is none."""
     path = Path(path)
     if not (path / "manifest.json").is_file():
-        raise FileNotFoundError(f"no store at {path}; run `make build-store` first")
+        raise FileNotFoundError(
+            f"no store at {path}; `faildex ingest --store {path}` creates one from your logs"
+        )
     if not read_only:
         return relate.connect(str(path))
     try:
@@ -64,17 +67,26 @@ def public_store() -> Path:
         / f"store-{digest}"
     )
     if not (cache / "manifest.json").is_file():
-        tmp = cache.with_name(cache.name + ".tmp")
-        shutil.rmtree(tmp, ignore_errors=True)
-        tmp.mkdir(parents=True)
-        for part in STORE_PARTS:
-            src = shipped / part
-            if src.is_dir():
-                shutil.copytree(src, tmp / part)
-            elif src.is_file():
-                shutil.copy2(src, tmp / part)
-        shutil.rmtree(cache, ignore_errors=True)
-        tmp.rename(cache)
+        # A private temporary folder per process, so two first runs cannot trip each other.
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix=cache.name + ".tmp-", dir=cache.parent))
+        try:
+            for part in STORE_PARTS:
+                src = shipped / part
+                if src.is_dir():
+                    shutil.copytree(src, tmp / part)
+                elif src.is_file():
+                    shutil.copy2(src, tmp / part)
+            try:
+                tmp.rename(cache)
+            except OSError:
+                # Another process finished first (keep its copy), or an old partial folder
+                # without a manifest is in the way (replace it once).
+                if not (cache / "manifest.json").is_file():
+                    shutil.rmtree(cache, ignore_errors=True)
+                    tmp.rename(cache)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     return cache
 
 

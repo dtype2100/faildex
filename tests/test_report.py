@@ -83,3 +83,35 @@ def test_hook_log_records_the_template_only_and_report_counts_it(tmp_path, capsy
 
     assert main(["report", "--store", str(store), "--hook-log", str(log)]) == 0
     assert "hook warnings" in capsys.readouterr().out
+
+
+def test_report_rejects_a_split_that_is_not_a_day(tmp_path, capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        main(["report", "--store", str(tmp_path), "--split", "2026/11/20"])
+    assert "YYYY-MM-DD" in capsys.readouterr().err
+
+
+def test_report_refuses_a_missing_hook_log(tmp_path, capsys):
+    assert main(["report", "--store", str(tmp_path), "--hook-log", str(tmp_path / "no.jsonl")]) == 1
+    assert "no hook log" in capsys.readouterr().out
+
+
+def test_report_shows_the_matched_column_only_with_a_key():
+    db = _db()
+    plain = render(db, "2026-11-15", None)
+    keyed = render(db, "2026-11-15", "not found")
+    db.close()
+    assert "matched" not in plain and "failed with" not in plain
+    assert 'failed with "not found"' in keyed
+    assert "counts in both periods" in plain
+
+
+def test_report_says_how_many_calls_had_no_timestamp():
+    db = relate.connect(":memory:")
+    undated = CallRecord(agent="claude_code", session_id="u", seq=0, tool="Bash", ok=True)
+    ingest(db, [*_records(), undated])
+    out = render(db, None, None)
+    db.close()
+    assert "1 call(s) without a timestamp are not counted above." in out

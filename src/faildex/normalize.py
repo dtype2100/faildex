@@ -161,6 +161,24 @@ _ERROR_WORDS = re.compile(
     re.IGNORECASE,
 )
 _MASKS = [
+    # Secrets first, before any other mask can split them: `api_key=...`, `token: ...`,
+    # and token shapes that need no label (sk-..., ghp_..., xoxb-..., AKIA..., JWTs).
+    (
+        re.compile(
+            r"\b((?:api|access|auth|secret|private)?[_-]?(?:key|token|secret)|password|passwd)"
+            r"(\s*[=:]\s*)[^\s,;'\"`]{6,}",
+            re.IGNORECASE,
+        ),
+        r"\1\2<secret>",
+    ),
+    (
+        re.compile(
+            r"\b(?:sk|pk|rk)[-_](?:live|test|proj|ant)?[-_]?[A-Za-z0-9_\-]{12,}"
+            r"|\bgh[pousr]_[A-Za-z0-9]{20,}|\bxox[abprs]-[A-Za-z0-9\-]{10,}"
+            r"|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+"
+        ),
+        "<secret>",
+    ),
     # A quoted string of any length, then one that never closes (the scan may
     # have cut it). A quote right after a letter is an apostrophe, not a string.
     (re.compile(r"(?<![A-Za-z0-9])(['\"`]).*?\1"), "<s>"),
@@ -187,6 +205,11 @@ _NOMATCH = re.compile(r"^(?:\(eval\)|zsh):(?:\d+:)?\s*no matches found:\s+\S+", 
 _LEGACY_NOMATCH = re.compile(
     r"^(?:\(eval\)|zsh):(?:<n>:|\d+:)?\s*no matches found:\s+\S+", re.IGNORECASE
 )
+# zsh `=` expansion: an unquoted word that starts with `==` (`echo =====`, `[ a == b ]`)
+# makes zsh look up a command named after the rest, `(eval):1: ==== not found`. Like
+# NOMATCH it happens in the shell before any program runs, whatever the program is.
+EQUALS_SIG = "=<word> not found"
+_EQUALS = re.compile(r"^(?:\(eval\)|zsh):(?:<n>:|\d+:)?\s*=\S* not found$", re.IGNORECASE)
 # "<file>:<line>:" opens a compiler message or a line of search output; only the
 # first is a failure, and it says so right after the position.
 _LOCATED = re.compile(r"^(?:\S+?\.\w{1,6}[:\-])?\d+[:\-](?:\d+[:\-])?\s*(.*)$")
@@ -276,7 +299,7 @@ def _bracket_glob_end(text: str, start: int) -> tuple[bool, int]:
 
 
 def _scan_shell(text: str, mode: str) -> bool:
-    """Single-pass O(N) iterative scanner for multiline arith, unquoted `||`, or globs."""
+    """Single-pass O(N) iterative scanner for multiline arith, unquoted `||`, globs or `==` words."""
     windows = bool(_WINDOWS_PATH.search(text))
     stack: list[list] = []  # frames: [kind, depth]
     arith_depth = 0
@@ -286,6 +309,7 @@ def _scan_shell(text: str, mode: str) -> bool:
     last_win_pos = -1
     last_win_j = 0
     last_win_res = False
+    escaped_end = -1
     i, n = 0, len(text)
 
     def _push(kind: str, depth: int) -> None:
@@ -386,10 +410,11 @@ def _scan_shell(text: str, mode: str) -> bool:
 
         if (
             ch == "\\"
-            and ((not _in_win_path_at(i)) if mode == "glob" else (not windows))
+            and ((not _in_win_path_at(i)) if mode in ("glob", "equals") else (not windows))
             and i + 1 < n
             and text[i + 1] != "\n"
         ):
+            escaped_end = i + 2  # an escaped space joins words, it does not end one
             i += 2
             continue
 
@@ -455,7 +480,7 @@ def _scan_shell(text: str, mode: str) -> bool:
             continue
 
         if (
-            mode == "glob"
+            mode in ("glob", "equals")
             and text[i : i + 2] == "[["
             and (i == 0 or text[i - 1].isspace())
             and (i + 2 == n or text[i + 2].isspace())
@@ -499,6 +524,13 @@ def _scan_shell(text: str, mode: str) -> bool:
         active = top in (None, "subst", "bt")
         if active:
             if mode == "or" and text[i : i + 2] == "||":
+                return True
+            if (
+                mode == "equals"
+                and text[i : i + 2] == "=="
+                and (i == 0 or text[i - 1] in " \t\n;|&(")
+                and i != escaped_end
+            ):
                 return True
             if mode == "glob":
                 if ch in "*?":
@@ -797,6 +829,20 @@ def is_nomatch_sig(sig: str) -> bool:
     return sig == NOMATCH_SIG or bool(_LEGACY_NOMATCH.match(sig))
 
 
+def is_equals_sig(sig: str) -> bool:
+    """True for the pooled zsh `=` expansion key or an older unpooled one."""
+    return sig == EQUALS_SIG or bool(_EQUALS.match(sig))
+
+
+def shell_sig(sig: str) -> str | None:
+    """The pooled key of a shell-level zsh failure (NOMATCH or `=` expansion), else None."""
+    if is_nomatch_sig(sig):
+        return NOMATCH_SIG
+    if is_equals_sig(sig):
+        return EQUALS_SIG
+    return None
+
+
 def _peel_simple_group(segment: str) -> str:
     """Iteratively unwrap outer `( ... )` / `{ ... }` when no split chars exist inside."""
     lo, hi = 0, len(segment)
@@ -815,8 +861,8 @@ def _peel_simple_group(segment: str) -> str:
     return segment[lo:hi]
 
 
-def has_unquoted_glob(command: str) -> bool:
-    """True when an executable part of `command` contains an unquoted shell glob."""
+def _has_unquoted(command: str, mode: str) -> bool:
+    """True when an executable part of `command` matches the scanner `mode` unquoted."""
     if _skip_command(command):
         return False
     cleaned = _COMMENT_LINE.sub("", _strip_here_strings(command))
@@ -837,9 +883,23 @@ def has_unquoted_glob(command: str) -> bool:
             ):
                 pending.append(segment[1:-1])
                 continue
-            if _scan_shell(segment, "glob"):
+            if _scan_shell(segment, mode):
                 return True
     return False
+
+
+def has_unquoted_glob(command: str) -> bool:
+    """True when an executable part of `command` contains an unquoted shell glob."""
+    return _has_unquoted(command, "glob")
+
+
+def has_unquoted_equals(command: str) -> bool:
+    """True when an executable part of `command` has an unquoted word starting with `==`.
+
+    zsh expands such a word (`=====`, the `==` of `[ a == b ]`) to the path of a
+    command named after the rest, and fails with `<rest> not found` when there is none.
+    """
+    return "==" in command and _has_unquoted(command, "equals")
 
 
 def command_template(command: str) -> str | None:
@@ -1098,6 +1158,8 @@ def error_signature(text: str) -> str | None:
         return None
     if _NOMATCH.match(picked):
         picked = NOMATCH_SIG
+    elif _EQUALS.match(picked):
+        picked = EQUALS_SIG
     else:
         picked = re.sub(r"<[^>]{1,40}>", "", picked)
         for pattern, mask in _MASKS:

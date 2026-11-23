@@ -38,7 +38,7 @@ faildex turns it into three things:
 | You run | You get |
 |---|---|
 | `faildex rules` | Rule proposals for failures that recurred across sessions, each with the recovery on record and pointers to the log lines. Only the ones you approve are written to a rules file. |
-| `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs (or, for pooled `zsh` `no matches found` glob failures, when the command line has an unquoted glob and the failure recurred across `min_sessions` sessions), and prints nothing otherwise. |
+| `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs (or, for the pooled `zsh` shell failures, `no matches found` for an unquoted glob and `=<word> not found` for an unquoted word starting with `==`, when the command line has that construct and the failure recurred across `min_sessions` sessions), and prints nothing otherwise. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. On your own store (`--store ~/.faildex/store`), which has no public datasets, the same split runs per agent. |
 | `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
@@ -172,7 +172,7 @@ all three installation methods, CLI checks, default ingest and isolated
 
 ### From a checkout
 
-Requirements: Python 3.10 or later and uv. Tested on macOS and Linux in CI.
+Requirements: Python 3.10 or later and uv. Tested on macOS, Linux and Windows in CI.
 
 ```bash
 git clone https://github.com/dtype2100/faildex && cd faildex
@@ -235,6 +235,13 @@ Counts are per failure, across every command that hit it (`+4 more commands`).
 "Recovered within 5 calls" counts failed calls after which the same command succeeded
 within the next 5 calls; "21 of 38 recoveries" says how many of those took the step in
 the Action line. `--evidence` prints the evidence pointers (up to 3 sessions) in full.
+
+Without `--store`, commands read the store named by the `FAILDEX_STORE`
+environment variable when it is set, then `./store` (inside a checkout), then
+`~/.faildex/store`, then the public demo store. `report` tries `~/.faildex/store`
+before `./store`; `ingest` always writes `~/.faildex/store`; `export-web` reads
+`./store` or the public demo store and exports any other store only when you pass
+it with `--store`.
 
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
 `~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.
@@ -331,7 +338,7 @@ your own logs to get yours.
 | Criterion | Where to look |
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer; the same graph and queries running in Relate WebAssembly in the browser demo, with each failure's neighbourhood drawn |
-| Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS and Linux |
+| Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS, Linux and Windows |
 | Usefulness | 68% of later failures were already in the graph; in a real Claude Code session Claude cited the hook's notice and did not retry; it warns only for recurring failures and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md` (each rule of the method mapped to the test that guards it); every number comes from `make eval` on the committed store, a test fails if a document disagrees, and the WebAssembly build reaches the same numbers |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |

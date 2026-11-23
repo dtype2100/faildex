@@ -125,3 +125,10 @@ def test_hook_handles_long_adversarial_inputs_quickly(tmp_path):
         cursor_out = json.loads(respond(json.dumps({"command": command}), store, agent="cursor"))
         assert cursor_out == {"permission": "allow"}
         assert time.monotonic() - started < 0.5
+
+
+def test_an_unwritable_log_does_not_hide_the_warning(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    out = respond(_bash("git status"), STORE, log=blocker / "hook.jsonl")
+    assert out and "git status" in json.loads(out)["systemMessage"]

@@ -476,3 +476,25 @@ def test_rules_quote_a_store_path_with_spaces_in_the_next_step(tmp_path, capsys)
         assert f"--store {shlex.quote(str(store))} --to" in last
         words = shlex.split(last.split(": ", 1)[1])
         assert words[words.index("--store") + 1] == str(store)
+
+
+def test_zsh_equals_expansion_pools_across_commands_and_legacy_keys():
+    """`(eval):1: ===== not found` is the shell's, whatever command it hit, like NOMATCH."""
+    from faildex.insight import proposals, warnings_for_line
+
+    db = relate.connect(":memory:")
+    records = [_call(f"ok{n}", 0, command="cat") for n in range(200)]
+    records += [
+        _call("a", 0, ok=False, command="cat", sig="(eval):<n>: ===== not found"),
+        _call("b", 0, ok=False, command="echo", sig="(eval):<n>: ==== not found"),
+        _call("c", 0, ok=False, command="sed", sig="=<word> not found"),
+    ]
+    ingest(db, records)
+    for command in ["echo =====", "cat x && echo '---' && echo ====", '[ "$a" == b ]']:
+        _, pairs = warnings_for_line(db, command)
+        assert [(t, w.sig) for t, w in pairs] == [("zsh", "=<word> not found")], command
+        assert pairs[0][1].sessions == {"claude_code:a", "claude_code:b", "claude_code:c"}
+    for command in ["echo '====='", "cat x", "[[ $a == b ]]", "echo a==b"]:
+        assert warnings_for_line(db, command)[1] == [], command
+    assert [p.sig for p in proposals(db)] == ["=<word> not found"]
+    db.close()

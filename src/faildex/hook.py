@@ -125,7 +125,10 @@ def respond(
             return quiet
         context = _context(template, found)
         if log:
-            _log(log, payload, context)
+            try:
+                _log(log, payload, context)
+            except OSError:
+                pass  # an unwritable log must not hide the warning itself
     except Exception:  # noqa: BLE001 - see module docstring
         return json.dumps({}) if event == "session-start" and agent == "cursor" else quiet
     if agent == "cursor":
