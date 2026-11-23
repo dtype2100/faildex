@@ -12,14 +12,21 @@ export const Q = {
   relationships: `MATCH ()-[r]->() RETURN type(r) AS type, count(r) AS n ORDER BY type`,
   recurring: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)
 OPTIONAL MATCH (f)-[:RAN]->(k:Command)
-WITH e, count(DISTINCT s) AS sessions, count(f) AS calls, collect(DISTINCT k.template)[0..3] AS commands
+WITH e, count(DISTINCT s) AS sessions, count(f) AS calls,
+     collect(DISTINCT k.template) AS commands, collect(DISTINCT f.tool) AS tools
 WHERE sessions >= 2
-RETURN e.sig AS failure, sessions, calls, commands
+RETURN e.sig AS failure, sessions, calls, commands, tools
 ORDER BY sessions DESC, calls DESC LIMIT 15`,
-  // How many failures came back at all (the map shows the biggest 15).
+  commandCounts: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)
+OPTIONAL MATCH (f)-[:RAN]->(k:Command)
+RETURN e.sig AS failure, k.template AS command, f.tool AS tool, count(f) AS calls
+ORDER BY failure, calls DESC`,
+  // How many failures came back at all (the list shows the biggest 15).
   recurringCount: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(:Call)<-[:HAS_CALL]-(s:Session)
 WITH e, count(DISTINCT s) AS sessions WHERE sessions >= 2
 RETURN count(e) AS n`,
+  failureTotals: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)
+RETURN e.sig AS failure, count(DISTINCT s) AS sessions, count(f) AS calls`,
   recovery: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)
 WHERE coalesce(f.compound, false) = false
 MATCH p = (f)-[:NEXT*1..${RECOVERY_HOPS}]->(g:Call {ok: true}), (g)-[:RAN]->(k)
@@ -52,7 +59,7 @@ RETURN e.sig AS failure, f.ts AS ts, s.id AS session, s.agent AS agent, d.name A
   // The sessions and commands around one failure: its neighbourhood in the graph.
   neighborhood: `MATCH (e:ErrorSig {sig: $failure})<-[:FAILED_WITH]-(f:Call)<-[:HAS_CALL]-(s:Session)
 OPTIONAL MATCH (f)-[:RAN]->(k:Command)
-RETURN s.id AS session, s.agent AS agent, coalesce(k.template, f.tool) AS command, count(f) AS calls
+RETURN s.id AS session, s.agent AS agent, k.template AS command, f.tool AS tool, count(f) AS calls
 ORDER BY command, session`,
   // How many failed calls of each failure have a recorded recovery.
   recoveredCounts: `MATCH (e:ErrorSig)<-[:FAILED_WITH]-(f:Call)-[:RAN]->(k:Command)

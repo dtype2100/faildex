@@ -13,25 +13,25 @@
      selected failure on the right), then the pre-run check, the evaluation and a query
      console. Neutral greys; red only for failures, green only for recoveries. */
   :root {
-    --bg: #fafafa; --surface: #ffffff; --raised: #f5f5f5; --ink: #171717; --body: #525252; --muted: #8f8f8f;
-    --line: #ebebeb; --line-strong: #dedede; --red: #e5484d; --red-soft: #feeceb; --red-ink: #c62a2f;
-    --green: #2f9e66; --green-soft: #e9f6ee; --green-ink: #1f7a4c; --focus: #0a72ef; --term: #171717; --term-ink: #ededed;
+    --bg: #fafafa; --surface: #ffffff; --raised: #f5f5f5; --ink: #171717; --body: #525252; --muted: #767676;
+    --line: #ebebeb; --line-strong: #dedede; --red: #dc2626; --red-bar: #dc2626; --red-soft: #fee2e2; --red-border: #fca5a5; --red-ink: #991b1b;
+    --green: #16a34a; --green-bar: #16a34a; --green-soft: #dcfce7; --green-border: #86efac; --green-ink: #166534; --focus: #0a72ef; --term: #171717; --term-ink: #ededed;
     --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
     --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #6f6f6f;
-      --line: #232323; --line-strong: #2e2e2e; --red: #ff6369; --red-soft: #2a1214; --red-ink: #ff8589;
-      --green: #3dd68c; --green-soft: #0f2419; --green-ink: #5fe3a4; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
+      --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #8a8a8a;
+      --line: #232323; --line-strong: #2e2e2e; --red: #ef4444; --red-bar: #ef4444; --red-soft: #3b1214; --red-border: #b91c1c; --red-ink: #fca5a5;
+      --green: #22c55e; --green-bar: #22c55e; --green-soft: #0d2e1b; --green-border: #15803d; --green-ink: #86efac; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #6f6f6f;
-    --line: #232323; --line-strong: #2e2e2e; --red: #ff6369; --red-soft: #2a1214; --red-ink: #ff8589;
-    --green: #3dd68c; --green-soft: #0f2419; --green-ink: #5fe3a4; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
+    --bg: #0a0a0a; --surface: #111111; --raised: #191919; --ink: #ededed; --body: #a3a3a3; --muted: #8a8a8a;
+    --line: #232323; --line-strong: #2e2e2e; --red: #ef4444; --red-bar: #ef4444; --red-soft: #3b1214; --red-border: #b91c1c; --red-ink: #fca5a5;
+    --green: #22c55e; --green-bar: #22c55e; --green-soft: #0d2e1b; --green-border: #15803d; --green-ink: #86efac; --focus: #52a8ff; --term: #000000; --term-ink: #ededed;
     color-scheme: dark;
   }
 
@@ -54,6 +54,8 @@
   .status { display: inline-flex; align-items: center; gap: 8px; font: 12.5px/1 var(--mono); color: var(--body); border: 1px solid var(--line); background: var(--surface); padding: 6px 10px; border-radius: 999px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status b { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
   .status.ready b { background: var(--green); }
+  .status-short { display: none; }
+  @media (max-width: 640px) { .bar .wrap { gap: 10px; } .status-long { display: none; } .status-short { display: inline; } }
   nav { margin-left: auto; display: flex; gap: 4px; }
   nav a { text-decoration: none; color: var(--body); font-size: 14px; padding: 6px 10px; border-radius: 8px; }
   nav a:hover { color: var(--ink); background: var(--raised); }
@@ -71,25 +73,20 @@
   .progress span { display: block; height: 2px; width: 0; background: var(--ink); transition: width .2s ease, opacity .4s ease; }
   @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
 
-  /* hero */
-  .hero { padding: 64px 0 36px; }
-  .eyebrow { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
-  h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; margin: 0; max-width: 18ch; text-wrap: balance; }
+  /* hero: one crisp sentence, the warning example with when it triggers, and one next-step line */
+  .hero { padding: 16px 0 12px; }
+  .eyebrow { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+  h1 { font-size: clamp(24px, 2.9vw, 33px); line-height: 1.1; letter-spacing: -0.03em; font-weight: 600; margin: 0; max-width: 100%; text-wrap: balance; }
   h1 span { color: var(--muted); }
-  .lede { color: var(--body); font-size: 17px; line-height: 1.6; max-width: 62ch; margin: 18px 0 0; }
-  .flow { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr); align-items: stretch; }
-  .flow a { display: grid; gap: 4px; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-decoration: none; transition: border-color .15s ease; }
-  .flow a:hover { border-color: var(--line-strong); }
-  .flow .fn { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 600 12px/22px var(--sans); text-align: center; margin-bottom: 6px; }
-  .flow b { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
-  .flow a > span:last-child { color: var(--body); font-size: 14px; font-variant-numeric: tabular-nums; }
-  .farrow { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; }
-  .mini { margin-top: 18px; background: var(--term); color: var(--term-ink); border-radius: 12px; padding: 14px 18px; font: 13px/1.6 var(--mono); overflow-wrap: anywhere; max-width: 980px; }
-  .mini-hook { color: #f3a3a6; }
-  .mini-cap { margin-top: 8px; color: #9a9a9a; font: 13.5px/1.5 var(--sans); }
-  .start { display: inline-block; margin-top: 22px; font-weight: 500; color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-strong); padding-bottom: 2px; }
-  .start:hover { border-color: var(--ink); }
-  @media (max-width: 760px) { .flow { grid-template-columns: minmax(0, 1fr); gap: 0; } .farrow { transform: rotate(90deg); height: 28px; } }
+  .lede { color: var(--body); font-size: 15px; line-height: 1.48; max-width: 78ch; margin: 8px 0 0; }
+  .mini { margin-top: 12px; background: var(--term); color: var(--term-ink); border-radius: 12px; padding: 11px 16px; font: 13px/1.5 var(--mono); overflow-wrap: anywhere; }
+  .mini-when { font: 600 12px/1.35 var(--sans); color: #e5e5e5; margin-bottom: 5px; letter-spacing: 0.01em; }
+  .mini-hook { color: #fca5a5; }
+  .mini-cap { margin-top: 5px; color: #a3a3a3; font: 12.5px/1.4 var(--sans); }
+  .hero-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 18px; margin-top: 10px; }
+  .start { display: inline-block; font-weight: 600; color: var(--ink); text-decoration: none; border-bottom: 1.5px solid var(--ink); padding-bottom: 2px; font-size: 14px; }
+  .start:hover { opacity: 0.8; }
+  .hero-meta { font-size: 12.5px; color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
   .result { padding: 26px 26px 22px; }
   .result-num { font-size: 64px; line-height: 1; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
@@ -113,12 +110,12 @@
   .appendix .rail span { background: var(--surface); color: var(--muted); border: 1px solid var(--line-strong); line-height: 30px; }
   .chapter .body { padding: 0 0 72px; min-width: 0; }
   .chapter:last-child .rail::before { bottom: auto; height: 34px; }
-  @media (max-width: 640px) { .tl-box { display: none; } section.chapter { grid-template-columns: minmax(0, 1fr); } .rail { justify-content: flex-start; margin-bottom: 8px; } .rail::before { display: none; } .rail span { position: static; width: 28px; height: 28px; font-size: 13px; line-height: 28px; } .map { height: 360px; } .detail { padding: 16px; } }
-  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 16px; }
+  @media (max-width: 640px) { .tl-box { display: none; } section.chapter { grid-template-columns: minmax(0, 1fr); } .rail { justify-content: flex-start; margin-bottom: 8px; } .rail::before { display: none; } .rail span { position: static; width: 28px; height: 28px; font-size: 13px; line-height: 28px; } .detail { padding: 16px; } .picker { flex-wrap: wrap; width: 100%; } .picker select { width: 100%; max-width: 100%; } }
+  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 20px; margin-bottom: 10px; }
   .head > div { flex: 1 1 420px; min-width: 0; }
-  .head h2 { font-size: 26px; letter-spacing: -0.025em; font-weight: 600; margin: 0; line-height: 1.25; }
-  .head p { margin: 8px 0 0; color: var(--body); max-width: 70ch; }
-  .takeaway { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; background: var(--raised); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  .head h2 { font-size: 24px; letter-spacing: -0.025em; font-weight: 600; margin: 0; line-height: 1.22; }
+  .head p { margin: 5px 0 0; color: var(--body); max-width: 76ch; font-size: 14.5px; }
+  .takeaway { margin: 0 0 10px; padding: 9px 14px; border-radius: 10px; background: var(--raised); color: var(--ink); font-size: 14.5px; line-height: 1.45; }
   .takeaway code, .next code { font: 0.92em var(--mono); }
   .next { display: inline-block; margin-top: 18px; color: var(--body); text-decoration: none; font-size: 14.5px; }
   .next:hover { color: var(--ink); }
@@ -131,37 +128,38 @@
   .proof { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
   @media (max-width: 960px) { .proof { grid-template-columns: minmax(0, 1fr); } }
 
-  /* failures: list + detail */
-  .split { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
-  @media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
-  .list { padding: 6px; max-height: calc(100vh - 96px); overflow: auto; position: sticky; top: 72px; }
-  @media (max-width: 960px) { .list { position: static; max-height: 560px; } }
-  .map { position: relative; height: 300px; margin-bottom: 16px; }
-  .tile { position: absolute; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; overflow: hidden; background: var(--surface); display: flex; flex-direction: column; gap: 6px; transition: border-color .15s ease, box-shadow .15s ease; }
-  .tile.red { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
-  .tile.green { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 22%, transparent); }
-  .tile:hover { border-color: var(--line-strong); }
-  .tile[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
-  .tile b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
-  .tile b small { font-size: 12px; font-weight: 400; color: var(--body); margin-left: 4px; letter-spacing: 0; }
-  .tile .t-cmd { font: 12px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile .t-sig { font: 11.5px/1.4 var(--mono); color: var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-  .tile.small b { font-size: 16px; }
-  .maplegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--body); margin: -4px 0 12px; }
-  .maplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line-strong); }
-  .item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 12px 12px 11px; cursor: pointer; }
-  .item:hover { background: var(--raised); }
-  .item[aria-selected="true"] { background: var(--raised); border-color: var(--line-strong); }
-  .item .sig { font: 13px/1.45 var(--mono); color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; max-height: 2.9em; }
-  .item .n { font-size: 13px; color: var(--body); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .item .n b { color: var(--ink); font-weight: 600; font-size: 15px; display: block; }
-  .item .meta { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  /* failures: ranked bar list with clear legend and full labels */
+  .rank-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 9px 14px; margin-bottom: 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 13.5px; font-weight: 500; color: var(--ink); }
+  .leg-item { display: inline-flex; align-items: center; gap: 8px; }
+  .leg-bar { display: inline-block; width: 28px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, var(--ink) 75%, var(--line-strong) 75%); }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .swatch.red { background: var(--red-bar); }
+  .swatch.green { background: var(--green-bar); }
+  .rank-list { display: grid; gap: 6px; }
+  .frow { width: 100%; display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; background: var(--surface); text-align: left; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+  .frow.green { border-left-color: var(--green-bar); }
+  .frow.red { border-left-color: var(--red-bar); }
+  .frow:hover { background: var(--raised); border-color: var(--line-strong); }
+  .frow.green:hover { border-left-color: var(--green-bar); }
+  .frow.red:hover { border-left-color: var(--red-bar); }
+  .frow[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); background: var(--raised); }
+  .frow-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+  .cmd-pill { display: inline-flex; align-items: center; font: 600 12.5px/1.2 var(--mono); padding: 3px 8px; border-radius: 6px; background: var(--raised); border: 1px solid var(--line-strong); color: var(--ink); white-space: nowrap; }
+  .frow-count { margin-left: auto; font: 600 13.5px/1.2 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+  .frow-count small { font-weight: 400; color: var(--body); margin-left: 4px; }
+  .frow-sig { font: 13px/1.45 var(--mono); color: var(--body); overflow-wrap: anywhere; }
+  .frow-track { height: 7px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+  .frow-fill { display: block; height: 100%; border-radius: 999px; }
+  .frow-fill.green { background: var(--green-bar); }
+  .frow-fill.red { background: var(--red-bar); }
+  .rank-more { margin-top: 10px; }
   .chip { display: inline-flex; align-items: center; font: 12px/1 var(--mono); padding: 4px 7px; border-radius: 6px; background: var(--raised); border: 1px solid var(--line); color: var(--body); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-  .item[aria-selected="true"] .chip { background: var(--surface); }
-  .spark { flex: 1; min-width: 60px; height: 18px; }
-  .tag { font-size: 12px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-  .tag.red { background: var(--red-soft); color: var(--red-ink); }
-  .tag.green { background: var(--green-soft); color: var(--green-ink); }
+  .tag { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .tag.red { background: var(--red-soft); color: var(--red-ink); border-color: var(--red-border); }
+  .tag.green { background: var(--green-soft); color: var(--green-ink); border-color: var(--green-border); }
+  .graph-note { margin: 0; padding: 0 12px 12px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .scope-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); font-size: 13px; color: var(--body); line-height: 1.5; }
+  .scope-note code { font: 0.92em var(--mono); color: var(--ink); }
 
   .detail { padding: 24px; min-height: 400px; }
   .detail .takeaway { margin: 0 0 22px; }
@@ -259,7 +257,7 @@
 <header class="bar">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="faildex home"><i></i>faildex</a>
-    <span class="status" id="status"><b></b><span id="status-text" data-i18n="status.loading">Loading Relate WebAssembly…</span></span>
+    <span class="status" id="status"><b></b><span class="status-long" id="status-text" data-i18n="status.loading">Loading Relate WebAssembly…</span><span class="status-short" id="status-short">…</span></span>
     <nav aria-label="Sections">
       <a href="#failures" data-i18n="nav.failures">1 Failures</a><a href="#failure" data-i18n="nav.failure">2 One failure</a><a href="#check" data-i18n="nav.check">3 Warning</a><a href="#evaluation" data-i18n="nav.evaluation">4 Proof</a><a href="#query" data-i18n="nav.query">Query</a>
       <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
@@ -277,18 +275,19 @@
 
 <main class="wrap" id="top">
   <section class="hero">
-    <p class="eyebrow" data-i18n="hero.eyebrow">faildex · built on Relate</p>
-    <h1 data-i18n-html="hero.title">Coding agents fail the same way twice. <span>The graph remembers.</span></h1>
+    <p class="eyebrow" data-i18n="hero.eyebrow">faildex · coding agent failure index · 422 public sessions</p>
+    <h1 data-i18n-html="hero.title">Coding agents repeat the same failures. <span>faildex warns them before the second try.</span></h1>
     <p class="lede" data-i18n="hero.lede"></p>
-    <ol class="flow" aria-label="How faildex works">
-      <li><a href="#failures"><span class="fn">1</span><b data-i18n="flow.1t">Agent logs</b><span id="flow1">—</span></a></li>
-      <li aria-hidden="true" class="farrow">→</li>
-      <li><a href="#failure"><span class="fn">2</span><b data-i18n="flow.2t">One Relate graph</b><span id="flow2">—</span></a></li>
-      <li aria-hidden="true" class="farrow">→</li>
-      <li><a href="#check"><span class="fn">3</span><b data-i18n="flow.3t">A warning before the command</b><span data-i18n="flow.3b">one line, only for failures that came back</span></a></li>
-    </ol>
-    <div class="mini" aria-label="What the agent sees"><div class="mini-cmd">● Bash(git status)</div><div class="mini-hook" id="mini-hook">…</div><div class="mini-cap" data-i18n="hero.mini">This is the line an agent gets before it repeats a known failure. The rest of the page shows where it comes from.</div></div>
-    <a class="start" href="#failures" data-i18n="hero.start">Follow one failure, step by step ↓</a>
+    <div class="mini" aria-label="What the agent sees">
+      <div class="mini-when" data-i18n="hero.when">WHEN SHOWN · Right before the agent runs a command that failed in earlier sessions</div>
+      <div class="mini-cmd">● Bash(git status)</div>
+      <div class="mini-hook" id="mini-hook">…</div>
+      <div class="mini-cap" data-i18n="hero.mini">The agent receives this warning and past fixes in context — the command runs without blocking.</div>
+    </div>
+    <div class="hero-foot">
+      <a class="start" href="#failures" data-i18n="hero.start">Below: top recurring failures — click any row to see how sessions recovered ↓</a>
+      <p class="hero-meta" id="hero-meta"></p>
+    </div>
   </section>
 
   <section class="chapter" id="failures">
@@ -300,9 +299,14 @@
       </div>
       <pre class="cypher" id="q-failures" hidden></pre>
       <p class="takeaway" id="take1">—</p>
-      <div class="maplegend"><span data-i18n="map.size">Tile size: sessions that hit the failure</span><span><i style="background:var(--red-soft)"></i><span data-i18n="map.none">no recovery on record</span></span><span><i style="background:var(--green-soft)"></i><span data-i18n="map.fixed">recovered in an earlier session</span></span></div>
-      <div class="map" id="map" role="group" aria-label="Failure map"></div>
-      <a class="next" href="#failure" data-i18n="s1.next">Pick a tile, or go on with the biggest one ↓</a>
+      <div class="rank-legend" role="note">
+        <span class="leg-item"><span class="leg-bar" aria-hidden="true"></span><span data-i18n="map.size">Bar length = sessions that hit the failure</span></span>
+        <span class="leg-item"><i class="swatch green" aria-hidden="true"></i><span data-i18n="map.fixed">Green = recovery on record</span></span>
+        <span class="leg-item"><i class="swatch red" aria-hidden="true"></i><span data-i18n="map.none">Red = no recovery on record yet</span></span>
+      </div>
+      <div class="rank-list" id="map" role="group" aria-label="Failure frequency list"></div>
+      <div class="rank-more" id="map-more"></div>
+      <a class="next" href="#failure" data-i18n="s1.next">Pick any failure above, or follow the selected one below ↓</a>
     </div>
   </section>
 
@@ -456,11 +460,12 @@ async function main() {
   const rels = run(db, Q.relationships).reduce((n, r) => n + r.n, 0);
   $("status").classList.add("ready");
   $("status-text").textContent = t("status.ready", { s: (built / 1000).toFixed(1), calls: fmt(calls) });
+  $("status-short").textContent = t("status.readyShort", { calls: fmt(calls) });
   $("progress").style.opacity = "0";
   $("sources").innerHTML = data.sources.map((s) => `<a href="${esc(s.url)}">${esc(s.repo)}</a> (${esc(s.license)})`).join(", ");
 
-  $("flow1").textContent = t("flow.1b", { s: fmt(counts.Session), c: fmt(counts.Call) });
-  $("flow2").textContent = t("flow.2b", { r: fmt(rels), k: fmt(counts.ErrorSig) });
+  const recurringCount = run(db, Q.recurringCount)[0].n;
+  $("hero-meta").textContent = t("hero.meta", { s: fmt(counts.Session), c: fmt(counts.Call), n: fmt(recurringCount) });
 
   // ---- the result
   await paint();
@@ -492,6 +497,8 @@ async function main() {
 
   // ---- failures
   const recurring = run(db, Q.recurring);
+  const cmdCountRows = run(db, Q.commandCounts);
+  const totalsByFailure = Object.fromEntries(run(db, Q.failureTotals).map((r) => [r.failure, r]));
   const occ = run(db, Q.occurrences);
   const recovered = Object.fromEntries(run(db, Q.recoveredCounts).map((r) => [r.failure, r.recovered]));
   const byFailure = {};
@@ -500,51 +507,97 @@ async function main() {
   const tMin = Math.min(...times), tMax = Math.max(...times);
   const xOf = (ts, w, pad = 4) => pad + ((Date.parse(ts) - tMin) / Math.max(1, tMax - tMin)) * (w - 2 * pad);
 
+  // Word-boundary trimming for display (also avoids broken 90-char key tails like `(os error <` or `volume labe`).
+  const cleanSig = (sig, limit = 84) => {
+    const s = String(sig || "");
+    const cutTag = (str) => {
+      const lt = str.lastIndexOf("<");
+      return lt >= 0 && str.indexOf(">", lt) === -1 ? str.slice(0, lt) : str;
+    };
+    const isCutoff90 = s.length >= 90 && (cutTag(s) !== s || /\b[a-z]{1,5}$/i.test(s));
+    if (s.length <= limit && !isCutoff90) return s;
+    const cap = Math.min(limit, s.length >= 90 ? 79 : limit);
+    let head = cutTag(s.slice(0, cap));
+    if (head.length < s.length && !/\s/.test(s[head.length])) {
+      const sp = Math.max(head.lastIndexOf(" "), head.lastIndexOf("\t"));
+      if (sp >= head.length / 3) head = head.slice(0, sp);
+    }
+    head = head.replace(/[\s.,;:(\[]+$/, "");
+    return `${head || s.slice(0, cap)}…`;
+  };
+
+  const resolveCmdLabel = (cmd, tool) => {
+    if (cmd === "<script>") return t("cmd.inlineScript");
+    if (cmd) return cmd;
+    if (tool === "shell_command" || tool === "Bash") return t("cmd.unparsedShell");
+    return tool || t("cmd.unparsedShell");
+  };
+
+  // Ordered command/tool counts per failure so the primary label is the most frequent one.
+  const rankedCommands = {};
+  for (const row of cmdCountRows) {
+    const list = (rankedCommands[row.failure] ||= []);
+    const label = resolveCmdLabel(row.command, row.tool);
+    const existing = list.find((x) => x.label === label);
+    if (existing) existing.calls += row.calls;
+    else list.push({ label, rawCmd: row.command, calls: row.calls });
+  }
+  for (const list of Object.values(rankedCommands)) list.sort((a, b) => b.calls - a.calls);
+
+  const primaryLabel = (r) => {
+    const list = rankedCommands[r.failure] || [];
+    if (!list.length) return resolveCmdLabel((r.commands || [])[0], (r.tools || [])[0]);
+    if (list.length === 1) return list[0].label;
+    return `${list[0].label} (${t("cmd.plusMore", { n: list.length - 1 })})`;
+  };
+  const primaryCommand = (r) => {
+    const list = rankedCommands[r.failure] || [];
+    const firstCmd = list.find((x) => x.rawCmd && x.rawCmd !== "<script>");
+    return firstCmd ? firstCmd.rawCmd : ((r.commands || [])[0] || "");
+  };
+
   $("q-failures").textContent = [Q.recurring, Q.occurrences, Q.neighborhood, Q.recovery, Q.evidence].join("\n\n");
   {
-    const top = recurring[0], cmd0 = (top.commands || [])[0] || "";
-    $("take1").innerHTML = t("s1.take", { n: run(db, Q.recurringCount)[0].n, shown: recurring.length, sig: `<code>${esc(top.failure.length > 60 ? top.failure.slice(0, 59) + "…" : top.failure)}</code>`, cmd: esc(cmd0), s: top.sessions });
+    const top = recurring[0], cmd0 = primaryLabel(top);
+    $("take1").innerHTML = t("s1.take", { n: recurringCount, shown: recurring.length, sig: `<code>${esc(cleanSig(top.failure, 60))}</code>`, cmd: esc(cmd0), s: top.sessions, c: top.calls });
   }
-  $("pick").innerHTML = recurring.map((r, i) => `<option value="${i}">${esc(r.sessions)} · ${esc((r.commands || [])[0] || "")} · ${esc(r.failure.slice(0, 48))}</option>`).join("");
+  $("pick").innerHTML = recurring.map((r, i) => `<option value="${i}">${esc(r.sessions)} · ${esc(primaryLabel(r))} · ${esc(cleanSig(r.failure, 52))}</option>`).join("");
   $("pick").addEventListener("change", () => select(Number($("pick").value)));
 
-  // A squarified treemap: one tile per failure, area by sessions.
-  const worst = (row, side) => {
-    const sum = row.reduce((a, r) => a + r.area, 0), max = Math.max(...row.map((r) => r.area)), min = Math.min(...row.map((r) => r.area));
-    return Math.max((side * side * max) / (sum * sum), (sum * sum) / (side * side * min));
-  };
-  const squarify = (items, x, y, w, h) => {
-    const total = items.reduce((a, it) => a + it.value, 0);
-    let rest = items.map((it) => ({ ...it, area: (it.value * w * h) / total }));
-    const out = [];
-    while (rest.length) {
-      const side = Math.min(w, h);
-      let row = [rest[0]], best = worst(row, side), i = 1;
-      while (i < rest.length) { const next = [...row, rest[i]]; const v = worst(next, side); if (v > best) break; row = next; best = v; i++; }
-      const sum = row.reduce((a, r) => a + r.area, 0);
-      if (w >= h) { const cw = sum / h; let cy = y; for (const r of row) { const rh = r.area / cw; out.push({ ...r, x, y: cy, w: cw, h: rh }); cy += rh; } x += cw; w -= cw; }
-      else { const ch = sum / w; let cx = x; for (const r of row) { const rw = r.area / ch; out.push({ ...r, x: cx, y, w: rw, h: ch }); cx += rw; } y += ch; h -= ch; }
-      rest = rest.slice(row.length);
-    }
-    return out;
-  };
   let current = 0;
+  let showAllRows = false;
+  const VISIBLE_DEFAULT = 6;
   const drawMap = () => {
-    const box = $("map"), W = box.clientWidth, H = box.clientHeight, gap = 3;
-    const tiles = squarify(recurring.map((r, i) => ({ value: r.sessions, i, r })), 0, 0, W, H);
-    box.innerHTML = tiles.map((tile) => {
-      const fixed = recovered[tile.r.failure] || 0, cmd = (tile.r.commands || [])[0] || "", tw = tile.w - gap, th = tile.h - gap;
-      const big = tw > 150 && th > 92, mid = tw > 70 && th > 48;
-      const name = `${cmd} · ${tile.r.failure} · ${tile.r.sessions} ${t("list.sessions")} · ${fixed ? t("map.fixed") : t("map.none")}`;
-      return `<button type="button" class="tile ${fixed ? "green" : "red"} ${big ? "" : "small"}" data-i="${tile.i}" aria-pressed="${tile.i === current}" title="${esc(tile.r.failure)}" aria-label="${esc(name)}"
-        style="left:${tile.x.toFixed(1)}px;top:${tile.y.toFixed(1)}px;width:${tw.toFixed(1)}px;height:${th.toFixed(1)}px">
-        ${mid ? `<b>${tile.r.sessions}<small>${big ? t("list.sessions") : ""}</small></b>` : `<b>${tile.r.sessions}</b>`}${mid && cmd ? `<span class="t-cmd">${esc(cmd)}</span>` : ""}${big ? `<span class="t-sig">${esc(tile.r.failure)}</span>` : ""}
+    const box = $("map"), moreBox = $("map-more");
+    const maxSessions = Math.max(1, ...recurring.map((r) => r.sessions));
+    const shown = showAllRows ? recurring : recurring.slice(0, VISIBLE_DEFAULT);
+    box.innerHTML = shown.map((r, idx) => {
+      const fixed = recovered[r.failure] || 0;
+      const cmdLabel = primaryLabel(r);
+      const pctW = Math.max(4, Math.round((100 * r.sessions) / maxSessions));
+      const sigDisplay = cleanSig(r.failure, 88);
+      const statusText = fixed ? t("tag.recovered", { r: fixed, c: r.calls }) : t("tag.none");
+      return `<button type="button" class="frow ${fixed ? "green" : "red"}" data-i="${idx}" aria-pressed="${idx === current}" title="${esc(r.failure)}">
+        <div class="frow-top">
+          <span class="cmd-pill">${esc(cmdLabel)}</span>
+          <span class="tag ${fixed ? "green" : "red"}">${esc(statusText)}</span>
+          <span class="frow-count">${t("row.sessions", { s: r.sessions })}<small>(${t("row.calls", { c: r.calls })})</small></span>
+        </div>
+        <div class="frow-sig">${esc(sigDisplay)}</div>
+        <div class="frow-track" aria-hidden="true"><span class="frow-fill ${fixed ? "green" : "red"}" style="width:${pctW}%"></span></div>
       </button>`;
     }).join("");
+    if (recurring.length > VISIBLE_DEFAULT) {
+      const label = showAllRows
+        ? t("s1.less", { n: VISIBLE_DEFAULT })
+        : t("s1.more", { shown: recurring.length, rest: recurring.length - VISIBLE_DEFAULT });
+      moreBox.innerHTML = `<button type="button" class="ghost" id="toggle-rows">${esc(label)}</button>`;
+      $("toggle-rows").addEventListener("click", () => { showAllRows = !showAllRows; drawMap(); });
+    } else {
+      moreBox.innerHTML = "";
+    }
   };
-  $("map").addEventListener("click", (e) => { const b = e.target.closest(".tile"); if (b) { select(Number(b.dataset.i)); $("failure").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); } });
-  let resizing;
-  addEventListener("resize", () => { clearTimeout(resizing); resizing = setTimeout(drawMap, 150); });
+  $("map").addEventListener("click", (e) => { const b = e.target.closest(".frow"); if (b) { select(Number(b.dataset.i)); $("failure").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); } });
 
   const timeline = (f) => {
     const w = 980, h = 88, rows = ["codex", "claude-code"];
@@ -560,38 +613,127 @@ async function main() {
     return `<div class="tl-box"><svg class="timeline" viewBox="0 0 ${w} ${h}" role="img" aria-label="When this failure happened">${axis}${ends}${lanes}${dots}</svg></div>`;
   };
 
-  // Left to right, as the hint reads: sessions -> the command they ran -> the failure.
+  // Left to right, aggregated by agent -> command/tool -> failure, with only real agents shown.
   const graph = (f) => {
     const raw = run(db, Q.neighborhood, { failure: f });
-    const bySessions = {};
-    for (const r of raw) bySessions[r.command] = (bySessions[r.command] || 0) + 1;
-    const keep = Object.entries(bySessions).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c]) => c);
-    const rows = raw.map((r) => (keep.includes(r.command) ? r : { ...r, command: "other" }));
-    const cmds = [...keep, ...(rows.some((r) => r.command === "other") ? ["other"] : [])];
-    const W = 420, H = 300, top = 24, bottom = H - 24;
-    const yAt = (i, n) => (n === 1 ? H / 2 : top + ((bottom - top) * i) / (n - 1));
-    const fx = 368, cx = 228;
-    const cmdPos = Object.fromEntries(cmds.map((c, i) => [c, [cx, yAt(i, cmds.length)]]));
-    const bySession = new Map();
-    for (const r of rows) {
-      const one = bySession.get(r.session) || { session: r.session, agent: r.agent, calls: 0, commands: new Set() };
-      one.calls += r.calls; one.commands.add(r.command); bySession.set(r.session, one);
+    const agentAgg = new Map();
+    const bucketAgg = new Map();
+    let hasUnparsed = false;
+
+    for (const r of raw) {
+      const isUnparsed = !r.command && (r.tool === "shell_command" || r.tool === "Bash");
+      if (isUnparsed) hasUnparsed = true;
+      const key = r.command ? `cmd:${r.command}` : `tool:${r.tool}`;
+      const label = resolveCmdLabel(r.command, r.tool);
+
+      const a = agentAgg.get(r.agent) || { agent: r.agent, sessions: new Set(), calls: 0 };
+      a.sessions.add(r.session); a.calls += r.calls;
+      agentAgg.set(r.agent, a);
+
+      const b = bucketAgg.get(key) || { key, label, sessions: new Set(), calls: 0, byAgent: new Map() };
+      b.sessions.add(r.session); b.calls += r.calls;
+      const ba = b.byAgent.get(r.agent) || { sessions: new Set(), calls: 0 };
+      ba.sessions.add(r.session); ba.calls += r.calls;
+      b.byAgent.set(r.agent, ba);
+      bucketAgg.set(key, b);
     }
-    const allSessions = [...bySession.values()];
-    const cap = matchMedia("(max-width: 640px)").matches ? 12 : 60;
-    const shown = allSessions.slice(0, cap), hidden = allSessions.length - shown.length;
-    const cols = shown.length > 24 ? 2 : 1, per = Math.ceil(shown.length / cols);
-    const sess = shown.map((r, i) => ({ ...r, pos: [cols === 2 ? (i % 2 ? 62 : 28) : 44, yAt(cols === 2 ? Math.floor(i / 2) : i, per)] }));
-    const lines = sess.flatMap((s) => [...s.commands].map((c) => `<line x1="${s.pos[0].toFixed(1)}" y1="${s.pos[1].toFixed(1)}" x2="${cx - 40}" y2="${cmdPos[c][1].toFixed(1)}" stroke="var(--line-strong)" stroke-width="1"/>`)).join("")
-      + cmds.map((c) => `<line x1="${cx + 40}" y1="${cmdPos[c][1].toFixed(1)}" x2="${fx}" y2="${H / 2}" stroke="var(--red)" stroke-opacity=".6" stroke-width="2"/>`).join("");
-    const nodes = sess.map((s) => `<circle cx="${s.pos[0].toFixed(1)}" cy="${s.pos[1].toFixed(1)}" r="${(shown.length > 36 ? 2.8 : 3.6).toFixed(1)}" fill="${s.agent === "codex" ? "var(--ink)" : "var(--surface)"}" stroke="var(--ink)" stroke-width="1.3"><title>${esc(AGENT[s.agent] || s.agent)} · ${s.calls} · ${esc([...s.commands].join(", "))}</title></circle>`).join("")
-      + (hidden ? `<text x="44" y="${H - 4}" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.more", { n: hidden })}</text>` : "");
-    const cmdNodes = cmds.map((c) => { const [x, y] = cmdPos[c]; const label = c.length > 13 ? `${c.slice(0, 12)}…` : c; return `<g><rect x="${x - 40}" y="${(y - 12).toFixed(1)}" width="80" height="24" rx="6" fill="var(--surface)" stroke="var(--line-strong)"/><text x="${x}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="var(--ink)">${esc(label)}</text></g>`; }).join("");
-    const center = `<circle cx="${fx}" cy="${H / 2}" r="16" fill="var(--red)"><title>${t("graph.failure")} (ErrorSig)</title></circle>`;
-    const heads = `<text x="44" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.hSessions", { n: new Set(rows.map((r) => r.session)).size })}</text><text x="${cx}" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.command")}</text><text x="${fx}" y="12" font-size="10" text-anchor="middle" fill="var(--muted)">${t("graph.failure")}</text>`;
-    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("graph.aria", { n: new Set(rows.map((r) => r.session)).size }))}">${heads}${lines}${nodes}${center}${cmdNodes}</svg>`;
-    const legend = `<div class="legend" style="padding:0 12px 12px"><span><i style="background:var(--red);border-radius:50%"></i>${t("graph.failure")}</span><span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>${t("graph.command")}</span><span><i style="background:var(--ink);border-radius:50%"></i>${t("graph.codex")}</span><span><i style="border:1.3px solid var(--ink);border-radius:50%"></i>${t("graph.claude")}</span></div>`;
-    return `<div class="graph-box">${svg}${legend}</div>`;
+
+    const sortedBuckets = [...bucketAgg.values()].sort((a, b) => b.sessions.size - a.sessions.size || b.calls - a.calls);
+    const topBuckets = sortedBuckets.slice(0, 4);
+    const restBuckets = sortedBuckets.slice(4);
+    const cmds = topBuckets.map((b) => ({
+      label: b.label,
+      sessions: b.sessions.size,
+      calls: b.calls,
+      byAgent: b.byAgent,
+      title: b.label,
+    }));
+    if (restBuckets.length) {
+      const otherSessions = new Set();
+      let otherCalls = 0;
+      const otherByAgent = new Map();
+      const otherNames = [];
+      for (const b of restBuckets) {
+        otherNames.push(b.label);
+        otherCalls += b.calls;
+        for (const s of b.sessions) otherSessions.add(s);
+        for (const [ag, info] of b.byAgent.entries()) {
+          const cur = otherByAgent.get(ag) || { sessions: new Set(), calls: 0 };
+          for (const s of info.sessions) cur.sessions.add(s);
+          cur.calls += info.calls;
+          otherByAgent.set(ag, cur);
+        }
+      }
+      cmds.push({
+        label: t("graph.otherCmds", { n: restBuckets.length }),
+        sessions: otherSessions.size,
+        calls: otherCalls,
+        byAgent: otherByAgent,
+        title: otherNames.join(", "),
+        otherList: otherNames,
+      });
+    }
+
+    const agents = [...agentAgg.values()].sort((a, b) => b.sessions.size - a.sessions.size);
+    const totalSessions = new Set(raw.map((r) => r.session)).size;
+    const totalCalls = raw.reduce((n, r) => n + r.calls, 0);
+    const maxRows = Math.max(agents.length, cmds.length, 1);
+    const W = 520, H = Math.max(210, 56 + maxRows * 56);
+    const yAt = (i, n) => (n === 1 ? H / 2 : 48 + ((H - 76) * i) / (n - 1));
+    const ax = 84, cx = 278, fx = 466;
+    const aw = 148, cw = 176, ah = 42, ch = 42;
+    const agentPos = Object.fromEntries(agents.map((a, i) => [a.agent, [ax, yAt(i, agents.length)]]));
+    const cmdPos = cmds.map((c, i) => [cx, yAt(i, cmds.length)]);
+    const maxCalls = Math.max(1, ...cmds.map((c) => c.calls));
+    const sw = (n) => (1.5 + (4.5 * n) / maxCalls).toFixed(1);
+
+    const agentToCmd = cmds.flatMap((c, ci) => {
+      const [x2, y2] = cmdPos[ci];
+      return [...c.byAgent.entries()].map(([ag, info]) => {
+        const [x1, y1] = agentPos[ag];
+        const sx = x1 + aw / 2, ex = x2 - cw / 2, mx = (sx + ex) / 2;
+        return `<path d="M${sx},${y1} C${mx},${y1} ${mx},${y2} ${ex},${y2}" fill="none" stroke="var(--line-strong)" stroke-width="${sw(info.calls)}"/>`;
+      });
+    }).join("");
+
+    const cmdToFail = cmds.map((c, ci) => {
+      const [x1, y1] = cmdPos[ci];
+      const sx = x1 + cw / 2, ex = fx - 22, mx = (sx + ex) / 2;
+      return `<path d="M${sx},${y1} C${mx},${y1} ${mx},${H / 2} ${ex},${H / 2}" fill="none" stroke="var(--red-bar)" stroke-opacity=".75" stroke-width="${sw(c.calls)}"/>`;
+    }).join("");
+
+    const agentNodes = agents.map((a) => {
+      const [x, y] = agentPos[a.agent];
+      const dark = a.agent === "codex";
+      const fill = dark ? "var(--ink)" : "var(--surface)";
+      const ink = dark ? "var(--bg)" : "var(--ink)";
+      const sub = dark ? "var(--bg)" : "var(--body)";
+      const stroke = "var(--ink)";
+      const name = AGENT[a.agent] || a.agent;
+      return `<g><rect x="${x - aw / 2}" y="${(y - ah / 2).toFixed(1)}" width="${aw}" height="${ah}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="1.4"/><text x="${x}" y="${(y - 3).toFixed(1)}" font-size="12" font-weight="600" text-anchor="middle" fill="${ink}">${esc(name)}</text><text x="${x}" y="${(y + 13).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="${sub}" opacity=".85">${esc(t("graph.agentLine", { s: a.sessions.size, c: a.calls }))}</text></g>`;
+    }).join("");
+
+    const cmdNodes = cmds.map((c, ci) => {
+      const [x, y] = cmdPos[ci];
+      return `<g><title>${esc(c.title)}</title><rect x="${x - cw / 2}" y="${(y - ch / 2).toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1.2"/><text x="${x}" y="${(y - 3).toFixed(1)}" font-size="11.5" font-weight="600" text-anchor="middle" fill="var(--ink)">${esc(c.label)}</text><text x="${x}" y="${(y + 13).toFixed(1)}" font-size="10" text-anchor="middle" fill="var(--body)">${esc(t("graph.cmdLine", { s: c.sessions, c: c.calls }))}</text></g>`;
+    }).join("");
+
+    const center = `<g><title>${t("graph.failure")} (ErrorSig)</title><circle cx="${fx}" cy="${H / 2}" r="22" fill="var(--red-bar)"/><text x="${fx}" y="${H / 2 + 4}" font-size="11.5" font-weight="600" text-anchor="middle" fill="#fff">${totalCalls}</text><text x="${fx}" y="${H / 2 + 36}" font-size="10.5" text-anchor="middle" fill="var(--body)">${esc(t("graph.hSessions", { n: totalSessions }))}</text></g>`;
+    const heads = `<text x="${ax}" y="16" font-size="10.5" text-anchor="middle" fill="var(--muted)">${esc(t("graph.colAgents"))}</text><text x="${cx}" y="16" font-size="10.5" text-anchor="middle" fill="var(--muted)">${esc(t("graph.colCmds"))}</text><text x="${fx}" y="16" font-size="10.5" text-anchor="middle" fill="var(--muted)">${esc(t("graph.colFailure"))}</text>`;
+    const svg = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("graph.aria", { n: totalSessions }))}">${heads}${agentToCmd}${cmdToFail}${agentNodes}${cmdNodes}${center}</svg>`;
+
+    const agentLegend = agents.map((a) => {
+      const name = AGENT[a.agent] || a.agent;
+      const style = a.agent === "codex" ? "background:var(--ink)" : "border:1.5px solid var(--ink);background:var(--surface)";
+      return `<span><i style="${style};border-radius:3px"></i>${esc(t("graph.legendAgent", { agent: name }))}</span>`;
+    }).join("");
+    const legend = `<div class="legend" style="padding:0 12px 10px">${agentLegend}<span><i style="border:1px solid var(--line-strong);background:var(--surface)"></i>${esc(t("graph.legendCmd"))}</span><span><i style="background:var(--red-bar);border-radius:50%"></i>${esc(t("graph.legendFail"))}</span></div>`;
+
+    const notes = [];
+    if (hasUnparsed) notes.push(t("graph.unparsedExplain"));
+    if (restBuckets.length) notes.push(t("graph.otherExplain", { list: restBuckets.map((b) => b.label).join(", ") }));
+    const noteHtml = notes.length ? `<p class="graph-note">${esc(notes.join(" "))}</p>` : "";
+    return `<div class="graph-box">${svg}${legend}${noteHtml}</div>`;
   };
 
   const paths = (f) => {
@@ -620,16 +762,17 @@ async function main() {
 
   const select = (i) => {
     current = i;
-    document.querySelectorAll("#map .tile").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i)));
+    document.querySelectorAll("#map .frow").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i)));
     $("pick").value = String(i);
     const r = recurring[i];
     const list = (byFailure[r.failure] || []).map((o) => o.ts).sort();
     const fixed = recovered[r.failure] || 0;
-    const cmd = (r.commands || [])[0] || "";
-    const take = fixed ? t("s2.takeFixed", { s: r.sessions, n: fixed }) : t("s2.takeNone", { s: r.sessions });
+    const cmdLabel = primaryLabel(r);
+    const cmd = primaryCommand(r);
+    const take = fixed ? t("s2.takeFixed", { s: r.sessions, m: r.calls, n: fixed }) : t("s2.takeNone", { s: r.sessions, m: r.calls });
     $("detail").innerHTML = `
-      <div class="top">${cmd ? `<span class="chip">${esc(cmd)}</span>` : ""}${fixed ? `<span class="tag green">${t("detail.recovered", { n: fixed, m: r.calls })}</span>` : `<span class="tag red">${t("detail.none")}</span>`}</div>
-      <h3>${esc(r.failure)}</h3>
+      <div class="top">${cmdLabel ? `<span class="chip">${esc(cmdLabel)}</span>` : ""}${fixed ? `<span class="tag green">${t("detail.recovered", { n: fixed, m: r.calls })}</span>` : `<span class="tag red">${t("detail.none")}</span>`}</div>
+      <h3>${esc(cleanSig(r.failure, 90))}</h3>
       <p class="takeaway">${take}</p>
       <div class="story">
         <div><p class="sub"><span class="k">a</span>${t("sub.graph")} <small>${t("sub.graphHint")}</small></p>${graph(r.failure)}</div>
@@ -685,9 +828,25 @@ async function main() {
       after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
     }
     $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
+    const allStats = totalsByFailure[k.known_failure];
     const picked = recurring[current];
-    const scope = picked && picked.failure === k.known_failure && picked.calls !== k.calls ? t("check.scope", { cmd: template }) : "";
-    $("check-note").textContent = t("check.warnNote", { cmd: template, calls: k.calls, runs: k.runs, pct: pct(k.calls, k.runs) }) + scope + (known.length > 1 ? t("check.more", { n: known.length - 1 }) : "");
+    const sameFailure = picked && picked.failure === k.known_failure;
+    const diffScope = allStats && (allStats.sessions !== k.sessions || allStats.calls !== k.calls);
+    const scopeVars = {
+      totalS: allStats ? allStats.sessions : k.sessions,
+      totalC: allStats ? allStats.calls : k.calls,
+      cmd: esc(template),
+      sig: esc(cleanSig(k.known_failure, 60)),
+      cmdS: k.sessions,
+      cmdC: k.calls,
+      runs: fmt(k.runs),
+      pct: pct(k.calls, k.runs),
+    };
+    const scopeKey = sameFailure
+      ? (diffScope ? "check.scopeDiff" : "check.scopeSame")
+      : (diffScope ? "check.scopeOtherDiff" : "check.scopeOther");
+    const scopeMsg = t(scopeKey, scopeVars);
+    $("check-note").innerHTML = `${scopeMsg}${known.length > 1 ? t("check.more", { n: known.length - 1 }) : ""}`;
   };
   let pending;
   $("cmd").addEventListener("input", () => { clearTimeout(pending); pending = setTimeout(check, 120); });
