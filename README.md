@@ -455,6 +455,14 @@ the warning would have acted on it. The Codex dataset is one developer on a
 Windows project, and one failure (`command timed out`) is 31 of the 80; without
 it the recurrence is 57%.
 
+A different question is whether the pre-run hook would have spoken. Replaying the
+hook's own rule on the later period, it would have spoken before 206 of the 5,070
+later shell calls (4.1%), and 10 of those calls then failed with the failure it
+named, 10 of the 117. Nine of the ten are in one session, and moving the cut
+between 50% and 90% moves the count between 0 and 22 (recomputed by a test from the
+committed store), so this describes these logs and is not a rate. None of the 48 failures with a recovery on record would
+have been warned. Details in [docs/evaluation.md](docs/evaluation.md#would-the-hook-have-spoken).
+
 ## Across agents, on real logs
 
 The public datasets cannot show the cross-agent case: one is PowerShell on

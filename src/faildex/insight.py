@@ -26,6 +26,12 @@ RECOVERY_HOPS = 5
 MIN_RATE = 0.03
 
 _RUNS = "MATCH (:Command {template: $command})<-[:RAN]-(c:Call) RETURN count(c) AS n"
+# The same count over some sessions before a cut: what the hook would have known then.
+_RUNS_IN = """
+MATCH (:Command {template: $command})<-[:RAN]-(c:Call)<-[:HAS_CALL]-(s:Session)
+WHERE s.id IN $sessions AND ($cut IS NULL OR c.ts < $cut)
+RETURN count(c) AS n
+"""
 RETRY = "retry"
 # Only these get better by running the same thing again; everything else needs a change.
 # Digits are masked in signatures, so status codes are matched by their reason phrase.
@@ -68,6 +74,12 @@ _FOR_COMMAND = """
 MATCH (k:Command {template: $command})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
 """
 
+_FOR_COMMAND_IN = """
+MATCH (k:Command {template: $command})<-[:RAN]-(f:Call)-[:FAILED_WITH]->(e:ErrorSig)
+MATCH (f)<-[:HAS_CALL]-(fs:Session)
+WHERE fs.id IN $sessions AND ($cut IS NULL OR f.ts < $cut)
+"""
+
 _FAILURES = """
 MATCH (f)<-[:HAS_CALL]-(s:Session)
 RETURN e.sig AS sig, e.kind AS kind, s.id AS session, s.agent AS agent,
@@ -88,6 +100,70 @@ OPTIONAL MATCH (step)-[:RAN]->(sk:Command)
 RETURN DISTINCT e.sig AS sig, f.id AS call, hops, k.template AS command,
        step.tool AS tool, sk.template AS step
 """
+# The calls some sessions made before a cut. `failures` rebuilds each session's NEXT chain
+# from these, the way `schema.ingest` links a store that holds only them.
+_CALLS_IN = """
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)
+WHERE s.id IN $sessions AND ($cut IS NULL OR c.ts < $cut)
+OPTIONAL MATCH (c)-[:RAN]->(k:Command)
+RETURN s.id AS session, c.id AS call, c.seq AS seq, c.ok AS ok, c.ts AS ts,
+       coalesce(c.compound, false) AS compound, c.tool AS tool, k.template AS command
+"""
+
+
+def _recoveries_in(db, command: str, failed: list[dict], cut: str | None) -> list[dict]:
+    """`_RECOVERIES` over the calls known before `cut` only, as rows of the same shape.
+
+    A store holding only those calls would chain them by (seq, id), skipping any call
+    from after the cut, so the hops and the step that follows a failure are counted
+    on that chain: the same command succeeding within RECOVERY_HOPS calls, neither
+    line chained, and the success not dated before the failure.
+    """
+    sessions = sorted({row["session"] for row in failed})
+    if not sessions:
+        return []
+    chains: dict[str, list[dict]] = {}
+    for row in db.execute(_CALLS_IN, {"sessions": sessions, "cut": cut}):
+        chains.setdefault(row["session"], []).append(row)
+    where: dict[str, tuple[list[dict], int]] = {}
+    for chain in chains.values():
+        chain.sort(key=lambda c: (c["seq"], c["call"]))
+        for i, c in enumerate(chain):
+            where[c["call"]] = (chain, i)
+    out = []
+    for row in failed:
+        if row["call"] not in where:
+            continue
+        chain, i = where[row["call"]]
+        f = chain[i]
+        if f["compound"]:
+            continue
+        hops = next(
+            (
+                h
+                for h in range(1, RECOVERY_HOPS + 1)
+                if i + h < len(chain)
+                and chain[i + h]["ok"]
+                and chain[i + h]["command"] == command
+                and not chain[i + h]["compound"]
+                and (f["ts"] is None or chain[i + h]["ts"] is None or chain[i + h]["ts"] >= f["ts"])
+            ),
+            None,
+        )
+        if hops is None:
+            continue
+        step = chain[i + 1]
+        out.append(
+            {
+                "sig": row["sig"],
+                "call": row["call"],
+                "hops": hops,
+                "command": command,
+                "tool": step["tool"],
+                "step": step["command"],
+            }
+        )
+    return out
 
 
 @dataclass
@@ -181,14 +257,29 @@ class Failure:
         return self.sig
 
 
-def failures(db, command: str | None = None) -> dict[str, Failure]:
-    """Failure keys with their recoveries: all of them, or those of one command."""
+def failures(
+    db,
+    command: str | None = None,
+    sessions: list[str] | None = None,
+    cut: str | None = None,
+) -> dict[str, Failure]:
+    """Failure keys with their recoveries: all of them, or those of one command.
+
+    With `sessions` (and a `cut`), only what those sessions did before the cut counts:
+    what the hook would have known then. `faildex eval` replays the hook this way.
+    """
     from faildex.normalize import shell_sig
 
-    scope = _FOR_COMMAND if command else _ALL
+    scoped = sessions is not None
+    if scoped and not command:
+        raise ValueError("a scoped lookup needs a command")
+    scope = _FOR_COMMAND_IN if scoped else _FOR_COMMAND if command else _ALL
     params = {"command": command} if command else {}
+    if scoped:
+        params |= {"sessions": list(sessions), "cut": cut}
     found: dict[str, Failure] = {}
-    for row in db.execute(scope + _FAILURES, params):
+    failed = list(db.execute(scope + _FAILURES, params))
+    for row in failed:
         sig = shell_sig(row["sig"]) or row["sig"]
         item = found.setdefault(sig, Failure(sig, row["kind"] or "text"))
         item.calls += 1
@@ -202,7 +293,12 @@ def failures(db, command: str | None = None) -> dict[str, Failure]:
         # One pointer per session, so the evidence shows the failure really spread.
         if row["path"] and fresh and len(item.evidence) < 3 and pointer not in item.evidence:
             item.evidence.append(pointer)
-    for row in db.execute(scope + _RECOVERIES, params):
+    recoveries = (
+        _recoveries_in(db, command, failed, cut)
+        if scoped
+        else db.execute(scope + _RECOVERIES, params)
+    )
+    for row in recoveries:
         sig = shell_sig(row["sig"]) or row["sig"]
         item = found.get(sig)
         if item is None:
@@ -214,21 +310,52 @@ def failures(db, command: str | None = None) -> dict[str, Failure]:
     return found
 
 
-def proposals(db, min_sessions: int = 2, command: str | None = None) -> list[Failure]:
+def proposals(
+    db,
+    min_sessions: int = 2,
+    command: str | None = None,
+    sessions: list[str] | None = None,
+    cut: str | None = None,
+) -> list[Failure]:
     """Failures worth a rule: seen in several sessions, best first."""
-    keep = [f for f in failures(db, command).values() if len(f.sessions) >= min_sessions]
+    found = failures(db, command, sessions, cut).values()
+    keep = [f for f in found if len(f.sessions) >= min_sessions]
     return sorted(keep, key=lambda f: (-f.score, -f.calls, f.sig))
 
 
+def warns(
+    calls: int, sessions: int, runs: int, min_sessions: int = 2, min_rate: float = MIN_RATE
+) -> bool:
+    """The pre-run hook's rule for one failure of one command: seen in `min_sessions`
+    sessions and in at least `min_rate` of that command's runs. `faildex eval` replays it."""
+    return sessions >= min_sessions and runs > 0 and calls / runs >= min_rate
+
+
 def warnings_for(
-    db, command: str, min_sessions: int = 2, min_rate: float = MIN_RATE
+    db,
+    command: str,
+    min_sessions: int = 2,
+    min_rate: float = MIN_RATE,
+    sessions: list[str] | None = None,
+    cut: str | None = None,
 ) -> list[Failure]:
-    """Recurring failures of one command that are frequent enough to warn about."""
-    runs = next(iter(db.execute(_RUNS, {"command": command})))["n"]
-    found = proposals(db, min_sessions, command)
+    """Recurring failures of one command that are frequent enough to warn about, best first.
+
+    `sessions` and `cut` limit what is known, as in `failures`.
+    """
+    if sessions is None:
+        runs = next(iter(db.execute(_RUNS, {"command": command})))["n"]
+    else:
+        params = {"command": command, "sessions": list(sessions), "cut": cut}
+        runs = next(iter(db.execute(_RUNS_IN, params)))["n"]
+    found = proposals(db, min_sessions, command, sessions, cut)
     for item in found:
         item.runs = runs
-    return [item for item in found if runs and item.calls / runs >= min_rate]
+    return [
+        item
+        for item in found
+        if warns(item.calls, len(item.sessions), runs, min_sessions, min_rate)
+    ]
 
 
 def warnings_for_line(

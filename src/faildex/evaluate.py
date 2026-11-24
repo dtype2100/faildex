@@ -21,10 +21,18 @@ the same table on any machine.
 
 A private store made by `faildex ingest` has no public datasets, so its sessions
 are grouped by agent instead and split the same way, one agent at a time.
+
+The same split also replays the pre-run hook's own rule (`insight.warns`) on the
+later period, with only the earlier period known: would the hook have spoken
+before each later shell call, and did the failure it named follow? Nobody was
+warned in these logs, so this shows when the hook would have spoken, not what an
+agent would have done. It looks only at the stored first program of each line,
+and leaves out the two zsh rules, which need the raw command line.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 EARLIER_SHARE = 0.7
@@ -75,6 +83,33 @@ WHERE size(agents) > 1
 RETURN e.sig AS sig ORDER BY sig
 """
 
+# What the earlier period tells the hook: runs per command, and per (command, failure)
+# the failed calls and the sessions they were in. `$cut` None means every call.
+_HOOK_RUNS = """
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:RAN]->(k:Command)
+WHERE s.id IN $earlier AND ($cut IS NULL OR c.ts < $cut)
+RETURN k.template AS command, count(c) AS runs
+"""
+
+_HOOK_FAILURES = """
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:FAILED_WITH]->(e:ErrorSig)
+WHERE s.id IN $earlier AND ($cut IS NULL OR c.ts < $cut)
+MATCH (c)-[:RAN]->(k:Command)
+RETURN k.template AS command, e.sig AS sig, e.kind AS kind,
+       count(c) AS calls, count(DISTINCT s.id) AS sessions
+"""
+
+# Every later-period call, with its command and failure if any.
+_HOOK_LATER = """
+MATCH (s:Session)-[:HAS_CALL]->(c:Call)
+WHERE s.id IN $later
+OPTIONAL MATCH (c)-[:RAN]->(k:Command)
+OPTIONAL MATCH (c)-[:FAILED_WITH]->(e:ErrorSig)
+RETURN c.id AS call, s.id AS session, c.tool AS tool, c.ok AS ok,
+       k.template AS command, e.sig AS sig, e.kind AS kind
+ORDER BY call
+"""
+
 _SOURCES = "MATCH (d:Source) RETURN d.name AS name ORDER BY name"
 _AGENTS = (
     "MATCH (s:Session) WHERE s.agent IS NOT NULL RETURN DISTINCT s.agent AS name ORDER BY name"
@@ -100,6 +135,204 @@ class Result:
     @property
     def warnable_share(self) -> float:
         return self.warnable / self.recurring if self.recurring else 0.0
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One failure the hook would warn about before a command, and what it was told."""
+
+    command: str
+    sig: str
+    calls: int
+    runs: int
+    sessions: int
+
+
+@dataclass(frozen=True)
+class RuleOutcome:
+    rule: Rule
+    warned: int  # later shell calls of the command that got this warning
+    came_true: int  # of those, calls that failed with this failure
+    runs: int = 0  # later shell calls of the command, warned or not (past the cap)
+
+
+# How far each later-period failure got towards a warning, in order.
+STAGES = ("failure", "shell", "named", "known", "command", "sessions", "rate", "cap")
+
+
+@dataclass(frozen=True)
+class HookReplay:
+    source: str
+    funnel: tuple[int, ...]  # later failures still in at each of STAGES
+    shell_calls: int
+    warned: int
+    warned_ok: int
+    came_true: int
+    came_true_sessions: tuple[int, ...]  # per session that had any, largest first
+    rules: tuple[RuleOutcome, ...] = ()
+    stages: tuple[tuple[str, str], ...] = ()  # (call, last stage reached) per later failure
+
+    @property
+    def other(self) -> int:
+        return self.warned - self.warned_ok - self.came_true
+
+
+def shell_tools() -> frozenset[str]:
+    """The tool name each agent's log gives its shell; the hook runs before these."""
+    from faildex.adapters import antigravity, claude_code, codex, codex_local, cursor
+
+    names = {m.SHELL_TOOL for m in (antigravity, claude_code, codex, cursor)}
+    return frozenset(names | {codex_local.TOOL})  # local Codex logs only shell commands
+
+
+def _earlier(db, earlier: list[str], cut: str | None):
+    runs = {
+        row["command"]: row["runs"]
+        for row in db.execute(_HOOK_RUNS, {"earlier": earlier, "cut": cut})
+    }
+    seen = {
+        (row["command"], row["sig"]): (row["calls"], row["sessions"])
+        for row in db.execute(_HOOK_FAILURES, {"earlier": earlier, "cut": cut})
+    }
+    return runs, seen
+
+
+def hook_rules(
+    db, earlier: list[str], cut: str | None, min_sessions: int = 2
+) -> dict[str, list[Rule]]:
+    """What the hook would warn about, per command, knowing only `earlier` before `cut`.
+
+    Each command is looked up with the hook's own `insight.warnings_for`, limited to
+    what was known then, so the rules and their order are the hook's. The two zsh rules
+    are left out: they are decided on the raw command line, which the store does not keep.
+    """
+    from faildex.insight import warnings_for, warns
+    from faildex.normalize import shell_sig
+
+    runs, seen = _earlier(db, earlier, cut)
+    # Only a command with a failure that clears the rule can get a warning; look up those.
+    candidates = sorted(
+        {
+            command
+            for (command, sig), (calls, sessions) in seen.items()
+            if warns(calls, sessions, runs.get(command, 0), min_sessions)
+        }
+    )
+    rules: dict[str, list[Rule]] = {}
+    for command in candidates:
+        found = [
+            Rule(command, item.sig, item.calls, item.runs, len(item.sessions))
+            for item in warnings_for(db, command, min_sessions, sessions=earlier, cut=cut)
+            if shell_sig(item.sig) is None
+        ]
+        if found:
+            rules[command] = found
+    return rules
+
+
+def replay_source(
+    db,
+    source: str,
+    kinds: tuple[str, ...] = ("text", "exit"),
+    by: str = "dataset",
+    min_sessions: int = 2,
+    max_warnings: int | None = None,
+) -> HookReplay | None:
+    """Replay the hook on one dataset's (or agent's) later period."""
+    from faildex.hook import MAX_WARNINGS
+    from faildex.insight import MIN_RATE
+
+    max_warnings = MAX_WARNINGS if max_warnings is None else max_warnings
+
+    rows = db.execute(_AGENT_SESSIONS if by == "agent" else _SESSIONS, {"source": source})
+    parts = split([(row["id"], row["started"]) for row in rows])
+    if parts is None:
+        return None
+    earlier_ids, later_ids, cut = parts
+    runs, seen = _earlier(db, earlier_ids, cut)
+    known = {row["sig"] for row in db.execute(_EARLIER_KEYS, {"earlier": earlier_ids, "cut": cut})}
+    rules = hook_rules(db, earlier_ids, cut, min_sessions)
+    spoken = {command: found[:max_warnings] for command, found in rules.items()}
+    shells = shell_tools()
+
+    funnel = Counter()
+    stages = []
+    shell_calls = warned = warned_ok = 0
+    true_sessions: Counter = Counter()
+    per_rule_warned: Counter = Counter()
+    per_rule_true: Counter = Counter()
+    later_commands: Counter = Counter()
+    for row in db.execute(_HOOK_LATER, {"later": later_ids}):
+        shell = row["tool"] in shells
+        command = row["command"] if shell else None
+        said = spoken.get(command, []) if command else []
+        if shell:
+            shell_calls += 1
+            later_commands[command] += 1
+        if said:
+            warned += 1
+            warned_ok += bool(row["ok"])
+            for rule in said:
+                per_rule_warned[rule] += 1
+        keyed = row["sig"] is not None and row["kind"] in kinds
+        if keyed and any(rule.sig == row["sig"] for rule in said):
+            true_sessions[row["session"]] += 1
+            per_rule_true[next(r for r in said if r.sig == row["sig"])] += 1
+        if not keyed:
+            continue
+        calls, sessions = seen.get((command, row["sig"]), (0, 0))
+        reached = [
+            True,
+            shell,
+            command is not None,
+            row["sig"] in known,
+            calls > 0,
+            sessions >= min_sessions,
+            calls > 0 and calls / max(runs.get(command, 0), 1) >= MIN_RATE,
+            any(rule.sig == row["sig"] for rule in said),
+        ]
+        last = 0
+        while last + 1 < len(reached) and reached[last + 1]:
+            last += 1
+        for stage in STAGES[: last + 1]:
+            funnel[stage] += 1
+        stages.append((row["call"], STAGES[last]))
+    outcomes = tuple(
+        RuleOutcome(rule, per_rule_warned[rule], per_rule_true[rule], later_commands[rule.command])
+        for found in rules.values()
+        for rule in found
+    )
+    return HookReplay(
+        source=source,
+        funnel=tuple(funnel[stage] for stage in STAGES),
+        shell_calls=shell_calls,
+        warned=warned,
+        warned_ok=warned_ok,
+        came_true=sum(true_sessions.values()),
+        came_true_sessions=tuple(sorted(true_sessions.values(), reverse=True)),
+        rules=outcomes,
+        stages=tuple(stages),
+    )
+
+
+def replay(db, kinds: tuple[str, ...] = ("text", "exit")) -> list[HookReplay]:
+    """The hook replay per dataset (or agent), then all of them together."""
+    by, names = groups(db)
+    found = [r for r in (replay_source(db, name, kinds, by) for name in names) if r]
+    if not found:
+        return []
+    every = HookReplay(
+        "all",
+        tuple(sum(r.funnel[i] for r in found) for i in range(len(STAGES))),
+        sum(r.shell_calls for r in found),
+        sum(r.warned for r in found),
+        sum(r.warned_ok for r in found),
+        sum(r.came_true for r in found),
+        tuple(sorted((n for r in found for n in r.came_true_sessions), reverse=True)),
+        tuple(o for r in found for o in r.rules),
+        tuple(pair for r in found for pair in r.stages),
+    )
+    return [*found, every]
 
 
 def split(sessions: list[tuple[str, str]]) -> tuple[list[str], list[str], str] | None:
@@ -261,4 +494,86 @@ def report(db, report_command: str = "faildex report") -> str:
     shared = shared_keys(db)
     lines.append(t("eval.shared", count=len(shared)))
     lines += [f"  {sig}" for sig in shared]
+    replays = replay(db)
+    if replays:
+        lines += ["", *_hook_lines(replays[-1], by)]
     return "\n".join(lines)
+
+
+def _short(text: str, size: int) -> str:
+    return text if len(text) <= size else text[: size - 3].rstrip() + "..."
+
+
+def _hook_lines(r: HookReplay, by: str = "dataset", min_sessions: int = 2) -> list[str]:
+    """The replay as text: the funnel, what the warned calls did, and the rules that spoke."""
+    from faildex.hook import MAX_WARNINGS as max_warnings
+    from faildex.i18n import pad, t, width, wrap
+    from faildex.insight import MIN_RATE
+
+    rate = f"{MIN_RATE:.0%}"
+    lines = [
+        *wrap(t("eval.hook.title", sessions=min_sessions, rate=rate, cap=max_warnings), 88, ""),
+        # Public datasets were logged without faildex; a private store may hold warned calls.
+        *wrap(t("eval.hook.note" if by == "dataset" else "eval.hook.note_agent"), 88, ""),
+        "",
+    ]
+    for depth, (stage, count) in enumerate(zip(STAGES, r.funnel)):
+        label = t(f"eval.hook.stage.{stage}", sessions=min_sessions, rate=rate, cap=max_warnings)
+        lines.append(f"{pad('  ' * min(depth, 1) + label, 56)}{count:>6}")
+    lines.append("")
+    if not r.warned:
+        lines.append(t("eval.hook.none"))
+    else:
+        share = f"{r.warned / r.shell_calls:.1%}"
+        lines += wrap(
+            t(
+                "eval.hook.warned",
+                warned=f"{r.warned:,}",
+                calls=f"{r.shell_calls:,}",
+                share=share,
+                ok=f"{r.warned_ok:,}",
+                true=r.came_true,
+                other=r.other,
+            ),
+            88,
+            "  ",
+        )
+    if r.came_true:
+        lines.append(
+            t(
+                "eval.hook.sessions",
+                true=r.came_true,
+                sessions=len(r.came_true_sessions),
+                most=r.came_true_sessions[0],
+            )
+        )
+    spoke = sorted(
+        (o for o in r.rules if o.warned),
+        key=lambda o: (-o.warned, -o.came_true, o.rule.command, o.rule.sig),
+    )
+    if spoke:
+        columns = [
+            (t("eval.hook.col.command"), 14, "<"),
+            (t("eval.hook.col.failure"), 42, "<"),
+            (t("eval.hook.col.earlier"), 30, "<"),
+            (t("eval.hook.col.warned"), 8, ">"),
+            (t("eval.hook.col.true"), 10, ">"),
+        ]
+        head = "".join(pad(name, size, align) for name, size, align in columns)
+        lines += ["", t("eval.hook.rules"), head, "-" * width(head)]
+        for o in spoke:
+            earlier = t(
+                "eval.hook.earlier", calls=o.rule.calls, runs=o.rule.runs, sessions=o.rule.sessions
+            )
+            lines.append(
+                f"{pad(_short(o.rule.command, 13), 14)}{pad(_short(o.rule.sig, 40), 42)}"
+                f"{pad(earlier, 30)}{o.warned:>8}{o.came_true:>10}"
+            )
+    absent = sum(1 for o in r.rules if not o.runs)
+    capped = sum(1 for o in r.rules if o.runs and not o.warned)
+    if absent:
+        lines.append(t("eval.hook.silent", count=absent))
+    if capped:
+        lines.append(t("eval.hook.capped", count=capped, cap=max_warnings))
+    lines += ["", *wrap(t("eval.hook.limits"), 88, "  ")]
+    return lines
