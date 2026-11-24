@@ -344,6 +344,8 @@ EN = {
     "lang.saved": "saved: {language} in {path}",
     "lang.env_wins": "note: FAILDEX_LANG={value} is set, so it still decides the language in this shell",
     "lang.env_ignored": "note: FAILDEX_LANG={value} is not en or ko, so it is ignored",
+    "lang.origin.console": "Korean was asked for, but this console cannot show it",
+    "note.console": "note: this console's encoding ({encoding}) cannot show Korean, so faildex prints English. For Korean, use a UTF-8 console (PYTHONIOENCODING=utf-8, or chcp 65001 on Windows).",
     "lang.name.en": "English",
     "lang.name.ko": "Korean",
     # faildex help
@@ -614,6 +616,8 @@ KO = {
     "lang.saved": "저장했습니다: {language}, {path}",
     "lang.env_wins": "참고: FAILDEX_LANG={value}가 설정되어 있어 이 셸에서는 그 값이 언어를 정합니다",
     "lang.env_ignored": "참고: FAILDEX_LANG={value}는 en도 ko도 아니어서 무시합니다",
+    "lang.origin.console": "한국어를 골랐지만 이 콘솔이 한글을 표시하지 못함",
+    "note.console": "참고: 이 콘솔의 인코딩({encoding})으로는 한글을 표시할 수 없어 영어로 출력합니다. 한국어로 보려면 UTF-8 콘솔을 쓰세요 (PYTHONIOENCODING=utf-8, Windows에서는 chcp 65001).",
     "lang.name.en": "영어",
     "lang.name.ko": "한국어",
     "help.title": "faildex 사용 순서",

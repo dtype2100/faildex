@@ -440,7 +440,7 @@ def _help(args: argparse.Namespace) -> int:
 def _lang(args: argparse.Namespace) -> int:
     import os
 
-    from faildex.i18n import ENV, LANGUAGES, config_path, current, origin, save, use
+    from faildex.i18n import ENV, LANGUAGES, config_path, current, origin, resolve, save, use
 
     env = os.environ.get(ENV)
     env_value = env.strip().lower() if env else None
@@ -460,8 +460,9 @@ def _lang(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as err:
         print(t("err.prefix", message=t("err.config", message=err)))
         return 1
-    if not getattr(args, "lang_given", False):
-        use(args.choice, "config")
+    # The saved language applies now unless --lang or FAILDEX_LANG still decides it.
+    use(*resolve(args.lang_option))
+    _fit_console()
     print(t("lang.saved", language=args.choice, path=_display_store_path(path)))
     if env_value in LANGUAGES and env_value != args.choice:
         print(t("lang.env_wins", value=env))
@@ -481,6 +482,34 @@ def _lang_option(argv: list[str]) -> str | None:
         elif word.startswith("--lang="):
             found = word.split("=", 1)[1]
     return found
+
+
+def _fit_console() -> None:
+    """Korean on a console whose encoding cannot show it (cp1252, say): English, not a crash."""
+    import sys
+
+    from faildex.i18n import current, t, use
+
+    if current() == "en":
+        return
+    broken = None
+    for stream in (sys.stdout, sys.stderr):
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            "한글".encode(encoding)
+        except (UnicodeEncodeError, LookupError):
+            broken = broken or encoding
+    if broken is None:
+        return
+    use("en", "console")
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(errors="replace")  # any other glyph it cannot show becomes "?"
+            except (ValueError, OSError):
+                pass
+    print(t("note.console", encoding=broken), file=sys.stderr)
 
 
 class _Formatter(argparse.HelpFormatter):
@@ -644,13 +673,15 @@ def main(argv: list[str] | None = None) -> int:
     from faildex.i18n import resolve, use
 
     argv = sys.argv[1:] if argv is None else list(argv)
-    use(*resolve(_lang_option(argv)))
+    option = _lang_option(argv)
+    use(*resolve(option))
+    _fit_console()
     parser, _ = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 0
-    args.lang_given = _lang_option(argv) is not None
+    args.lang_option = option
     args.store_given = getattr(args, "store", None) is not None
     if getattr(args, "store", "set") is None:
         import os

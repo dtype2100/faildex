@@ -106,7 +106,7 @@ def _period_name(name: str) -> str:
 
 
 def render(db, split: str | None, key: str | None, hook_log: Path | None = None) -> str:
-    from faildex.i18n import pad, t
+    from faildex.i18n import current, pad, t
 
     lines = [
         pad(t("report.col.agent"), 14)
@@ -129,7 +129,10 @@ def render(db, split: str | None, key: str | None, hook_log: Path | None = None)
         + pad(per_1000, 10, ">")
     )
     if key:  # the matched column means nothing without --key
-        head += "  " + pad(t("report.col.matched", key=key), 30, ">") + pad(per_1000, 10, ">")
+        matched = t("report.col.matched", key=key)
+        # English keeps str.format's padding, so its output is what it always was.
+        matched = f"{matched:>30}" if current() == "en" else pad(matched, 30, ">")
+        head += "  " + matched + pad(per_1000, 10, ">")
     with_log = hook_log is not None
     lines.append(head + (pad(t("report.col.hook"), 15, ">") if with_log else ""))
     for p in periods(db, split, key, hook_log):

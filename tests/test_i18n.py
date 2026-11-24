@@ -91,7 +91,7 @@ def test_faildex_lang_saves_switches_and_reports_where_it_came_from(capsys):
     home = Path.home()
     store = home / ".faildex" / "store"
     store.mkdir(parents=True)
-    (store / "manifest.json").write_text("{}")
+    (store / "manifest.json").write_text("{}", encoding="utf-8")
 
     assert main(["lang"]) == 0
     assert capsys.readouterr().out.startswith("language: en (the default")
@@ -99,7 +99,9 @@ def test_faildex_lang_saves_switches_and_reports_where_it_came_from(capsys):
     assert main(["lang", "ko"]) == 0
     out = capsys.readouterr().out
     assert "저장했습니다: ko" in out and "~/.faildex/config.json" in out
-    assert json.loads((home / ".faildex" / "config.json").read_text()) == {"lang": "ko"}
+    assert json.loads((home / ".faildex" / "config.json").read_text(encoding="utf-8")) == {
+        "lang": "ko"
+    }
 
     assert main(["lang"]) == 0
     assert capsys.readouterr().out.startswith("언어: ko (~/.faildex/config.json에 저장됨)")
@@ -112,27 +114,29 @@ def test_faildex_lang_saves_switches_and_reports_where_it_came_from(capsys):
     assert "how to use it, in order" in capsys.readouterr().out
     # The store folder next to the config is untouched.
     assert sorted(p.name for p in store.iterdir()) == ["manifest.json"]
-    assert (store / "manifest.json").read_text() == "{}"
+    assert (store / "manifest.json").read_text(encoding="utf-8") == "{}"
 
 
 def test_faildex_lang_keeps_other_settings_and_refuses_a_broken_file(capsys):
     config = Path.home() / ".faildex" / "config.json"
     config.parent.mkdir(parents=True)
-    config.write_text('{"other": 1}')
+    config.write_text('{"other": 1}', encoding="utf-8")
     assert main(["lang", "ko"]) == 0
-    assert json.loads(config.read_text()) == {"other": 1, "lang": "ko"}
-    config.write_text("{not json")
+    assert json.loads(config.read_text(encoding="utf-8")) == {"other": 1, "lang": "ko"}
+    config.write_text("{not json", encoding="utf-8")
     capsys.readouterr()
     assert main(["lang", "en"]) == 1
     assert "error:" in capsys.readouterr().out
-    assert config.read_text() == "{not json"
+    assert config.read_text(encoding="utf-8") == "{not json"
 
 
 def test_faildex_lang_says_when_the_environment_still_wins(monkeypatch, capsys):
     monkeypatch.setenv("FAILDEX_LANG", "en")
     assert main(["lang", "ko"]) == 0
     out = capsys.readouterr().out
-    assert "FAILDEX_LANG=en" in out
+    # Saved, but FAILDEX_LANG=en still decides this shell, so the reply is English.
+    assert out.startswith("saved: ko") and "FAILDEX_LANG=en" in out
+    assert not re.search("[가-힣]", out)
     assert main(["lang"]) == 0
     assert "FAILDEX_LANG" in capsys.readouterr().out
 
@@ -188,7 +192,7 @@ def test_check_speaks_korean_but_approve_writes_english(tmp_path, capsys):
     argv = ["--lang", "ko", "rules", "--approve", "1", "--to", str(rules), "--store", str(store)]
     assert main(argv) == 0
     assert "규칙 1개를" in capsys.readouterr().out
-    assert f"- When `git push` fails with `{REJECTED}`" in rules.read_text()
+    assert f"- When `git push` fails with `{REJECTED}`" in rules.read_text(encoding="utf-8")
     # A second approval in English sees the same rule and skips it.
     assert main(["rules", "--approve", "1", "--to", str(rules), "--store", str(store)]) == 0
     assert capsys.readouterr().out.startswith("added 0 rule(s)")
@@ -304,3 +308,54 @@ def test_readme_steps_match_faildex_help(readme, heading):
 def test_readme_steps_come_before_setup(readme, heading, before):
     text = (ROOT / readme).read_text(encoding="utf-8")
     assert text.index(heading) < text.index(before)
+
+
+def _cp1252(monkeypatch):
+    """A Windows console on a code page without Hangul, as when output is redirected."""
+    import io
+
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    err = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr("sys.stdout", out)
+    monkeypatch.setattr("sys.stderr", err)
+
+    def read() -> tuple[str, str]:
+        out.flush()
+        err.flush()
+        text = out.buffer.getvalue().decode("cp1252"), err.buffer.getvalue().decode("cp1252")
+        for stream in (out, err):
+            stream.buffer.seek(0)
+            stream.buffer.truncate()
+        return text
+
+    return read
+
+
+def test_korean_on_a_console_that_cannot_show_it_prints_english(monkeypatch):
+    read = _cp1252(monkeypatch)
+    for argv in (
+        ["--lang", "ko", "help"],
+        ["--lang", "ko", "lang"],
+        ["--lang", "ko", "rules", "--top", "1", "--store", str(STORE)],
+        ["--lang", "ko", "eval", "--store", str(STORE)],
+    ):
+        assert main(argv) == 0
+        out, err = read()
+        assert out and "cp1252" in err and "Korean" in err
+    with pytest.raises(SystemExit) as done:
+        main(["--lang", "ko", "--help"])
+    assert done.value.code == 0
+    out, err = read()
+    assert out.rstrip().endswith("New here? Run: faildex help") and "cp1252" in err
+
+    monkeypatch.setenv("FAILDEX_LANG", "ko")
+    assert main(["lang"]) == 0
+    out, _ = read()
+    assert "cannot show it" in out
+
+
+def test_english_report_pads_a_korean_key_as_before(capsys):
+    assert main(["report", "--store", str(STORE), "--key", "오류"]) == 0
+    head = next(line for line in capsys.readouterr().out.splitlines() if "오류" in line)
+    label = 'failed with "오류"'
+    assert f"  {label:>30}{'per 1000':>10}" in head
