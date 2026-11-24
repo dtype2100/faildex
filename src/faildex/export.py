@@ -81,5 +81,5 @@ def export(db) -> dict:
 def write(db, out: Path) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(export(db), separators=(",", ":"))
-    out.write_text(text)
+    out.write_text(text, encoding="utf-8")
     return len(text)

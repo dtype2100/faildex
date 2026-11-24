@@ -76,7 +76,7 @@ def _log(path: Path, payload: dict, context: str) -> None:
         "warnings": context.count("\n- "),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as out:
+    with path.open("a", encoding="utf-8") as out:
         out.write(json.dumps(entry) + "\n")
 
 

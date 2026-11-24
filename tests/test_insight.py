@@ -88,6 +88,18 @@ def test_approve_writes_only_chosen_rules_once(tmp_path):
     assert "Evidence: demo/s1.jsonl:1" in text
 
 
+def test_approve_appends_to_a_utf8_rules_file(tmp_path):
+    # The hook reads the rules file as UTF-8, so approve must write it that way
+    # on a machine whose locale encoding is a legacy code page.
+    items = proposals(_db())
+    path = tmp_path / "rules.md"
+    path.write_text("# 원칙 → 한글 규칙\n", encoding="utf-8")
+    assert len(approve(items, [1], path)) == 1
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("# 원칙 → 한글 규칙\n")
+    assert text.count("git pull") == 1
+
+
 def test_cli_check_is_silent_for_unknown_commands(tmp_path, capsys):
     store = tmp_path / "store"
     db = relate.connect(str(store))
