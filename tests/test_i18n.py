@@ -96,15 +96,20 @@ def test_faildex_lang_saves_switches_and_reports_where_it_came_from(capsys):
     assert main(["lang"]) == 0
     assert capsys.readouterr().out.startswith("language: en (the default")
 
+    from faildex.insight import tilde_path
+
+    shown = tilde_path(
+        i18n.config_path()
+    )  # ~/.faildex/config.json, ~\.faildex\config.json on Windows
     assert main(["lang", "ko"]) == 0
     out = capsys.readouterr().out
-    assert "저장했습니다: ko" in out and "~/.faildex/config.json" in out
+    assert out.startswith(f"저장했습니다: ko, {shown}")
     assert json.loads((home / ".faildex" / "config.json").read_text(encoding="utf-8")) == {
         "lang": "ko"
     }
 
     assert main(["lang"]) == 0
-    assert capsys.readouterr().out.startswith("언어: ko (~/.faildex/config.json에 저장됨)")
+    assert capsys.readouterr().out.startswith(f"언어: ko ({shown}에 저장됨)")
     assert main(["help"]) == 0
     assert "faildex 사용 순서" in capsys.readouterr().out
 
