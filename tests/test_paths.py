@@ -9,7 +9,7 @@ import base64
 import shutil
 from pathlib import Path
 
-from faildex.cli import _path, build_parser, main
+from faildex.cli import build_parser, main
 from faildex.store import STORE_PARTS
 
 ROOT = Path(__file__).parent.parent
@@ -59,31 +59,50 @@ def test_ingest_reads_and_writes_tilde_paths(tmp_path, monkeypatch, capsys):
     assert not (tmp_path / "~").exists()
 
 
+# Every path option, per command; a lost or new one fails here.
+PATH_OPTIONS = {
+    "build-store": {"data", "out"},
+    "eval": {"store"},
+    "rules": {"store", "to"},
+    "link": {"rules"},
+    "check": {"store"},
+    "hook": {"rules", "encoded_rules", "log", "store"},
+    "report": {"store", "hook_log"},
+    "mcp": {"store"},
+    "ingest": {"claude", "codex", "codex_sessions", "cursor", "antigravity", "store"},
+    "export-web": {"out", "store"},
+}
+
+
 def test_every_path_option_expands_the_home_folder():
-    parser, commands = build_parser()
-    found = []
-    for sub in [parser, *commands.values()]:
+    from faildex.cli import _path
+
+    _, commands = build_parser()
+    found = {}
+    for name, sub in commands.items():
         for action in sub._actions:
-            assert action.type is not Path, (sub.prog, action.option_strings)
+            assert action.type is not Path, (name, action.option_strings)
             if action.type is _path:
-                found.append((sub.prog, action.dest))
+                found.setdefault(name, set()).add(action.dest)
             elif action.dest == "encoded_rules":  # base64 of a path, decoded then expanded
                 encoded = base64.urlsafe_b64encode(b"~/r.md").decode()
                 assert action.type(encoded) == Path.home() / "r.md"
-                found.append((sub.prog, action.dest))
-    assert {dest for _, dest in found} >= {
-        "to",
-        "store",
-        "out",
-        "log",
-        "hook_log",
-        "rules",
-        "data",
-        "claude",
-        "codex",
-        "codex_sessions",
-        "cursor",
-        "antigravity",
-        "encoded_rules",
-    }
+                found.setdefault(name, set()).add(action.dest)
+    assert found == PATH_OPTIONS
+
+
+def test_only_the_home_folder_is_expanded():
+    from faildex.cli import _path
+
+    assert _path("~") == Path.home()
     assert _path("~/a") == Path.home() / "a"
+    assert _path("~old") == Path("~old")  # a folder name, not a user's home
+    assert _path("~nosuchuser/x") == Path("~nosuchuser/x")
+    assert _path("a/~/b") == Path("a/~/b")
+
+
+def test_a_folder_whose_name_starts_with_a_tilde_still_works(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    shutil.copytree(FIXTURES / "claude_code", tmp_path / "~old" / "p1")
+    assert main(["ingest", "--claude", "~old", "--store", "~/mine"]) == 0
+    assert "sessions 2" in capsys.readouterr().out

@@ -398,8 +398,17 @@ def _sources(args: argparse.Namespace) -> int:
 
 
 def _path(value: str) -> Path:
-    """A path option, `~` included: PowerShell 5.1 and cmd.exe pass `~` through unexpanded."""
-    return Path(value).expanduser()
+    """A path option, `~` included: PowerShell 5.1 and cmd.exe pass `~` through unexpanded.
+
+    Only `~` and `~/...` (`~\\...` on Windows) mean the home folder. A name such as `~old`
+    stays a name, as before, instead of another user's home or an error.
+    """
+    import os
+
+    seps = ("/", "\\") if os.name == "nt" else ("/",)
+    if value == "~" or value.startswith(tuple("~" + sep for sep in seps)):
+        return Path(value).expanduser()
+    return Path(value)
 
 
 def _positive(value: str) -> int:
