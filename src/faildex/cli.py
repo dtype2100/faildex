@@ -526,8 +526,11 @@ def _fit_console() -> None:
     print(t("note.console", encoding=broken), file=sys.stderr)
 
 
-class _Formatter(argparse.HelpFormatter):
-    """argparse's formatter with the `usage:` prefix in the chosen language."""
+class _Formatter(argparse.RawDescriptionHelpFormatter):
+    """argparse's formatter with the `usage:` prefix in the chosen language.
+
+    Descriptions and the epilog keep their line breaks: the epilog is the install order.
+    """
 
     def add_usage(self, usage, actions, groups, prefix=None):
         super().add_usage(usage, actions, groups, t("argparse.usage") if prefix is None else prefix)
@@ -541,13 +544,14 @@ def _translate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.ArgumentParser]]:
     """The faildex parser in the current language, and each command's own parser."""
+    from faildex.guide import brief
     from faildex.i18n import LANGUAGES
 
     parser = _translate(
         argparse.ArgumentParser(
             prog="faildex",
             description=t("cli.description"),
-            epilog=t("cli.epilog"),
+            epilog=brief(),
             formatter_class=_Formatter,
             add_help=False,
         )

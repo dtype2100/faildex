@@ -24,29 +24,138 @@ Windows는 [설치](#설치)의 PowerShell 한 줄을 쓰세요.
 
 ## 사용 순서
 
-1. **설치**: `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh`
-   `faildex` 명령(없으면 uv도)을 설치합니다. 다른 것은 바꾸지 않습니다. Windows는 [설치](#설치)를 보세요.
-2. **공개 데이터로 맛보기**: `faildex demo`
-   아무것도 쓰지 않습니다. faildex에 들어 있는 공개 기록으로 규칙, 경고, 수치를 보여 줍니다.
-3. **내 기록 모으기**: `faildex ingest`
-   개인 스토어 `~/.faildex/store`를 만듭니다. 이 컴퓨터 밖으로 나가지 않습니다.
-4. **규칙 제안 보기**: `faildex rules`
-   아무것도 쓰지 않습니다. 여러 세션에서 반복된 실패를 번호와 복구 기록과 함께 보여 줍니다.
-5. **골라서 승인**: `faildex rules --approve 1 3 --to ~/faildex-rules.md`
-   고른 규칙을 `~/faildex-rules.md`에 덧붙입니다. 묻지 않고는 쓰지 않습니다.
-6. **에이전트에 연결**: `faildex link`
-   스킬과 규칙 파일을 Claude Code, Antigravity, Codex, Cursor에 설치합니다. `faildex link --remove`로 되돌립니다.
-7. **실행 전 경고**: `faildex hook` · `faildex mcp` · `faildex check "git status"`
-   아무것도 쓰지 않습니다. 훅과 MCP 서버가 에이전트에게 경고하고, `check`는 같은 내용을 사람에게 보여 줍니다.
-   훅 설정은 [설치와 실행](#설치와-실행)에 있습니다.
-8. **효과 확인**: `faildex eval` · `faildex report --split 2026-11-17`
-   아무것도 쓰지 않습니다. `eval`은 반복률을 채점하고, `report`는 내 기록을 어떤 날짜 이전과 이후로 비교합니다.
+세 부분으로 나뉩니다. 처음 한 번은 순서대로 설정하고, 새 세션이 쌓이면 두 단계를
+되풀이하고, 그다음 효과를 확인합니다. `faildex help`는 같은 순서를 터미널에 보여 주고,
+`faildex --help`의 끝에는 첫 부분이 나옵니다. 아래 단계마다 복사할 명령과 무엇이 바뀌는지를
+적었습니다. 명령별 자세한 내용은 [설치와 실행](#설치와-실행)에 있습니다.
 
-`faildex help`는 이 순서를 터미널에 보여 주고, `faildex help <명령>`은 명령 하나를 예와 함께
-설명합니다. 출력은 기본이 영어입니다. `faildex lang ko`로 한국어로, `faildex lang en`으로 다시
+### 처음 설치할 때 (한 번, 이 순서대로)
+
+**1. 설치**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+```
+
+설치 스크립트가 PATH에 폴더를 추가하라고 하면 먼저 `uv tool update-shell`을 실행합니다. 그다음
+새 터미널을 열어 `faildex`가 PATH에 잡히게 한 뒤 확인합니다.
+
+```bash
+faildex --version
+```
+
+바뀌는 것: `faildex` 명령(없으면 uv도)을 설치합니다. 다른 것은 바꾸지 않습니다.
+`faildex --version`은 설치된 버전을 보여 줍니다. Windows는 [설치](#설치)의 PowerShell 한 줄을 쓰세요.
+
+**2. 공개 데이터로 맛보기**
+
+```bash
+faildex demo
+```
+
+바뀌는 것: 아무것도 쓰지 않습니다. faildex에 들어 있는 공개 기록으로 규칙, 경고, 수치를 보여 줍니다.
+
+**3. 내 기록 모으기**
+
+```bash
+faildex ingest
+```
+
+바뀌는 것: 찾은 에이전트 기록 폴더로 개인 스토어 `~/.faildex/store`를 만듭니다. 이 컴퓨터 밖으로 나가지 않습니다. 이후 명령은 이 스토어를 읽습니다. 단, `FAILDEX_STORE`가 설정돼 있거나 자체 `./store`가 있는 faildex 저장소 폴더 안에서 실행하면 그쪽을 읽습니다.
+
+**4. 규칙 제안을 보고 골라서 승인**
+
+```bash
+faildex rules
+faildex rules --approve 1 3 --to ~/faildex-rules.md
+```
+
+바뀌는 것: `faildex rules`는 아무것도 쓰지 않고, 여러 세션에서 반복된 실패에 번호를 붙여 보여 줍니다. `--approve`는 고른 규칙(여기서는 1과 3)을 `~/faildex-rules.md`에 덧붙입니다.
+
+**5. 에이전트에 연결**
+
+```bash
+faildex link
+```
+
+바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄과 `~/.claude/skills/faildex/`의 스킬, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`의 훅 두 개(세션 시작 때 규칙, 셸 명령 전에 경고)를 넣습니다. `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
+
+**6. Claude Code 실행 전 경고 켜기**
+
+`~/.claude/settings.json`에 아래를 추가합니다. 파일에 이미 `hooks`가 있으면 그 `PreToolUse` 목록에 항목을 더합니다.
+
+```json
+{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+  {"type": "command", "command": "faildex hook", "timeout": 5}
+]}]}}
+```
+
+바뀌는 것: `faildex link`는 이 단계를 하지 않습니다. 그 뒤에 시작한 Claude Code 세션부터 경고할 만큼 잦은 반복 실패가 있는 셸 명령 전에 한 줄 안내가 뜹니다(7단계가 보여 주는 것).
+
+범위: 실행 전 경고는 셸 명령에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령에도 뜨고, MCP 도구나 파일 도구를 부르기 전에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다.
+
+**7. 잘 됐는지 확인**
+
+```bash
+faildex check "git status"
+```
+
+바뀌는 것: 아무것도 쓰지 않습니다. 그 명령의 반복된 실패 중 경고할 만큼 잦은 것을 훅과 같은 조회로 최대 3개, 복구 기록과 함께 보여 주고, 없으면 아무것도 출력하지 않습니다.
+
+### 평소에 (새 세션이 쌓일 때마다 되풀이)
+
+**1. 새 세션 모으기**
+
+```bash
+faildex ingest
+```
+
+바뀌는 것: 모든 기록을 다시 읽습니다. 스토어에 이미 있는 호출은 지금 기록 내용으로 바꾸고, 새 호출은 더하며, 기록 파일이 사라져도 스토어에서 지우지 않습니다.
+
+**2. 새 규칙 승인**
+
+```bash
+faildex rules
+faildex rules --approve 1 3 --to ~/faildex-rules.md
+```
+
+바뀌는 것: ingest 뒤에는 번호가 바뀌므로 먼저 목록을 봅니다. 승인한 규칙은 연결된 에이전트마다 다음 세션부터 적용되고, `faildex link`를 다시 하지 않아도 됩니다. Windows에서 Antigravity가 링크 대신 사본을 받았다면 다시 실행합니다.
+
+### 효과 확인
+
+**1. 내 기록으로 반복률 보기**
+
+```bash
+faildex eval --store ~/.faildex/store
+```
+
+바뀌는 것: 아무것도 쓰지 않습니다. 에이전트별로 세션을 시작 시각으로 나누고, 뒤 실패 중 앞에서 이미 일어난 것이 얼마인지 보여 줍니다.
+
+**2. 어떤 날짜 전후 비교**
+
+```bash
+faildex report --split 2026-11-17
+```
+
+바뀌는 것: 아무것도 쓰지 않습니다. 내 스토어의 호출과 실패를 그 날짜 이전과 그 날짜부터로 나눠 셉니다.
+
+### 되돌리기
+
+```bash
+faildex link --remove
+```
+
+- 이 명령은 `faildex link`가 설치하는 가져오기 줄, 스킬, 플러그인, 훅을 지웁니다. `~/faildex-rules.md`는 남습니다.
+- `~/.claude/settings.json`의 `faildex hook` 항목은 직접 지웁니다.
+- `~/.faildex`를 지우면 개인 스토어와 저장된 언어가 사라지고, `--store` 없이 실행한 명령은 `FAILDEX_STORE`나 `./store`가 없으면 공개 데모 스토어를 씁니다.
+
+### 출력 언어
+
+출력은 기본이 영어입니다. `faildex lang ko`로 한국어로, `faildex lang en`으로 다시
 영어로 바꿉니다(`~/.faildex/config.json`에 저장, 한 번만 바꾸려면 `--lang`, 셸 단위로는
 `FAILDEX_LANG`이 먼저입니다). 훅과 MCP 응답, `--approve`가 쓰는 규칙 문장, JSON, 실패 키는
 영어 그대로 둡니다. 에이전트가 읽고, 규칙 파일의 중복 판단도 그 문장으로 하기 때문입니다.
+`faildex help <명령>`은 명령 하나를 예와 함께 설명합니다.
 
 ## 무엇을 해결하나
 
@@ -142,7 +251,9 @@ uv tool install git+https://github.com/dtype2100/faildex      # macOS, Linux
 uv tool install https://github.com/dtype2100/faildex/archive/refs/heads/main.zip   # Windows, git 없이
 ```
 
-설치 후 새 터미널을 열어야 `faildex`가 PATH에 잡힙니다. 그다음 어느 폴더에서든:
+설치 후 새 터미널을 열어야 `faildex`가 PATH에 잡힙니다(설치 스크립트가 PATH에 폴더를 추가하라고
+하면 먼저 `uv tool update-shell`을 실행합니다). 그다음 어느 폴더에서든
+(전체 순서는 [사용 순서](#사용-순서)에 있습니다):
 
 ```bash
 faildex demo                  # 공개 기록으로 규칙 제안, 실행 전 경고, 수치를 보여 줌
@@ -222,7 +333,8 @@ make serve     # http://localhost:8765
 있고, 콘솔에서 직접 질의할 수 있습니다. 페이지는 영어와 한국어를 지원합니다. 상단의
 지구본 메뉴에서 고르거나 `?lang=ko`로 여세요.
 
-내 기록 적재하기. 기록은 내 컴퓨터의 `~/.faildex/store`에만 남습니다.
+내 기록 적재하기. 기록은 내 컴퓨터의 `~/.faildex/store`에만 남습니다. 아래는
+[처음 설치할 때](#처음-설치할-때-한-번-이-순서대로)의 3~5단계이고, 단계마다 무엇이 바뀌는지는 그 절에 있습니다.
 
 ```bash
 faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
@@ -267,7 +379,8 @@ Action은 저절로 풀리는 실패(시간 초과, 연결 거부나 재설정, 
 `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.
 
 Claude Code에서 쓰기. 프로젝트의 `.claude/settings.json`(모든 세션에 쓰려면
-`~/.claude/settings.json`)에 추가하세요. `faildex ingest`를 실행한 뒤에는 내 스토어를,
+`~/.claude/settings.json`)에 추가하세요. [처음 설치할 때](#처음-설치할-때-한-번-이-순서대로)의 6단계이고,
+`faildex link`가 대신하지 않습니다. `faildex ingest`를 실행한 뒤에는 내 스토어를,
 그 전에는 공개 스토어를 읽습니다.
 
 ```json

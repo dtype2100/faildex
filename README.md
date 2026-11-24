@@ -24,29 +24,138 @@ WebAssembly and recomputes every number on the page. Open it at
 
 ## How to use, in order
 
-1. **Install**: `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh`
-   Adds the `faildex` command, and uv if it is missing; nothing else changes. Windows: see [Install](#install).
-2. **Try it on public data**: `faildex demo`
-   Nothing is written; shows rules, a warning and the numbers on the public logs that ship with faildex.
-3. **Index your own logs**: `faildex ingest`
-   Writes your private store at `~/.faildex/store`; it never leaves this machine.
-4. **See the proposed rules**: `faildex rules`
-   Nothing is written; lists the failures that recurred across sessions, numbered, with the recovery on record.
-5. **Approve the ones you want**: `faildex rules --approve 1 3 --to ~/faildex-rules.md`
-   Appends those rules to `~/faildex-rules.md`; nothing is written unasked.
-6. **Connect your agents**: `faildex link`
-   Installs the skill and the rules file into Claude Code, Antigravity, Codex and Cursor; `faildex link --remove` undoes it.
-7. **Get a warning before a command runs**: `faildex hook` · `faildex mcp` · `faildex check "git status"`
-   Nothing is written; the hook and the MCP server warn the agent, and `check` shows you the same.
-   Hook setup is under [Setup and run](#setup-and-run).
-8. **See the effect**: `faildex eval` · `faildex report --split 2026-11-17`
-   Nothing is written; `eval` scores recurrence, `report` compares your logs before and from a day.
+Three parts: set faildex up once, in order; repeat two steps as new sessions pile
+up; then see the effect. `faildex help` prints the same steps in the terminal, and
+the end of `faildex --help` lists the first part. Each step below has the command to
+copy and what it changes. More on each command is under [Setup and run](#setup-and-run).
 
-`faildex help` prints these steps in the terminal, and `faildex help <command>` explains one
-command with examples. Output is in English by default; `faildex lang ko` switches it to Korean
-and `faildex lang en` back (saved in `~/.faildex/config.json`; `--lang` or `FAILDEX_LANG` wins for
-one run or one shell). Hook and MCP replies, the rule text `--approve` writes, JSON and failure
-keys stay in English, because agents read them and rules files are deduplicated on that text.
+### First install (once, in this order)
+
+**1. Install**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh
+```
+
+If the installer says to add a folder to your PATH, run `uv tool update-shell` first. Then open a
+new terminal so `faildex` is on your PATH, and check it:
+
+```bash
+faildex --version
+```
+
+What changes: adds the `faildex` command, and uv if it is missing; nothing else.
+`faildex --version` prints the installed version. On Windows, use the PowerShell line in [Install](#install).
+
+**2. Try it on public data**
+
+```bash
+faildex demo
+```
+
+What changes: nothing is written. It shows rules, a warning and the numbers on the public logs that ship with faildex.
+
+**3. Index your own logs**
+
+```bash
+faildex ingest
+```
+
+What changes: writes your private store at `~/.faildex/store` from the agent log folders it finds; it never leaves this machine. Later commands read it, unless `FAILDEX_STORE` is set or you run them inside a faildex checkout, which has its own `./store`.
+
+**4. See the proposed rules, then approve the ones you want**
+
+```bash
+faildex rules
+faildex rules --approve 1 3 --to ~/faildex-rules.md
+```
+
+What changes: `faildex rules` writes nothing and numbers the failures that recurred across sessions; `--approve` appends the ones you pick (here 1 and 3) to `~/faildex-rules.md`.
+
+**5. Connect your agents**
+
+```bash
+faildex link
+```
+
+What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md` and the skill in `~/.claude/skills/faildex/`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and two hooks in their `hooks.json` (rules at session start, warnings before shell commands). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
+
+**6. Turn on warnings in Claude Code**
+
+Add this to `~/.claude/settings.json`; if the file already has `hooks`, add the entry to its `PreToolUse` list:
+
+```json
+{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+  {"type": "command", "command": "faildex hook", "timeout": 5}
+]}]}}
+```
+
+What changes: `faildex link` does not do this step. Claude Code sessions started afterwards show a one-line notice before a shell command with a recurring failure frequent enough to warn about (what step 7 prints).
+
+Scope: warnings come only before shell commands, including those run by skills, plugins and subagents; none come before MCP tools or file tools. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts.
+
+**7. Check that it works**
+
+```bash
+faildex check "git status"
+```
+
+What changes: nothing is written. It prints up to three recurring failures of that command that are frequent enough to warn about, from the same lookup the hook uses, each with the recovery on record; nothing when there are none.
+
+### Day to day (repeat as new sessions pile up)
+
+**1. Index the new sessions**
+
+```bash
+faildex ingest
+```
+
+What changes: it reads every log again. Calls already in the store are replaced by what the log says now, new ones are added, and nothing is deleted, even when a log file is gone.
+
+**2. Approve new rules**
+
+```bash
+faildex rules
+faildex rules --approve 1 3 --to ~/faildex-rules.md
+```
+
+What changes: list first, since the numbers change after an ingest. Approved rules reach every linked agent from its next session without running `faildex link` again; on Windows, where Antigravity got a copy instead of a link, run it again.
+
+### See the effect
+
+**1. Score recurrence on your own logs**
+
+```bash
+faildex eval --store ~/.faildex/store
+```
+
+What changes: nothing is written. It splits your sessions by start time, per agent, and shows how many later failures had already happened earlier.
+
+**2. Compare before and from a day**
+
+```bash
+faildex report --split 2026-11-17
+```
+
+What changes: nothing is written. It counts calls and failures in your store before that day and from that day on.
+
+### Undo
+
+```bash
+faildex link --remove
+```
+
+- That command takes out the import line, skills, plugin and hooks that `faildex link` installs; `~/faildex-rules.md` stays.
+- Delete the `faildex hook` entry from `~/.claude/settings.json` yourself.
+- Deleting `~/.faildex` removes your private store and the saved language; commands without `--store` then use the public demo store, unless `FAILDEX_STORE` or `./store` applies.
+
+### Output language
+
+Output is in English by default. `faildex lang ko` switches it to Korean and `faildex lang en`
+back (saved in `~/.faildex/config.json`; `--lang` or `FAILDEX_LANG` wins for one run or one
+shell). Hook and MCP replies, the rule text `--approve` writes, JSON and failure keys stay in
+English, because agents read them and rules files are deduplicated on that text.
+`faildex help <command>` explains one command with examples.
 
 ## Use case
 
@@ -147,7 +256,9 @@ uv tool install git+https://github.com/dtype2100/faildex      # macOS, Linux
 uv tool install https://github.com/dtype2100/faildex/archive/refs/heads/main.zip   # Windows, without git
 ```
 
-Open a new terminal afterwards so `faildex` is on your PATH. Then, from any folder:
+Open a new terminal afterwards so `faildex` is on your PATH (if the installer says to add a folder
+to your PATH, run `uv tool update-shell` first). Then, from any folder
+(the whole order is in [How to use, in order](#how-to-use-in-order)):
 
 ```bash
 faildex demo                  # rules, a pre-run warning and the numbers, on public logs
@@ -228,7 +339,8 @@ evaluation in the browser; it arrives at the same 80 of 117. Every panel has a
 "Show Cypher" button with the queries behind it, and a console runs your own. The page is in English
 and Korean: pick one from the globe menu in the top bar, or open it with `?lang=ko`.
 
-Index your own logs. They stay on your machine, in `~/.faildex/store`:
+Index your own logs. They stay on your machine, in `~/.faildex/store`. These are steps 3 to 5
+of [First install](#first-install-once-in-this-order), which says what each one changes:
 
 ```bash
 faildex ingest    # reads every default folder it finds; or pass --claude, --codex-sessions, --cursor, --antigravity DIR
@@ -277,7 +389,8 @@ With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions
 `~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.
 
 Use it in Claude Code. Add this to `.claude/settings.json` (your project's, or
-`~/.claude/settings.json` for every session). It reads your own store once you
+`~/.claude/settings.json` for every session); it is step 6 of
+[First install](#first-install-once-in-this-order), and `faildex link` does not add it. It reads your own store once you
 have run `faildex ingest`, and the public one until then:
 
 ```json

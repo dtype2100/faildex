@@ -4,6 +4,7 @@ import json
 import re
 import shlex
 import string
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from test_insight import REJECTED, _records
 
 from faildex import i18n
 from faildex.cli import build_parser, main
-from faildex.guide import EXAMPLES, STEPS
+from faildex.guide import CLAUDE_HOOK, EXAMPLES, PARTS, commands
 from faildex.schema import ingest
 
 ROOT = Path(__file__).parent.parent
@@ -229,16 +230,21 @@ def test_errors_are_translated(tmp_path, capsys):
 # faildex help and --help
 
 
-def test_faildex_help_lists_the_steps_and_points_at_per_command_help(capsys):
+def test_faildex_help_shows_the_three_parts_and_points_at_per_command_help(capsys):
     for lang, more in (
         ("en", "Details for one command: faildex help <command>"),
         ("ko", "명령별 자세한 설명: faildex help <명령>"),
     ):
         assert main(["--lang", lang, "help"]) == 0
         out = capsys.readouterr().out
-        for _, commands in STEPS:
-            for command in commands:
-                assert command in out
+        headings = [i18n.CATALOG[lang][f"help.part.{part}"] for part, _ in PARTS]
+        assert [line for line in out.splitlines() if line in headings] == headings
+        for command in commands():
+            assert command in out
+        assert textwrap.indent(CLAUDE_HOOK, " " * 5) in out
+        undo = out[out.index(i18n.CATALOG[lang]["help.undo"].split()[0]) :]
+        for words in ("faildex link --remove", "~/.claude/settings.json", "~/.faildex"):
+            assert words in undo
         assert more in out
 
 
@@ -262,18 +268,40 @@ def test_faildex_help_with_an_unknown_command_fails_with_the_list(capsys):
 
 def test_every_example_and_step_command_parses():
     parser, _ = build_parser()
-    commands = [c for _, cs in STEPS for c in cs if c.startswith("faildex ")]
-    commands += [c for examples in EXAMPLES.values() for c in examples]
-    for command in commands:
-        parser.parse_args(shlex.split(command)[1:])
+    lines = [c for c in commands() if c.startswith("faildex ")]
+    lines += [c for examples in EXAMPLES.values() for c in examples]
+    for line in lines:
+        try:
+            parser.parse_args(shlex.split(line)[1:])
+        except SystemExit as done:  # faildex --version prints the version and exits 0
+            assert line == "faildex --version" and done.code == 0
 
 
-def test_dash_dash_help_still_works_and_ends_with_the_pointer(capsys):
-    for lang, tail in (("en", "New here? Run: faildex help"), ("ko", "처음이면: faildex help")):
+def test_the_claude_code_hook_is_valid_json_that_runs_faildex_hook():
+    hook = json.loads(CLAUDE_HOOK)["hooks"]["PreToolUse"][0]
+    assert hook["matcher"] == "Bash"
+    assert hook["hooks"][0]["command"] == "faildex hook"
+
+
+def test_dash_dash_help_ends_with_the_first_install_order(capsys):
+    for lang, tail in (
+        ("en", "More: faildex help, per command: faildex help <command>"),
+        ("ko", "자세히: faildex help, 명령별: faildex help <명령>"),
+    ):
         with pytest.raises(SystemExit) as done:
             main(["--lang", lang, "--help"])
         assert done.value.code == 0
-        assert capsys.readouterr().out.rstrip().endswith(tail)
+        out = capsys.readouterr().out
+        assert out.rstrip().endswith(tail)
+        order = out[out.index(i18n.CATALOG[lang]["help.part.first"]) :]
+        for command in commands("first"):
+            assert f"       {command}" in order.splitlines()
+        for step in (1, 5):  # a new terminal before --version; Codex trusts its new hooks
+            assert f"-> {i18n.CATALOG[lang][f'help.first.{step}.brief']}" in " ".join(order.split())
+        assert textwrap.indent(CLAUDE_HOOK, " " * 7) in order
+        for part in ("again", "effect"):
+            assert i18n.CATALOG[lang][f"help.part.{part}"] in order
+            assert "  " + ", ".join(commands(part)) in order.splitlines()
         with pytest.raises(SystemExit):
             main(["--lang", lang, "rules", "--help"])
         assert "--approve" in capsys.readouterr().out
@@ -286,21 +314,70 @@ def test_dash_dash_help_still_works_and_ends_with_the_pointer(capsys):
 # The README steps are the help steps
 
 
-def _readme_steps(path: Path, heading: str) -> list[tuple[int, tuple[str, ...]]]:
+def test_english_help_is_plain_ascii(capsys):
+    """An ASCII console (LANG=C, some CI runners) must still print the English help."""
+    assert main(["--lang", "en", "help"]) == 0
+    out = capsys.readouterr().out
+    with pytest.raises(SystemExit) as done:
+        main(["--lang", "en", "--help"])
+    assert done.value.code == 0
+    out += capsys.readouterr().out
+    assert out.count(i18n.EN["help.part.first"]) == 2
+    out.encode("ascii")
+
+
+def _readme_parts(path: Path, lang: str) -> list[tuple[str, tuple[tuple[str, ...], ...]]]:
+    """Each part of the usage section as (part, the commands of each step), titles checked."""
     text = path.read_text(encoding="utf-8")
-    section = text.split(f"\n{heading}\n", 1)[1].split("\n## ", 1)[0]
-    steps = []
-    for number, rest in re.findall(r"^(\d+)\. \*\*[^*]+\*\*: (.+)$", section, re.MULTILINE):
-        steps.append((int(number), tuple(re.findall(r"`([^`]+)`", rest))))
-    return steps
+    catalog = i18n.CATALOG[lang]
+    parts = []
+    for part, steps in PARTS:
+        heading = f"\n### {catalog[f'help.part.{part}']}\n"
+        assert text.count(heading) == 1, heading
+        section = re.split(r"\n##+ ", text.split(heading, 1)[1], maxsplit=1)[0]
+        found = []
+        chunks = re.split(r"^\*\*(\d+)\. ([^*]+)\*\*$", section, flags=re.MULTILINE)[1:]
+        for number, title, body in zip(chunks[::3], chunks[1::3], chunks[2::3]):
+            assert title == catalog[f"help.{part}.{number}"]
+            blocks = re.findall(r"^```(bash|json)\n(.*?)\n```$", body, re.MULTILINE | re.DOTALL)
+            cmds = tuple(
+                line for kind, block in blocks if kind == "bash" for line in block.split("\n")
+            )
+            hook = [block for kind, block in blocks if kind == "json"]
+            assert hook == ([] if cmds else [CLAUDE_HOOK])
+            found.append(cmds)
+        parts.append((part, tuple(found)))
+    return parts
 
 
-@pytest.mark.parametrize(
-    ("readme", "heading"),
-    [("README.md", "## How to use, in order"), ("README.ko.md", "## 사용 순서")],
-)
-def test_readme_steps_match_faildex_help(readme, heading):
-    assert _readme_steps(ROOT / readme, heading) == list(STEPS)
+@pytest.mark.parametrize(("readme", "lang"), [("README.md", "en"), ("README.ko.md", "ko")])
+def test_readme_steps_match_faildex_help(readme, lang):
+    assert _readme_parts(ROOT / readme, lang) == list(PARTS)
+
+
+@pytest.mark.parametrize("readme", ["README.md", "README.ko.md"])
+def test_every_claude_code_hook_in_the_readme_is_the_one_help_shows(readme):
+    text = (ROOT / readme).read_text(encoding="utf-8")
+    hooks = [
+        b
+        for b in re.findall(r"^```json\n(.*?)\n```$", text, re.MULTILINE | re.DOTALL)
+        if "PreToolUse" in b
+    ]
+    assert len(hooks) == 2 and set(hooks) == {CLAUDE_HOOK}
+
+
+def _slug(heading: str) -> str:
+    """The anchor GitHub gives a heading."""
+    return re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+
+
+@pytest.mark.parametrize("readme", ["README.md", "README.ko.md"])
+def test_every_link_inside_the_readme_reaches_a_heading(readme):
+    text = (ROOT / readme).read_text(encoding="utf-8")
+    prose = re.sub(r"^```.*?^```$", "", text, flags=re.MULTILINE | re.DOTALL)
+    anchors = {_slug(h) for h in re.findall(r"^#+ (.+)$", prose, re.MULTILINE)}
+    links = set(re.findall(r"\]\(#([^)]+)\)", prose))
+    assert links and links <= anchors, links - anchors
 
 
 @pytest.mark.parametrize(
@@ -351,7 +428,8 @@ def test_korean_on_a_console_that_cannot_show_it_prints_english(monkeypatch):
         main(["--lang", "ko", "--help"])
     assert done.value.code == 0
     out, err = read()
-    assert out.rstrip().endswith("New here? Run: faildex help") and "cp1252" in err
+    assert out.rstrip().endswith("More: faildex help, per command: faildex help <command>")
+    assert "cp1252" in err
 
     monkeypatch.setenv("FAILDEX_LANG", "ko")
     assert main(["lang"]) == 0

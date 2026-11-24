@@ -1,29 +1,56 @@
-"""`faildex help`: how to use faildex in order, and how to use one command.
+"""`faildex help` and the end of `faildex --help`: how to use faildex, in order.
 
-The steps and example commands live here, untranslated; their titles and notes come
-from the i18n catalog. README.md and README.ko.md list the same steps, and a test
-checks that the commands there are exactly the commands here.
+The steps and their commands live here, untranslated; titles and notes come from
+the i18n catalog. README.md and README.ko.md show the same three parts under the
+same headings, and a test checks that their commands are exactly the commands here.
 """
 
 from __future__ import annotations
 
 import argparse
 
-from faildex.i18n import t, wrap
+from faildex.i18n import CATALOG, DEFAULT, t, wrap
 
 INSTALL = "curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh"
+APPROVE = "faildex rules --approve 1 3 --to ~/faildex-rules.md"
 
-# (step number, commands); the title and "what changes" line are help.step.N / help.change.N.
-STEPS: tuple[tuple[int, tuple[str, ...]], ...] = (
-    (1, (INSTALL,)),
-    (2, ("faildex demo",)),
-    (3, ("faildex ingest",)),
-    (4, ("faildex rules",)),
-    (5, ("faildex rules --approve 1 3 --to ~/faildex-rules.md",)),
-    (6, ("faildex link",)),
-    (7, ("faildex hook", "faildex mcp", 'faildex check "git status"')),
-    (8, ("faildex eval", "faildex report --split 2026-11-17")),
+# Claude Code's PreToolUse hook. `faildex link` does not add it; the person pastes it into
+# ~/.claude/settings.json. The README shows this same text.
+CLAUDE_HOOK = (
+    '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [\n'
+    '  {"type": "command", "command": "faildex hook", "timeout": 5}\n'
+    "]}]}}"
 )
+
+# The three parts, in order: first install (once), day to day (again), the effect.
+# A part's heading is help.part.<part>; step N's title is help.<part>.N and its
+# "what changes" line help.<part>.N.change. A step with no commands is the Claude Code
+# hook: help.<part>.N.where, then CLAUDE_HOOK.
+PARTS: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
+    (
+        "first",
+        (
+            (INSTALL, "faildex --version"),
+            ("faildex demo",),
+            ("faildex ingest",),
+            ("faildex rules", APPROVE),
+            ("faildex link",),
+            (),
+            ('faildex check "git status"',),
+        ),
+    ),
+    ("again", (("faildex ingest",), ("faildex rules", APPROVE))),
+    (
+        "effect",
+        (("faildex eval --store ~/.faildex/store",), ("faildex report --split 2026-11-17",)),
+    ),
+)
+
+
+def commands(part: str | None = None) -> list[str]:
+    """Every command of one part, or of all three, in order."""
+    return [c for name, steps in PARTS if part in (None, name) for cmds in steps for c in cmds]
+
 
 # Example commands per command; each note is ex.<command>.<n>.
 EXAMPLES: dict[str, tuple[str, ...]] = {
@@ -58,17 +85,46 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
 }
 
 
-def overview(commands: list[str], lang: str) -> str:
-    """The steps, in order: title, command(s), what changes."""
+def _step(part: str, number: int, cmds: tuple[str, ...], indent: str) -> list[str]:
+    if cmds:
+        return [f"{indent}{cmd}" for cmd in cmds]
+    return [f"{indent}{t(f'help.{part}.{number}.where')}"] + [
+        indent + line for line in CLAUDE_HOOK.splitlines()
+    ]
+
+
+def overview(names: list[str], lang: str) -> str:
+    """The three parts, each step with its title, command(s) and what changes."""
     lines = [t("help.title"), ""]
-    for number, cmds in STEPS:
-        lines.append(f"{number}. {t(f'help.step.{number}')}")
-        lines += [f"     {cmd}" for cmd in cmds]
-        lines += wrap(f"     -> {t(f'help.change.{number}')}", 80, " " * 8)
-        lines.append("")
+    for part, steps in PARTS:
+        lines += [t(f"help.part.{part}"), ""]
+        for number, cmds in enumerate(steps, start=1):
+            lines.append(f"{number}. {t(f'help.{part}.{number}')}")
+            lines += _step(part, number, cmds, " " * 5)
+            lines += wrap(f"     -> {t(f'help.{part}.{number}.change')}", 80, " " * 8)
+            lines.append("")
+    lines += wrap(t("help.undo"), 80, "  ")
+    lines.append("")
     lines.append(t("help.more"))
-    lines.append(t("help.commands", commands=", ".join(commands)))
+    lines.append(t("help.commands", commands=", ".join(names)))
     lines.append(t("help.lang", language=lang))
+    return "\n".join(lines)
+
+
+def brief() -> str:
+    """The end of `faildex --help`: every first-install step, then each other part in a line."""
+    first, *rest = PARTS
+    part, steps = first
+    lines = [t(f"help.part.{part}")]
+    for number, cmds in enumerate(steps, start=1):
+        lines.append(f"  {number}. {t(f'help.{part}.{number}')}")
+        lines += _step(part, number, cmds, " " * 7)
+        if f"help.{part}.{number}.brief" in CATALOG[DEFAULT]:  # what must happen before the next
+            lines += wrap(f"       -> {t(f'help.{part}.{number}.brief')}", 90, " " * 10)
+    lines.append("")
+    for part, _ in rest:
+        lines += [t(f"help.part.{part}"), f"  {', '.join(commands(part))}"]
+    lines += ["", t("help.next")]
     return "\n".join(lines)
 
 
