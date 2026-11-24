@@ -397,6 +397,11 @@ def _sources(args: argparse.Namespace) -> int:
     return 0
 
 
+def _path(value: str) -> Path:
+    """A path option, `~` included: PowerShell 5.1 and cmd.exe pass `~` through unexpanded."""
+    return Path(value).expanduser()
+
+
 def _positive(value: str) -> int:
     number = int(value) if value.lstrip("-").isdigit() else None
     if number is None or number < 1:
@@ -561,23 +566,23 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
         return sub
 
     build = add("build-store")
-    build.add_argument("--data", type=Path, default=Path(".tmp/data"), help=t("opt.build.data"))
-    build.add_argument("--out", type=Path, default=Path("store"), help=t("opt.build.out"))
+    build.add_argument("--data", type=_path, default=Path(".tmp/data"), help=t("opt.build.data"))
+    build.add_argument("--out", type=_path, default=Path("store"), help=t("opt.build.out"))
     build.set_defaults(run=_build_store)
 
     evaluate = add("eval")
-    evaluate.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+    evaluate.add_argument("--store", type=_path, default=None, help=t("opt.store"))
     evaluate.set_defaults(run=_eval)
 
     rules = add("rules")
     rules.add_argument("--approve", type=int, nargs="+", metavar="N", help=t("opt.rules.approve"))
-    rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help=t("opt.rules.to"))
+    rules.add_argument("--to", type=_path, default=Path("faildex-rules.md"), help=t("opt.rules.to"))
     rules.add_argument("--evidence", action="store_true", help=t("opt.rules.evidence"))
     rules.set_defaults(run=_rules)
 
     linker = add("link")
     linker.add_argument(
-        "--rules", type=Path, default=Path("~/faildex-rules.md"), help=t("opt.link.rules")
+        "--rules", type=_path, default=Path("~/faildex-rules.md"), help=t("opt.link.rules")
     )
     linker.add_argument("--remove", action="store_true", help=t("opt.link.remove"))
     linker.add_argument("--dry-run", action="store_true", help=t("opt.link.dry_run"))
@@ -601,30 +606,30 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
         help=t("opt.hook.event"),
     )
     hook.add_argument(
-        "--rules", type=Path, default=Path("~/faildex-rules.md"), help=t("opt.hook.rules")
+        "--rules", type=_path, default=Path("~/faildex-rules.md"), help=t("opt.hook.rules")
     )
     hook.add_argument(
         "--rules-encoded",
         dest="encoded_rules",
         help=argparse.SUPPRESS,
-        type=lambda value: Path(base64.urlsafe_b64decode(value).decode("utf-8")),
+        type=lambda value: _path(base64.urlsafe_b64decode(value).decode("utf-8")),
     )
-    hook.add_argument("--log", type=Path, default=None, help=t("opt.hook.log"))
+    hook.add_argument("--log", type=_path, default=None, help=t("opt.hook.log"))
     hook.set_defaults(run=_hook)
 
     report = add("report")
-    report.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+    report.add_argument("--store", type=_path, default=None, help=t("opt.store"))
     report.add_argument("--split", metavar="YYYY-MM-DD", type=_day, help=t("opt.report.split"))
     report.add_argument("--key", help=t("opt.report.key"))
-    report.add_argument("--hook-log", type=Path, default=None, help=t("opt.report.hook_log"))
+    report.add_argument("--hook-log", type=_path, default=None, help=t("opt.report.hook_log"))
     report.set_defaults(run=_report)
 
     mcp = add("mcp")
-    mcp.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+    mcp.add_argument("--store", type=_path, default=None, help=t("opt.store"))
     mcp.set_defaults(run=_mcp)
 
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
-        sub.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+        sub.add_argument("--store", type=_path, default=None, help=t("opt.store"))
         sub.add_argument("--min-sessions", type=_positive, default=2, help=t("opt.min_sessions"))
         sub.add_argument("--top", type=_positive, default=top, help=t("opt.top"))
 
@@ -638,18 +643,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
     ):
         ingest.add_argument(
             flag,
-            type=Path,
+            type=_path,
             action="append",
             default=[],
             metavar=metavar,
             help=t(f"opt.ingest.{flag[2:].replace('-', '_')}"),
         )
-    ingest.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+    ingest.add_argument("--store", type=_path, default=None, help=t("opt.store"))
     ingest.set_defaults(run=_ingest)
 
     web = add("export-web")
-    web.add_argument("--out", type=Path, default=Path("site/data.json"), help=t("opt.web.out"))
-    web.add_argument("--store", type=Path, default=argparse.SUPPRESS, help=t("opt.web.store"))
+    web.add_argument("--out", type=_path, default=Path("site/data.json"), help=t("opt.web.out"))
+    web.add_argument("--store", type=_path, default=argparse.SUPPRESS, help=t("opt.web.store"))
     web.set_defaults(run=_export_web)
 
     add("demo").set_defaults(run=_demo)
