@@ -50,7 +50,7 @@ def hook_warnings(path: Path | None) -> Counter:
     days: Counter = Counter()
     if path is None or not path.is_file():
         return days
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             entry = json.loads(line)
         except ValueError:

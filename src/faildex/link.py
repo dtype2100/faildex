@@ -66,14 +66,16 @@ def _has_antigravity(home: Path) -> bool:
 
 def _ours(plugin: Path) -> bool:
     try:
-        return json.loads((plugin / "plugin.json").read_text()).get("name") == PLUGIN
+        return (
+            json.loads((plugin / "plugin.json").read_text(encoding="utf-8")).get("name") == PLUGIN
+        )
     except (OSError, ValueError):
         return False
 
 
 def _is_faildex_skill(path: Path) -> bool:
     try:
-        head = path.read_text().split("---", 2)[1]
+        head = path.read_text(encoding="utf-8").split("---", 2)[1]
     except (OSError, IndexError):
         return False
     return any(line.strip() == "name: faildex" for line in head.splitlines())
@@ -115,7 +117,7 @@ def _ownership(home: Path) -> dict[str, list[str]] | None:
         return None
     if state.is_symlink():
         raise ValueError("faildex link ownership file must not be a symlink")
-    data = json.loads(state.read_text())
+    data = json.loads(state.read_text(encoding="utf-8"))
     files, dirs = _link_paths()
     if not isinstance(data, dict) or any(
         not isinstance(data.get(key), list)
@@ -131,8 +133,8 @@ def _install_skill(agent: str, folder: Path, dry_run: bool, home: Path) -> Step:
     dest = folder / "SKILL.md"
     if _symlink_path(dest, home):
         return Step(agent, "skipped", dest, "a symlink is there; left alone", "skill")
-    text = skill_source().read_text()
-    if dest.exists() and dest.read_text() == text:
+    text = skill_source().read_text(encoding="utf-8")
+    if dest.exists() and dest.read_text(encoding="utf-8") == text:
         return Step(agent, "already", dest, what="skill")
     if dest.exists() and not _is_faildex_skill(dest):
         return Step(agent, "skipped", dest, "a different skill is there; not replaced", "skill")
@@ -140,7 +142,7 @@ def _install_skill(agent: str, folder: Path, dry_run: bool, home: Path) -> Step:
         return Step(agent, "would install", dest, what="skill")
     status = "updated" if dest.exists() else "installed"
     folder.mkdir(parents=True, exist_ok=True)
-    dest.write_text(text)
+    dest.write_text(text, encoding="utf-8")
     return Step(agent, status, dest, what="skill")
 
 
@@ -186,13 +188,14 @@ def _write_manifest(plugin: Path, rules: Path) -> None:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
 
 
 def _is_copy(target: Path, rules: Path) -> bool:
     try:
-        return target.read_text().startswith(COPY.format(rules))
+        return target.read_text(encoding="utf-8").startswith(COPY.format(rules))
     except OSError:
         return False
 
@@ -206,12 +209,16 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
     steps: list[Step] = []
     if not rules.exists() and not dry_run:
         rules.parent.mkdir(parents=True, exist_ok=True)
-        rules.write_text(HEADER)
+        rules.write_text(HEADER, encoding="utf-8")
 
     # Claude Code: one import line.
     claude = _claude_md(home)
     line = f"@{rules}"
-    text = claude.read_text() if claude.exists() and not _symlink_path(claude, home) else ""
+    text = (
+        claude.read_text(encoding="utf-8")
+        if claude.exists() and not _symlink_path(claude, home)
+        else ""
+    )
     if _symlink_path(claude, home):
         steps.append(Step("Claude Code", "skipped", claude, "a symlink is there; left alone"))
     elif line in text.splitlines():
@@ -220,7 +227,7 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
         steps.append(Step("Claude Code", "would link", claude, line))
     else:
         claude.parent.mkdir(parents=True, exist_ok=True)
-        with claude.open("a") as out:
+        with claude.open("a", encoding="utf-8") as out:
             out.write(("" if not text or text.endswith("\n") else "\n") + line + "\n")
         steps.append(Step("Claude Code", "linked", claude, line))
     steps.append(
@@ -273,7 +280,9 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
             except OSError:
                 copied = True
         if copied:
-            target.write_text(COPY.format(rules) + rules.read_text())
+            target.write_text(
+                COPY.format(rules) + rules.read_text(encoding="utf-8"), encoding="utf-8"
+            )
             steps.append(
                 Step(
                     "Antigravity",
@@ -321,7 +330,9 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
             )
             for key, paths in (("files", files), ("dirs", dirs))
         }
-        (home / ".faildex-link.json").write_text(json.dumps(created, indent=2) + "\n")
+        (home / ".faildex-link.json").write_text(
+            json.dumps(created, indent=2) + "\n", encoding="utf-8"
+        )
     return steps
 
 
@@ -341,7 +352,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
     claude = _claude_md(home)
     line = f"@{rules}"
     lines = (
-        claude.read_text().splitlines(keepends=True)
+        claude.read_text(encoding="utf-8").splitlines(keepends=True)
         if claude.exists() and not _symlink_path(claude, home)
         else []
     )
@@ -355,7 +366,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
         if not leftover and owned is not None and ".claude/CLAUDE.md" in owned["files"]:
             _remove_file(claude, home, owned)
         else:
-            claude.write_text(leftover)
+            claude.write_text(leftover, encoding="utf-8")
         steps.append(Step("Claude Code", "removed", claude, line))
 
     steps.append(

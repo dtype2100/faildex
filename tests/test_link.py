@@ -682,3 +682,40 @@ def test_unlink_with_other_rules_removes_tracked_antigravity_symlink(tmp_path, n
     unlink(other_rules, home)
     assert not agents.exists() and not agents.is_symlink()
     assert not (home / ".faildex-link.json").exists()
+
+
+# Agent files are UTF-8 whatever the machine's locale says. On Windows the locale
+# encoding is a legacy code page (cp949 in Korea, cp1252 on the CI runner), and
+# "원" is UTF-8 EC 9B 90: 0x90 is not a cp1252 character, so both pages reject it.
+KOREAN = "# 원칙 → 한글 규칙\n"
+
+
+def test_link_and_unlink_keep_a_utf8_claude_md(tmp_path):
+    home = _home(tmp_path)
+    claude = home / ".claude" / "CLAUDE.md"
+    claude.write_text(KOREAN, encoding="utf-8")
+    rules = tmp_path / "rules.md"
+    assert {s.agent: s.status for s in RULES(link(rules, home))}["Claude Code"] == "linked"
+    assert claude.read_text(encoding="utf-8") == f"{KOREAN}@{rules.resolve()}\n"
+    assert {s.agent: s.status for s in RULES(link(rules, home))}["Claude Code"] == "already"
+    assert {s.agent: s.status for s in RULES(unlink(rules, home))}["Claude Code"] == "removed"
+    assert claude.read_text(encoding="utf-8") == KOREAN
+
+
+def test_link_writes_a_non_ascii_rules_path_and_rules_as_utf8(tmp_path):
+    home = _home(tmp_path)
+    rules = tmp_path / "원본 규칙" / "rules.md"
+    rules.parent.mkdir()
+    rules.write_text(KOREAN, encoding="utf-8")
+    first = {s.agent: s.status for s in RULES(link(rules, home))}
+    assert first == {"Claude Code": "linked", "Antigravity": "linked"}
+    claude = home / ".claude" / "CLAUDE.md"
+    assert f"@{rules.resolve()}" in claude.read_text(encoding="utf-8").splitlines()
+    # A symlink, or a copy where symlinks are not allowed: either way the rules read as UTF-8.
+    agents = home / ".gemini/config/plugins/faildex-rules/rules/AGENTS.md"
+    assert agents.read_text(encoding="utf-8").endswith(KOREAN)
+    second = {s.agent: s.status for s in RULES(link(rules, home))}
+    assert second["Claude Code"] == second["Antigravity"] == "already"
+    steps = {s.agent: s.status for s in RULES(unlink(rules, home))}
+    assert steps == {"Claude Code": "removed", "Antigravity": "removed"}
+    assert rules.read_text(encoding="utf-8") == KOREAN

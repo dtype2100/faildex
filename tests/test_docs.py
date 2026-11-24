@@ -27,7 +27,7 @@ def _row(result) -> str:
 
 
 def test_readme_table_matches_the_committed_store(results):
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     both, text_only = results
     assert f"| All failure keys {_row(both)}" in readme
     assert f"| Failure text only {_row(text_only)}" in readme
@@ -36,7 +36,7 @@ def test_readme_table_matches_the_committed_store(results):
 
 
 def test_evaluation_doc_matches_the_committed_store(results):
-    doc = (ROOT / "docs" / "evaluation.md").read_text()
+    doc = (ROOT / "docs" / "evaluation.md").read_text(encoding="utf-8")
     both, _ = results
     assert f"| All | {both.earlier_sessions} / {both.later_sessions} {_row(both)}" in doc
     assert f"{len(both.later_keys)} distinct failure keys" in doc
@@ -69,8 +69,10 @@ def test_relate_webassembly_reaches_the_same_numbers(results, tmp_path):
 def test_every_test_named_in_the_evaluation_doc_exists():
     import re
 
-    doc = (ROOT / "docs" / "evaluation.md").read_text()
+    doc = (ROOT / "docs" / "evaluation.md").read_text(encoding="utf-8")
     named = re.findall(r"`(test_\w+\.py)::(test_\w+)`", doc)
     assert len(named) >= 12
     for file, function in named:
-        assert f"def {function}(" in (ROOT / "tests" / file).read_text(), f"{file}::{function}"
+        assert f"def {function}(" in (ROOT / "tests" / file).read_text(encoding="utf-8"), (
+            f"{file}::{function}"
+        )

@@ -508,7 +508,7 @@ def approve(items: list[Failure], numbers: list[int], path) -> list[str]:
 
     A failure that already has a rule is skipped, even when the wording has changed since.
     """
-    existing = path.read_text() if path.exists() else ""
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
     seen = _rule_keys(existing)
     chosen = []
     for n in numbers:
@@ -516,7 +516,7 @@ def approve(items: list[Failure], numbers: list[int], path) -> list[str]:
             seen.add(items[n - 1].key)
             chosen.append(items[n - 1])
     if chosen:
-        with path.open("a") as out:
+        with path.open("a", encoding="utf-8") as out:
             if not existing:
                 out.write("# Rules learned from recurring failures (faildex)\n\n")
             elif not existing.endswith("\n"):
