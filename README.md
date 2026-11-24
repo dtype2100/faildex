@@ -289,7 +289,7 @@ while investigating. See [results and verification steps](docs/agent-hook-verifi
 ## Where the data lives
 
 - **`store/`** is the persisted Relate store: 422 sessions, 14,328 tool calls,
-  627 failed calls, 38,424 relationships, 0.85 MB. `faildex.store.open_store`
+  627 failed calls, 38,338 relationships, 0.85 MB. `faildex.store.open_store`
   opens it, including the first time after a fresh clone.
 - It is built from two public datasets only, both MIT licensed, pinned by revision
   in [`build.py`](src/faildex/build.py):
