@@ -190,72 +190,75 @@ def shared_keys(db) -> list[str]:
 
 
 def _table(results: list[Result], by: str = "dataset") -> list[str]:
-    head = (
-        f"{by:<20}{'sessions':>10}{'failures':>10}{'recurring':>11}"
-        f"{'recurrence':>12}{'warnable':>10}{'of recurring':>14}"
-    )
-    lines = [head, "-" * len(head)]
+    from faildex.i18n import pad, t, width
+
+    columns = [
+        (t(f"eval.by.{by}"), 20, "<"),
+        (t("eval.col.sessions"), 10, ">"),
+        (t("eval.col.failures"), 10, ">"),
+        (t("eval.col.recurring"), 11, ">"),
+        (t("eval.col.recurrence"), 12, ">"),
+        (t("eval.col.warnable"), 10, ">"),
+        (t("eval.col.of_recurring"), 14, ">"),
+    ]
+    head = "".join(pad(name, size, align) for name, size, align in columns)
+    lines = [head, "-" * width(head)]
     for r in results:
         sessions = f"{r.earlier_sessions}/{r.later_sessions}"
+        name = t("eval.all") if r.source == "all" else r.source
         lines.append(
-            f"{r.source:<20}{sessions:>10}{r.later_failures:>10}{r.recurring:>11}"
+            f"{pad(name, 20)}{sessions:>10}{r.later_failures:>10}{r.recurring:>11}"
             f"{r.recurrence:>12.1%}{r.warnable:>10}{r.warnable_share:>14.1%}"
         )
     return lines
 
 
 def report(db, report_command: str = "faildex report") -> str:
+    from faildex.i18n import t, tn
+
     by, names = groups(db)
     both = evaluate(db)
     text_only = evaluate(db, kinds=("text",))
+    label = t(f"eval.by.{by}")
     lines = []
     if by == "agent":
-        lines.append("No public dataset in this store, so sessions are grouped by agent.")
+        lines.append(t("eval.by_agent"))
     lines += [
-        (
-            f"Split: first {EARLIER_SHARE:.0%} of each {by}'s sessions by start time "
-            "= earlier, the rest = later."
-        ),
-        "sessions = earlier/later; failures = later-period failed calls with a failure key.",
+        t("eval.split", share=f"{EARLIER_SHARE:.0%}", by=label),
+        t("eval.legend"),
     ]
     if not both:
+        groups_found = tn("eval.groups", len(names), count=len(names), by=label)
         lines += [
             "",
-            (
-                f"Nothing to score: no {by} has 2 or more sessions with a start time"
-                f" ({len(names)} {by}{'' if len(names) == 1 else 's'} found)."
-                f" For counts per failure, run: {report_command}"
-            ),
+            t("eval.nothing", by=label, groups=groups_found, command=report_command),
         ]
         return "\n".join(lines)
     lines += [
         "",
-        "All failure keys (failure text, or command + exit code when nothing usable was printed)",
+        t("eval.all_keys"),
         *_table(both, by),
         "",
-        "Failure text only",
+        t("eval.text_only"),
         *_table(text_only, by),
     ]
     if both:
         keys = both[-1]
         lines += [
             "",
-            (
-                f"Distinct later-period failure keys: {len(keys.later_keys)}, "
-                f"already seen earlier: {len(keys.recurring_keys)}"
-            ),
+            t("eval.distinct", later=len(keys.later_keys), seen=len(keys.recurring_keys)),
         ]
     top = top_recurring(both[-1]) if both else []
     if top:
-        lines += ["", "Recurring later-period failures by key"]
+        lines += ["", t("eval.by_key")]
         lines += [f"  {count:>4}  {sig}" for sig, count in top]
         without = both[-1].recurring - top[0][1]
         base = both[-1].later_failures - top[0][1]
         if base:
             lines.append(
-                f"Recurrence without the most common key: {without}/{base} = {without / base:.1%}"
+                t("eval.without_top", without=without, base=base, share=f"{without / base:.1%}")
             )
     shared = shared_keys(db)
-    lines.append(f"Failure keys seen under more than one agent: {len(shared)}")
+    lines.append(t("eval.shared", count=len(shared)))
     lines += [f"  {sig}" for sig in shared]
     return "\n".join(lines)

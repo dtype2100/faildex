@@ -22,6 +22,32 @@ Windows는 [설치](#설치)의 PowerShell 한 줄을 쓰세요.
 화면의 모든 수치를 다시 계산합니다. <https://dtype2100.github.io/faildex/>에서 바로 열거나,
 로컬에서 `make site && make serve`로 실행합니다.*
 
+## 사용 순서
+
+1. **설치**: `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh`
+   `faildex` 명령(없으면 uv도)을 설치합니다. 다른 것은 바꾸지 않습니다. Windows는 [설치](#설치)를 보세요.
+2. **공개 데이터로 맛보기**: `faildex demo`
+   아무것도 쓰지 않습니다. faildex에 들어 있는 공개 기록으로 규칙, 경고, 수치를 보여 줍니다.
+3. **내 기록 모으기**: `faildex ingest`
+   개인 스토어 `~/.faildex/store`를 만듭니다. 이 컴퓨터 밖으로 나가지 않습니다.
+4. **규칙 제안 보기**: `faildex rules`
+   아무것도 쓰지 않습니다. 여러 세션에서 반복된 실패를 번호와 복구 기록과 함께 보여 줍니다.
+5. **골라서 승인**: `faildex rules --approve 1 3 --to ~/faildex-rules.md`
+   고른 규칙을 `~/faildex-rules.md`에 덧붙입니다. 묻지 않고는 쓰지 않습니다.
+6. **에이전트에 연결**: `faildex link`
+   스킬과 규칙 파일을 Claude Code, Antigravity, Codex, Cursor에 설치합니다. `faildex link --remove`로 되돌립니다.
+7. **실행 전 경고**: `faildex hook` · `faildex mcp` · `faildex check "git status"`
+   아무것도 쓰지 않습니다. 훅과 MCP 서버가 에이전트에게 경고하고, `check`는 같은 내용을 사람에게 보여 줍니다.
+   훅 설정은 [설치와 실행](#설치와-실행)에 있습니다.
+8. **효과 확인**: `faildex eval` · `faildex report --split 2026-11-17`
+   아무것도 쓰지 않습니다. `eval`은 반복률을 채점하고, `report`는 내 기록을 어떤 날짜 이전과 이후로 비교합니다.
+
+`faildex help`는 이 순서를 터미널에 보여 주고, `faildex help <명령>`은 명령 하나를 예와 함께
+설명합니다. 출력은 기본이 영어입니다. `faildex lang ko`로 한국어로, `faildex lang en`으로 다시
+영어로 바꿉니다(`~/.faildex/config.json`에 저장, 한 번만 바꾸려면 `--lang`, 셸 단위로는
+`FAILDEX_LANG`이 먼저입니다). 훅과 MCP 응답, `--approve`가 쓰는 규칙 문장, JSON, 실패 키는
+영어 그대로 둡니다. 에이전트가 읽고, 규칙 파일의 중복 판단도 그 문장으로 하기 때문입니다.
+
 ## 무엇을 해결하나
 
 코딩 에이전트는 기억하지 못합니다. 한 세션이 `fatal: not a git repository`를 만나

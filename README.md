@@ -22,6 +22,32 @@ On Windows, see [Install](#install) for the PowerShell line.
 WebAssembly and recomputes every number on the page. Open it at
 <https://dtype2100.github.io/faildex/>, or run it locally with `make site && make serve`.*
 
+## How to use, in order
+
+1. **Install**: `curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh`
+   Adds the `faildex` command, and uv if it is missing; nothing else changes. Windows: see [Install](#install).
+2. **Try it on public data**: `faildex demo`
+   Nothing is written; shows rules, a warning and the numbers on the public logs that ship with faildex.
+3. **Index your own logs**: `faildex ingest`
+   Writes your private store at `~/.faildex/store`; it never leaves this machine.
+4. **See the proposed rules**: `faildex rules`
+   Nothing is written; lists the failures that recurred across sessions, numbered, with the recovery on record.
+5. **Approve the ones you want**: `faildex rules --approve 1 3 --to ~/faildex-rules.md`
+   Appends those rules to `~/faildex-rules.md`; nothing is written unasked.
+6. **Connect your agents**: `faildex link`
+   Installs the skill and the rules file into Claude Code, Antigravity, Codex and Cursor; `faildex link --remove` undoes it.
+7. **Get a warning before a command runs**: `faildex hook` · `faildex mcp` · `faildex check "git status"`
+   Nothing is written; the hook and the MCP server warn the agent, and `check` shows you the same.
+   Hook setup is under [Setup and run](#setup-and-run).
+8. **See the effect**: `faildex eval` · `faildex report --split 2026-11-17`
+   Nothing is written; `eval` scores recurrence, `report` compares your logs before and from a day.
+
+`faildex help` prints these steps in the terminal, and `faildex help <command>` explains one
+command with examples. Output is in English by default; `faildex lang ko` switches it to Korean
+and `faildex lang en` back (saved in `~/.faildex/config.json`; `--lang` or `FAILDEX_LANG` wins for
+one run or one shell). Hook and MCP replies, the rule text `--approve` writes, JSON and failure
+keys stay in English, because agents read them and rules files are deduplicated on that text.
+
 ## Use case
 
 Coding agents do not remember. A session hits `fatal: not a git repository`,

@@ -5,6 +5,7 @@ import base64
 from pathlib import Path
 
 from faildex import __version__
+from faildex.i18n import t
 
 
 def _build_store(args: argparse.Namespace) -> int:
@@ -13,7 +14,7 @@ def _build_store(args: argparse.Namespace) -> int:
     try:
         result = build_store(args.data, args.out)
     except FileNotFoundError as err:
-        print(f"error: {err}")
+        print(t("err.prefix", message=err))
         return 1
     print(report(result, args.out))
     return 0
@@ -26,7 +27,7 @@ def _eval(args: argparse.Namespace) -> int:
     try:
         db = open_store(args.store)
     except FileNotFoundError as err:
-        print(f"error: {err}")
+        print(t("err.prefix", message=err))
         return 1
     command = "faildex report"
     if getattr(args, "store_given", False):
@@ -42,7 +43,7 @@ def _open(args: argparse.Namespace):
     try:
         return open_store(args.store)
     except FileNotFoundError as err:
-        print(f"error: {err}")
+        print(t("err.prefix", message=err))
         return None
 
 
@@ -80,7 +81,7 @@ def _store_overview(db, store_path: Path) -> tuple[str, bool, int, int]:
     resolved = store_path.expanduser().resolve()
     private_resolved = PRIVATE_STORE.expanduser().resolve()
     if resolved == private_resolved:
-        return "Your logs (~/.faildex/store)", False, sessions, failed
+        return t("rules.label.yours"), False, sessions, failed
 
     shipped = _shipped_store()
     cache_root = (
@@ -92,13 +93,13 @@ def _store_overview(db, store_path: Path) -> tuple[str, bool, int, int]:
     )
     if is_public:
         if is_cached_public:
-            where = "built-in"
+            where = t("rules.label.builtin")
         elif store_path == Path("store"):
             where = "./store"
         else:
             where = _display_store_path(store_path)
-        return f"Public demo logs ({where})", True, sessions, failed
-    return f"Store ({_display_store_path(store_path)})", False, sessions, failed
+        return t("rules.label.public", where=where), True, sessions, failed
+    return t("rules.label.store", path=_display_store_path(store_path)), False, sessions, failed
 
 
 def _rules(args: argparse.Namespace) -> int:
@@ -115,7 +116,7 @@ def _rules(args: argparse.Namespace) -> int:
         items = all_items[: args.top]
         if args.approve:
             added = approve(items, args.approve, args.to)
-            print(f"added {len(added)} rule(s) to {args.to}")
+            print(t("rules.added", count=len(added), path=args.to))
             return 0
         label, is_public, sessions, failed = _store_overview(db, args.store)
     finally:
@@ -128,17 +129,24 @@ def _rules(args: argparse.Namespace) -> int:
         return f"\033[{code}m{text}\033[0m" if color else text
 
     total = len(all_items)
-    recurring = f", {total:,} recurring" if total else ""
-    lines = [style(f"{label}: {sessions:,} sessions, {failed:,} failed calls{recurring}", "1")]
+    recurring = t("rules.summary.recurring", count=f"{total:,}") if total else ""
+    summary = t(
+        "rules.summary",
+        label=label,
+        sessions=f"{sessions:,}",
+        failed=f"{failed:,}",
+        recurring=recurring,
+    )
+    lines = [style(summary, "1")]
     if is_public:
         private = PRIVATE_STORE.expanduser()
         if (
             private / "manifest.json"
         ).is_file() and args.store.expanduser().resolve() != private.resolve():
-            hint = "Your logs: faildex rules --store ~/.faildex/store"
+            hint = t("rules.hint.yours")
         else:
-            hint = "Index your own logs with: faildex ingest"
-        lines.append(style(f"Note: this is demo data. {hint}", "33"))
+            hint = t("rules.hint.ingest")
+        lines.append(style(t("rules.demo_note", hint=hint), "33"))
     lines.append("")
     lines.append(
         render(
@@ -152,9 +160,9 @@ def _rules(args: argparse.Namespace) -> int:
         lines.append("")
         more = []
         if len(items) < total:
-            more.append(f"Showing {len(items)} of {total:,} recurring (--top {total} for all)")
+            more.append(t("rules.showing", shown=len(items), total=f"{total:,}", count=total))
         if not args.evidence and any(len(item.evidence) > 1 for item in items):
-            more.append("full evidence paths: --evidence")
+            more.append(t("rules.full_evidence"))
         if more:
             lines.append("; ".join(more))
         picks = "1 3" if len(items) >= 3 else " ".join(str(i) for i in range(1, len(items) + 1))
@@ -164,12 +172,8 @@ def _rules(args: argparse.Namespace) -> int:
         if args.min_sessions != 2:
             extra.append(f"--min-sessions {args.min_sessions}")
         suffix = f" {' '.join(extra)}" if extra else ""
-        lines.append(
-            style(
-                f"Write a rule: faildex rules --approve {picks}{suffix} --to ~/faildex-rules.md",
-                "1",
-            )
-        )
+        command = f"faildex rules --approve {picks}{suffix} --to ~/faildex-rules.md"
+        lines.append(style(t("rules.write", command=command), "1"))
     print(safe_console_text("\n".join(lines), sys.stdout))
     return 0
 
@@ -181,11 +185,8 @@ def _link(args: argparse.Namespace) -> int:
     print(render(steps))
     if not args.remove and not args.dry_run:
         where = str(args.rules.expanduser().resolve()).replace(str(Path.home()), "~", 1)
-        print(f"rules file: {where}  (new sessions read it and use the skill)")
-        print(
-            "Claude Code warnings before each command: add `faildex hook` as a PreToolUse "
-            "hook in ~/.claude/settings.json (see the README)"
-        )
+        print(t("link.rules_file", path=where))
+        print(t("link.claude_hook"))
     return 0
 
 
@@ -197,8 +198,10 @@ def _check(args: argparse.Namespace) -> int:
         return 1
     _, pairs = warnings_for_line(db, args.command_line, args.min_sessions)
     db.close()
+    from faildex.i18n import current
+
     for _, item in pairs[: args.top]:
-        print(item.rule())
+        print(item.rule(lang=current()))
     return 0
 
 
@@ -206,6 +209,9 @@ def _hook(args: argparse.Namespace) -> int:
     import sys
 
     from faildex.hook import respond
+    from faildex.i18n import use
+
+    use("en")  # an agent reads this, whatever language the person chose
 
     out = respond(
         sys.stdin.read(),
@@ -223,7 +229,10 @@ def _hook(args: argparse.Namespace) -> int:
 
 
 def _mcp(args: argparse.Namespace) -> int:
+    from faildex.i18n import use
     from faildex.mcp_server import serve
+
+    use("en")  # an agent reads this, whatever language the person chose
 
     serve(args.store)
     return 0
@@ -255,14 +264,11 @@ def _ingest(args: argparse.Namespace) -> int:
             path = home / rel
             if path.is_dir():
                 getattr(args, attr).append(path)
-                print(f"found {path}")
+                print(t("ingest.found", path=path))
                 found_any = True
         if not found_any:
-            print(
-                "error: no agent logs in the default folders "
-                f"({', '.join('~/' + rel for _, rel in DEFAULT_SOURCES)}); "
-                "give --claude, --codex-sessions, --cursor or --antigravity DIR"
-            )
+            folders = ", ".join("~/" + rel for _, rel in DEFAULT_SOURCES)
+            print(t("err.prefix", message=t("err.no_logs", folders=folders)))
             return 1
     missing = [
         str(p)
@@ -270,7 +276,7 @@ def _ingest(args: argparse.Namespace) -> int:
         if not p.exists()
     ]
     if missing:
-        print(f"error: not found: {', '.join(missing)}")
+        print(t("err.prefix", message=t("err.not_found", paths=", ".join(missing))))
         return 1
     records = [r for root in args.claude for r in claude_code.read_dir(root)]
     records += [r for root in args.codex_sessions for r in codex_local.read_dir(root)]
@@ -287,10 +293,15 @@ def _ingest(args: argparse.Namespace) -> int:
     finally:
         db.close()
     where = _display_store_path(args.store)
-    print(f"ingested {written:,} calls from current logs into {where}")
+    print(t("ingest.done", count=f"{written:,}", where=where))
     print(
-        f"  store total: sessions {found['Session']:,}  calls {found['Call']:,}  "
-        f"failed {found['failed calls']:,}  failure keys {found['ErrorSig']:,}"
+        t(
+            "ingest.total",
+            sessions=f"{found['Session']:,}",
+            calls=f"{found['Call']:,}",
+            failed=f"{found['failed calls']:,}",
+            keys=f"{found['ErrorSig']:,}",
+        )
     )
     return 0
 
@@ -322,21 +333,15 @@ def _export_web(args: argparse.Namespace) -> int:
             )
         )["n"]
         if local and chosen:
-            print(
-                f"error: {args.store} holds {local:,} session(s) from your own logs, with local "
-                "file paths, so nothing was written. Run this outside that folder to export the "
-                "public store, or pass `--store` to export a store on purpose."
-            )
+            message = t("err.export_own_logs", store=args.store, count=f"{local:,}")
+            print(t("err.prefix", message=message))
             return 1
         size = write(db, args.out)
     finally:
         db.close()
-    print(f"wrote {args.out} ({size / 1e6:.2f} MB) from {args.store}")
+    print(t("web.wrote", out=args.out, size=f"{size / 1e6:.2f}", store=args.store))
     if local:
-        print(
-            f"note: {local:,} session(s) come from your own logs, with local file paths; "
-            "do not publish this file"
-        )
+        print(t("web.note_own", count=f"{local:,}"))
     return 0
 
 
@@ -344,9 +349,7 @@ def _report(args: argparse.Namespace) -> int:
     from faildex.report import render
 
     if args.hook_log is not None and not args.hook_log.is_file():
-        print(
-            f"error: no hook log at {args.hook_log}; it is the file given to `faildex hook --log`"
-        )
+        print(t("err.prefix", message=t("err.no_hook_log", path=args.hook_log)))
         return 1
     db = _open(args)
     if db is None:
@@ -369,24 +372,20 @@ def _demo(args: argparse.Namespace) -> int:
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
     db = open_store(public_store())
     try:
-        print("== 1. Failures that came back across sessions, with the recovery on record\n")
+        print(t("demo.rules"))
         print(
             safe_console_text(render(proposals(db)[:3], color=color, encoding=encoding), sys.stdout)
         )
-        print("\n== 2. Before running a command (what the Claude Code hook prints)\n")
+        print(t("demo.check"))
         for command in ("git status", "ls"):
             found = warnings_for(db, command)
             print(f"$ {command}")
-            print(
-                f"  {notice_for(found)}"
-                if found
-                else "  (no notice: no recurring failure on record)"
-            )
-        print("\n== 3. How often later sessions repeated a failure the graph already held\n")
+            print(f"  {notice_for(found)}" if found else t("demo.no_notice"))
+        print(t("demo.eval"))
         print(report(db))
     finally:
         db.close()
-    print("\nThis ran on public session logs. Index your own with: faildex ingest --help")
+    print(t("demo.end"))
     return 0
 
 
@@ -401,7 +400,7 @@ def _sources(args: argparse.Namespace) -> int:
 def _positive(value: str) -> int:
     number = int(value) if value.lstrip("-").isdigit() else None
     if number is None or number < 1:
-        raise argparse.ArgumentTypeError(f"expected a whole number of 1 or more, got {value!r}")
+        raise argparse.ArgumentTypeError(t("err.whole_number", value=repr(value)))
     return number
 
 
@@ -415,152 +414,243 @@ def _day(value: str) -> str:
             return date.fromisoformat(value).isoformat()
     except ValueError:
         pass
-    raise argparse.ArgumentTypeError(f"expected a day as YYYY-MM-DD, got {value!r}")
+    raise argparse.ArgumentTypeError(t("err.day", value=repr(value)))
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="faildex", description=__doc__)
-    parser.add_argument("--version", action="version", version=f"faildex {__version__}")
+def _help(args: argparse.Namespace) -> int:
+    import sys
+
+    from faildex.guide import command, overview
+    from faildex.i18n import current
+    from faildex.insight import safe_console_text
+
+    names = list(args.commands)
+    if args.topic is None:
+        text = overview(names, current())
+    elif args.topic in args.commands:
+        text = command(args.topic, args.commands[args.topic])
+    else:
+        message = t("err.unknown_topic", topic=args.topic, commands=", ".join(names))
+        print(t("err.prefix", message=message), file=sys.stderr)
+        return 2
+    print(safe_console_text(text, sys.stdout))
+    return 0
+
+
+def _lang(args: argparse.Namespace) -> int:
+    import os
+
+    from faildex.i18n import ENV, LANGUAGES, config_path, current, origin, save, use
+
+    env = os.environ.get(ENV)
+    env_value = env.strip().lower() if env else None
+    if args.choice is None:
+        where = origin()
+        detail = (
+            t("lang.origin.config", path=_display_store_path(config_path()))
+            if where == "config"
+            else t(f"lang.origin.{where}")
+        )
+        print(t("lang.now", language=current(), origin=detail))
+        if env and env_value not in LANGUAGES:
+            print(t("lang.env_ignored", value=env))
+        return 0
+    try:
+        path = save(args.choice)
+    except (OSError, ValueError) as err:
+        print(t("err.prefix", message=t("err.config", message=err)))
+        return 1
+    if not getattr(args, "lang_given", False):
+        use(args.choice, "config")
+    print(t("lang.saved", language=args.choice, path=_display_store_path(path)))
+    if env_value in LANGUAGES and env_value != args.choice:
+        print(t("lang.env_wins", value=env))
+    elif env and env_value not in LANGUAGES:
+        print(t("lang.env_ignored", value=env))
+    return 0
+
+
+def _lang_option(argv: list[str]) -> str | None:
+    """The value of --lang, read before the parser exists so its help text is translated."""
+    found = None
+    for i, word in enumerate(argv):
+        if word == "--":
+            break
+        if word == "--lang" and i + 1 < len(argv):
+            found = argv[i + 1]
+        elif word.startswith("--lang="):
+            found = word.split("=", 1)[1]
+    return found
+
+
+class _Formatter(argparse.HelpFormatter):
+    """argparse's formatter with the `usage:` prefix in the chosen language."""
+
+    def add_usage(self, usage, actions, groups, prefix=None):
+        super().add_usage(usage, actions, groups, t("argparse.usage") if prefix is None else prefix)
+
+
+def _translate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser._positionals.title = t("argparse.positional")
+    parser._optionals.title = t("argparse.options")
+    return parser
+
+
+def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.ArgumentParser]]:
+    """The faildex parser in the current language, and each command's own parser."""
+    from faildex.i18n import LANGUAGES
+
+    parser = _translate(
+        argparse.ArgumentParser(
+            prog="faildex",
+            description=t("cli.description"),
+            epilog=t("cli.epilog"),
+            formatter_class=_Formatter,
+            add_help=False,
+        )
+    )
+    parser.add_argument("-h", "--help", action="help", help=t("opt.help"))
+    parser.add_argument(
+        "--version", action="version", version=f"faildex {__version__}", help=t("opt.version")
+    )
+    parser.add_argument("--lang", choices=LANGUAGES, default=None, help=t("opt.lang"))
     commands = parser.add_subparsers(dest="command")
+    found: dict[str, argparse.ArgumentParser] = {}
 
-    build = commands.add_parser("build-store", help="rebuild the store from the public datasets")
-    build.add_argument("--data", type=Path, default=Path(".tmp/data"), help="downloaded datasets")
-    build.add_argument("--out", type=Path, default=Path("store"), help="store directory")
+    def add(name: str) -> argparse.ArgumentParser:
+        sub = _translate(
+            commands.add_parser(
+                name,
+                help=t(f"cmd.{name}"),
+                formatter_class=_Formatter,
+                add_help=False,
+            )
+        )
+        sub.add_argument("-h", "--help", action="help", help=t("opt.help"))
+        sub.add_argument("--lang", choices=LANGUAGES, default=argparse.SUPPRESS, help=t("opt.lang"))
+        found[name] = sub
+        return sub
+
+    build = add("build-store")
+    build.add_argument("--data", type=Path, default=Path(".tmp/data"), help=t("opt.build.data"))
+    build.add_argument("--out", type=Path, default=Path("store"), help=t("opt.build.out"))
     build.set_defaults(run=_build_store)
 
-    evaluate = commands.add_parser("eval", help="recurrence of failures in the store")
-    evaluate.add_argument("--store", type=Path, default=None, help="store directory")
+    evaluate = add("eval")
+    evaluate.add_argument("--store", type=Path, default=None, help=t("opt.store"))
     evaluate.set_defaults(run=_eval)
 
-    rules = commands.add_parser("rules", help="propose rules from recurring failures")
-    rules.add_argument("--approve", type=int, nargs="+", metavar="N", help="write these proposals")
-    rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help="rules file")
-    rules.add_argument(
-        "--evidence",
-        action="store_true",
-        help="show the evidence log pointers (up to 3 per failure) in full",
-    )
+    rules = add("rules")
+    rules.add_argument("--approve", type=int, nargs="+", metavar="N", help=t("opt.rules.approve"))
+    rules.add_argument("--to", type=Path, default=Path("faildex-rules.md"), help=t("opt.rules.to"))
+    rules.add_argument("--evidence", action="store_true", help=t("opt.rules.evidence"))
     rules.set_defaults(run=_rules)
 
-    linker = commands.add_parser(
-        "link",
-        help="install the faildex skill and your approved rules into Claude Code, Antigravity, Codex and Cursor",
-    )
+    linker = add("link")
     linker.add_argument(
-        "--rules",
-        type=Path,
-        default=Path("~/faildex-rules.md"),
-        help="rules file to link (default ~/faildex-rules.md)",
+        "--rules", type=Path, default=Path("~/faildex-rules.md"), help=t("opt.link.rules")
     )
-    linker.add_argument("--remove", action="store_true", help="undo the links")
-    linker.add_argument("--dry-run", action="store_true", help="show what would change")
+    linker.add_argument("--remove", action="store_true", help=t("opt.link.remove"))
+    linker.add_argument("--dry-run", action="store_true", help=t("opt.link.dry_run"))
     linker.set_defaults(run=_link)
 
-    check = commands.add_parser("check", help="what is known to go wrong with a command")
-    check.add_argument("command_line", help="the command about to run, quoted")
+    check = add("check")
+    check.add_argument("command_line", help=t("opt.check.command_line"))
     check.set_defaults(run=_check)
 
-    hook = commands.add_parser("hook", help="agent session and shell hooks (JSON on stdin)")
-    hook.add_argument("--agent", choices=("claude", "codex", "cursor"), default="claude")
-    hook.add_argument("--event", choices=("session-start", "pre-shell"), default="pre-shell")
-    hook.add_argument("--rules", type=Path, default=Path("~/faildex-rules.md"))
+    hook = add("hook")
+    hook.add_argument(
+        "--agent",
+        choices=("claude", "codex", "cursor"),
+        default="claude",
+        help=t("opt.hook.agent"),
+    )
+    hook.add_argument(
+        "--event",
+        choices=("session-start", "pre-shell"),
+        default="pre-shell",
+        help=t("opt.hook.event"),
+    )
+    hook.add_argument(
+        "--rules", type=Path, default=Path("~/faildex-rules.md"), help=t("opt.hook.rules")
+    )
     hook.add_argument(
         "--rules-encoded",
         dest="encoded_rules",
         help=argparse.SUPPRESS,
         type=lambda value: Path(base64.urlsafe_b64decode(value).decode("utf-8")),
     )
-    hook.add_argument("--log", type=Path, default=None, help="append one line per warning given")
+    hook.add_argument("--log", type=Path, default=None, help=t("opt.hook.log"))
     hook.set_defaults(run=_hook)
 
-    report = commands.add_parser(
-        "report", help="counts before and after a date, for your own store"
-    )
-    report.add_argument("--store", type=Path, default=None, help="store directory")
-    report.add_argument(
-        "--split", metavar="YYYY-MM-DD", type=_day, help="compare before and from this day"
-    )
-    report.add_argument("--key", help="count failures whose key contains this text")
-    report.add_argument("--hook-log", type=Path, default=None, help="the file given to hook --log")
+    report = add("report")
+    report.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+    report.add_argument("--split", metavar="YYYY-MM-DD", type=_day, help=t("opt.report.split"))
+    report.add_argument("--key", help=t("opt.report.key"))
+    report.add_argument("--hook-log", type=Path, default=None, help=t("opt.report.hook_log"))
     report.set_defaults(run=_report)
 
-    mcp = commands.add_parser("mcp", help="serve preflight, evidence and recurring over MCP")
-    mcp.add_argument("--store", type=Path, default=None, help="store directory")
+    mcp = add("mcp")
+    mcp.add_argument("--store", type=Path, default=None, help=t("opt.store"))
     mcp.set_defaults(run=_mcp)
 
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
-        sub.add_argument("--store", type=Path, default=None, help="store directory")
-        sub.add_argument(
-            "--min-sessions", type=_positive, default=2, help="sessions a failure must span"
-        )
-        sub.add_argument("--top", type=_positive, default=top, help="how many to show")
+        sub.add_argument("--store", type=Path, default=None, help=t("opt.store"))
+        sub.add_argument("--min-sessions", type=_positive, default=2, help=t("opt.min_sessions"))
+        sub.add_argument("--top", type=_positive, default=top, help=t("opt.top"))
 
-    ingest = commands.add_parser(
-        "ingest", help="read your own agent logs into a private store on this machine"
-    )
-    ingest.add_argument(
-        "--claude",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="DIR",
-        help="a directory of Claude Code transcripts (*.jsonl), searched recursively",
-    )
-    ingest.add_argument(
-        "--codex",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="FILE",
-        help="a Codex trajectories jsonl file",
-    )
-    ingest.add_argument(
-        "--codex-sessions",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="DIR",
-        help="a directory of Codex CLI session files (~/.codex/sessions)",
-    )
-    ingest.add_argument(
-        "--cursor",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="DIR",
-        help="a directory of Cursor agent chats (~/.cursor/chats)",
-    )
-    ingest.add_argument(
-        "--antigravity",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="DIR",
-        help="an Antigravity data folder (~/.gemini/antigravity or ~/.gemini/antigravity-cli)",
-    )
-    ingest.add_argument("--store", type=Path, default=None, help="store directory")
+    ingest = add("ingest")
+    for flag, metavar in (
+        ("--claude", "DIR"),
+        ("--codex", "FILE"),
+        ("--codex-sessions", "DIR"),
+        ("--cursor", "DIR"),
+        ("--antigravity", "DIR"),
+    ):
+        ingest.add_argument(
+            flag,
+            type=Path,
+            action="append",
+            default=[],
+            metavar=metavar,
+            help=t(f"opt.ingest.{flag[2:].replace('-', '_')}"),
+        )
+    ingest.add_argument("--store", type=Path, default=None, help=t("opt.store"))
     ingest.set_defaults(run=_ingest)
 
-    web = commands.add_parser("export-web", help="write the store as JSON for the browser demo")
-    web.add_argument("--out", type=Path, default=Path("site/data.json"), help="output file")
-    web.add_argument(
-        "--store",
-        type=Path,
-        default=argparse.SUPPRESS,
-        help="store directory (default: ./store or the public demo store; FAILDEX_STORE is ignored)",
-    )
+    web = add("export-web")
+    web.add_argument("--out", type=Path, default=Path("site/data.json"), help=t("opt.web.out"))
+    web.add_argument("--store", type=Path, default=argparse.SUPPRESS, help=t("opt.web.store"))
     web.set_defaults(run=_export_web)
 
-    demo = commands.add_parser("demo", help="see faildex work on the public logs it ships with")
-    demo.set_defaults(run=_demo)
+    add("demo").set_defaults(run=_demo)
+    add("sources").set_defaults(run=_sources)
 
-    sources = commands.add_parser("sources", help="list the pinned public datasets")
-    sources.set_defaults(run=_sources)
+    guide = add("help")
+    guide.add_argument("topic", nargs="?", metavar="COMMAND", help=t("opt.help.topic"))
+    guide.set_defaults(run=_help, commands=found)
 
+    language = add("lang")
+    language.add_argument(
+        "choice", nargs="?", choices=LANGUAGES, metavar="{en,ko}", help=t("opt.lang.choice")
+    )
+    language.set_defaults(run=_lang)
+    return parser, found
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    from faildex.i18n import resolve, use
+
+    argv = sys.argv[1:] if argv is None else list(argv)
+    use(*resolve(_lang_option(argv)))
+    parser, _ = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 0
+    args.lang_given = _lang_option(argv) is not None
     args.store_given = getattr(args, "store", None) is not None
     if getattr(args, "store", "set") is None:
         import os

@@ -180,9 +180,11 @@ def _build_into(data_dir: Path, out: Path) -> None:
 
 
 def report(result: dict, out: Path) -> str:
-    lines = [f"store: {out}"]
+    from faildex.i18n import pad, t
+
+    lines = [t("build.store", out=out)]
     lines += [f"  {name:<14} {value:>8,}" for name, value in result["counts"].items()]
-    lines.append(f"  {'size on disk':<14} {result['bytes'] / 1e6:>8.2f} MB")
-    lines.append(f"  {'build time':<14} {result['seconds']:>8.1f} s")
-    lines.append(f"  {'peak memory':<14} {result['peak_rss_mb']:>8.0f} MB")
+    lines.append(f"  {pad(t('build.size'), 14)} {result['bytes'] / 1e6:>8.2f} MB")
+    lines.append(f"  {pad(t('build.time'), 14)} {result['seconds']:>8.1f} s")
+    lines.append(f"  {pad(t('build.memory'), 14)} {result['peak_rss_mb']:>8.0f} MB")
     return "\n".join(lines)

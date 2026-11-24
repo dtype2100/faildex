@@ -27,9 +27,9 @@ def open_store(path: str | Path, read_only: bool = True):
     """Connect to the store at `path`. Raises FileNotFoundError when there is none."""
     path = Path(path)
     if not (path / "manifest.json").is_file():
-        raise FileNotFoundError(
-            f"no store at {path}; `faildex ingest --store {path}` creates one from your logs"
-        )
+        from faildex.i18n import t
+
+        raise FileNotFoundError(t("err.no_store", path=path))
     if not read_only:
         return relate.connect(str(path))
     try:
@@ -59,7 +59,9 @@ def public_store() -> Path:
     """
     shipped = _shipped_store()
     if shipped is None:
-        raise FileNotFoundError("this copy of faildex has no public store; reinstall it")
+        from faildex.i18n import t
+
+        raise FileNotFoundError(t("err.no_public_store"))
     digest = hashlib.sha256((shipped / "manifest.json").read_bytes()).hexdigest()[:12]
     cache = (
         Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser()

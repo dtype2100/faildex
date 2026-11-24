@@ -420,11 +420,22 @@ def render(steps: list[Step], home: Path | None = None) -> str:
         s = str(p)
         return "~" + s[len(str(home)) :] if s.startswith(str(home)) else s
 
+    from faildex.i18n import CATALOG, DEFAULT, pad, t
+
+    english = CATALOG[DEFAULT]
+    notes = {english[key]: key for key in english if key.startswith("link.note.")}
+
+    def word(prefix: str, value: str) -> str:
+        key = f"{prefix}.{value}"
+        return t(key) if key in english else value
+
     rows = []
     for step in steps:
-        note = step.note.replace(str(home), "~")
+        note = t(notes[step.note]) if step.note in notes else step.note
+        note = note.replace(str(home), "~")
         rows.append(
-            f"{step.agent:<12} {step.what:<6} {step.status:<14} {short(step.where)}"
+            f"{pad(step.agent, 12)} {pad(word('link.what', step.what), 6)} "
+            f"{pad(word('link.status', step.status), 14)} {short(step.where)}"
             + (f"  ({note})" if note else "")
         )
     return "\n".join(rows)

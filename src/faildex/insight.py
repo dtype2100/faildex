@@ -44,6 +44,14 @@ SHELL_FIXES = {
     "no matches found: <glob>": "quote the glob, star included (`--include='*.py'`, not `--include=*.py`)",
     "=<word> not found": "quote words that start with `=` (`echo '===='`, not `echo ====`)",
 }
+# The same cures, as catalog keys, for output in the person's language.
+_SHELL_FIX_KEYS = {"no matches found: <glob>": "fix.glob", "=<word> not found": "fix.equals"}
+
+
+def shell_fix(sig: str, lang: str | None = None) -> str:
+    from faildex.i18n import t
+
+    return t(_SHELL_FIX_KEYS[sig], lang)
 
 
 def is_transient(sig: str) -> bool:
@@ -136,31 +144,36 @@ class Failure:
             after = f"sessions got past it by running `{self.fix}` first"
         return f"faildex: {subject} {what} in {len(self.sessions)} earlier sessions; {after}."
 
-    def rule(self) -> str:
+    def rule(self, lang: str = "en") -> str:
+        """The rule sentence. English unless asked: agents read it, and rules files are
+        deduplicated on its English wording (`faildex check` asks for the person's language)."""
+        from faildex.i18n import t
+
         subject = f"`{self.command or self.tools.most_common(1)[0][0]}`"
         head = (
-            f"When {subject} fails with `{self.sig}`"
+            t("rule.when_text", lang, subject=subject, sig=self.sig)
             if self.kind == "text"
-            else f"When `{self.sig.rsplit(' exited ', 1)[0]}` exits with code "
-            f"{self.sig.rsplit(' ', 1)[-1]} and prints nothing useful"
-        )
-        seen = f"seen in {len(self.sessions)} sessions, {self.calls} calls"
-        if self.runs:
-            seen += f", {self.calls / self.runs:.0%} of this command's {self.runs} runs"
-        if self.sig in SHELL_FIXES:
-            return f"{head} ({seen}): the shell stops before the command runs; {SHELL_FIXES[self.sig]}."
-        if not self.fix:
-            return f"{head} ({seen}): no recovery on record yet; stop and check before retrying."
-        top = self.fixes.most_common(1)[0][1]
-        share = f"{top} of {self.recovered} recoveries"
-        if self.fix == RETRY and is_transient(self.sig):
-            return f"{head} ({seen}): retry it; a later try of the same command worked ({share})."
-        if self.fix == RETRY:
-            return (
-                f"{head} ({seen}): fix the cause, then run it again; a later, changed call "
-                f"of the same command worked ({share})."
+            else t(
+                "rule.when_exit",
+                lang,
+                command=self.sig.rsplit(" exited ", 1)[0],
+                code=self.sig.rsplit(" ", 1)[-1],
             )
-        return f"{head} ({seen}): earlier sessions got past it by running `{self.fix}` first ({share})."
+        )
+        seen = t("rule.seen", lang, sessions=len(self.sessions), calls=self.calls)
+        if self.runs:
+            seen += t("rule.seen_runs", lang, share=f"{self.calls / self.runs:.0%}", runs=self.runs)
+        if self.sig in SHELL_FIXES:
+            return t("rule.shell", lang, head=head, seen=seen, fix=shell_fix(self.sig, lang))
+        if not self.fix:
+            return t("rule.none", lang, head=head, seen=seen)
+        top = self.fixes.most_common(1)[0][1]
+        share = t("rule.share", lang, top=top, recovered=self.recovered)
+        if self.fix == RETRY and is_transient(self.sig):
+            return t("rule.retry", lang, head=head, seen=seen, share=share)
+        if self.fix == RETRY:
+            return t("rule.fix_cause", lang, head=head, seen=seen, share=share)
+        return t("rule.run_first", lang, head=head, seen=seen, fix=self.fix, share=share)
 
     @property
     def key(self) -> str:
@@ -384,10 +397,6 @@ def short_pointer(pointer: str, max_len: int = 48) -> str:
     return f".../{tail}{suffix}"
 
 
-def _plural(count: int, word: str) -> str:
-    return word if count == 1 else f"{word}s"
-
-
 def _subject(item: Failure) -> str:
     if item.command:
         return item.command
@@ -400,28 +409,35 @@ def _subject(item: Failure) -> str:
 
 def _recovery_summary(item: Failure) -> str:
     """Failed calls that the same command later got past, within RECOVERY_HOPS calls."""
-    return f"{item.recovered:,} of {item.calls:,} recovered within {RECOVERY_HOPS} calls"
+    from faildex.i18n import t
+
+    return t(
+        "rules.recovered",
+        recovered=f"{item.recovered:,}",
+        calls=f"{item.calls:,}",
+        hops=RECOVERY_HOPS,
+    )
 
 
 def _action_line(item: Failure) -> str:
     """What to do, and how many of the recoveries back it (the `top of recovered` share)."""
+    from faildex.i18n import t, tn
+
     if item.sig in SHELL_FIXES:
-        return f"{SHELL_FIXES[item.sig]}; the shell stops before any command runs."
+        return t("action.shell", fix=shell_fix(item.sig))
     if not item.fix:
-        return "stop and check before retrying; no recovery on record yet."
+        return t("action.none")
     top = item.fixes.most_common(1)[0][1]
-    share = f"{top:,} of {item.recovered:,} {'recovery' if item.recovered == 1 else 'recoveries'}"
+    share = tn("action.share", item.recovered, top=f"{top:,}", recovered=f"{item.recovered:,}")
     if item.fix == RETRY:
         # Counts cover every command that hit this failure, so name one only when it is alone.
-        what = f"`{_subject(item)}`" if len(item.commands) <= 1 else "the same command"
+        alone = len(item.commands) <= 1
+        what = f"`{_subject(item)}`" if alone else t("action.same_command")
         if is_transient(item.sig):
-            return f"retry {what}; a later try worked in {share}."
-        what = what if len(item.commands) <= 1 else "it"
-        return (
-            f"fix the cause, then run {what} again; a later, changed call of the same "
-            f"command worked in {share}."
-        )
-    return f"run `{item.fix}` first; {share} did that."
+            return t("action.retry", what=what, share=share)
+        what = what if alone else t("action.it")
+        return t("action.fix_cause", what=what, share=share)
+    return t("action.run_first", fix=item.fix, share=share)
 
 
 def render(
@@ -432,8 +448,10 @@ def render(
     encoding: str | None = None,
 ) -> str:
     """Readable numbered proposals with counts, recovery clarity, action, and evidence."""
+    from faildex.i18n import current, t, tn, width, wrap
+
     if not items:
-        return "No failure has recurred across sessions yet."
+        return t("rules.none")
 
     enc = encoding or getattr(sys.stdout, "encoding", None) or "utf-8"
     dash = "—" if _can_encode("—", enc) else "--"
@@ -448,44 +466,53 @@ def render(
         subject = f"`{_subject(item)}`"
         if len(item.commands) > 1:
             others = len(item.commands) - 1
-            subject += f" +{others} more {_plural(others, 'command')}"
+            subject += " " + tn("rules.more_commands", others, count=others)
         if item.kind == "text":
             # Keep the whole first line within LINE_WIDTH columns.
-            room = max(40, LINE_WIDTH - len(f"{number}. {subject} {dash} "))
+            room = max(40, LINE_WIDTH - width(f"{number}. {subject} {dash} "))
             what = truncate_words(item.sig, min(room, MAX_DISPLAY_SIG), ellipsis=ellip)
         else:
             code = item.sig.rsplit(" ", 1)[-1]
-            what = f"exited with code {code} (no error output)"
+            what = t("rules.exited", code=code)
 
         head = f"{style(f'{number}.', '1')} {style(subject, '1')} {dash} {style(what, '31')}"
-        counts = (
-            f"{len(item.sessions):,} {_plural(len(item.sessions), 'session')}, "
-            f"{item.calls:,} failed {_plural(item.calls, 'call')}"
+        counts = t(
+            "rules.counts",
+            sessions=tn(
+                "rules.counts.sessions", len(item.sessions), count=f"{len(item.sessions):,}"
+            ),
+            calls=tn("rules.counts.calls", item.calls, count=f"{item.calls:,}"),
         )
         rec = _recovery_summary(item)
         rec_styled = style(rec, "32" if item.recovered else "31")
         stats = f"   {counts} {dot} {rec_styled}"
         # Wrap the action under itself so every line stays within LINE_WIDTH columns.
-        action = textwrap.wrap(
-            f"   Action: {_action_line(item)}",
-            LINE_WIDTH,
-            subsequent_indent=" " * len("   Action: "),
-            break_long_words=False,
-            break_on_hyphens=False,
-        )
-        action[0] = action[0].replace("Action:", style("Action:", "1;36"), 1)
+        label = t("rules.action")
+        indent = " " * (3 + width(label) + 1)
+        if current() == "en":
+            action = textwrap.wrap(
+                f"   {label} {_action_line(item)}",
+                LINE_WIDTH,
+                subsequent_indent=indent,
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        else:
+            action = wrap(f"   {label} {_action_line(item)}", LINE_WIDTH, indent)
+        action[0] = action[0].replace(label, style(label, "1;36"), 1)
 
         lines = [head, stats, *action]
         if item.evidence:
+            ev_head = t("rules.evidence", count=len(item.evidence))
             if show_evidence:
-                ev_head = f"   evidence ({len(item.evidence)}):"
-                lines.append(style(ev_head, "2"))
+                lines.append(style(f"   {ev_head}", "2"))
                 for ptr in item.evidence:
                     lines.append(style(f"     {tilde_path(ptr)}", "2"))
             else:
                 first_ptr = short_pointer(item.evidence[0])
-                more = f", +{len(item.evidence) - 1} more" if len(item.evidence) > 1 else ""
-                lines.append(style(f"   evidence ({len(item.evidence)}): {first_ptr}{more}", "2"))
+                extra = len(item.evidence) - 1
+                more = t("rules.evidence_more", count=extra) if extra else ""
+                lines.append(style(f"   {ev_head} {first_ptr}{more}", "2"))
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 

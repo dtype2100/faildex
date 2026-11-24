@@ -1,0 +1,689 @@
+"""The words faildex prints for people, in English and Korean.
+
+Every message a person reads comes out of one catalog here, looked up by key, so
+the two languages cannot drift apart: a test checks that both have the same keys
+and the same `{placeholders}`.
+
+The language is chosen in this order: `--lang ko|en`, then the `FAILDEX_LANG`
+environment variable, then the saved setting in `~/.faildex/config.json`
+(`faildex lang ko`), then English. The system locale is not consulted, so the
+default output stays the English that the published numbers and tests use.
+
+Some output stays English whatever the setting, because an agent reads it, not a
+person: the hook and MCP replies, the rule text that `rules --approve` writes (it
+is also how a rules file is deduplicated), JSON, failure keys (log text), and
+command and option names.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import unicodedata
+from pathlib import Path
+
+LANGUAGES = ("en", "ko")
+DEFAULT = "en"
+ENV = "FAILDEX_LANG"
+
+_state = {"lang": DEFAULT, "origin": "default"}
+
+
+def config_path() -> Path:
+    """`~/.faildex/config.json`; never anything inside the store folder."""
+    return Path.home() / ".faildex" / "config.json"
+
+
+def _valid(value) -> str | None:
+    if isinstance(value, str) and value.strip().lower() in LANGUAGES:
+        return value.strip().lower()
+    return None
+
+
+def saved() -> str | None:
+    """The language saved by `faildex lang`, or None when there is none (or it is unreadable)."""
+    try:
+        data = json.loads(config_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return _valid(data.get("lang")) if isinstance(data, dict) else None
+
+
+def resolve(option: str | None = None) -> tuple[str, str]:
+    """(language, where it came from): option, env, config or default."""
+    if _valid(option):
+        return _valid(option), "option"
+    if _valid(os.environ.get(ENV)):
+        return _valid(os.environ.get(ENV)), "env"
+    found = saved()
+    if found:
+        return found, "config"
+    return DEFAULT, "default"
+
+
+def use(lang: str, origin: str = "option") -> None:
+    _state["lang"] = _valid(lang) or DEFAULT
+    _state["origin"] = origin
+
+
+def current() -> str:
+    return _state["lang"]
+
+
+def origin() -> str:
+    return _state["origin"]
+
+
+def save(lang: str) -> Path:
+    """Write the language into the config file, keeping any other settings in it."""
+    path = config_path()
+    data: dict = {}
+    if path.is_file():
+        loaded = json.loads(path.read_text(encoding="utf-8"))  # ValueError when broken
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{path} does not hold a JSON object")
+        data = loaded
+    data["lang"] = lang
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def t(key: str, lang: str | None = None, /, **values) -> str:
+    """The message for `key` in the current (or given) language, with `values` filled in.
+
+    `key` and `lang` are positional only, so a placeholder may be called {key} or {lang}.
+    """
+    table = CATALOG[lang or _state["lang"]]
+    text = table[key] if key in table else CATALOG[DEFAULT][key]
+    return text.format(**values) if values else text
+
+
+def tn(key: str, number: int, lang: str | None = None, /, **values) -> str:
+    """Like t(), choosing `key.one` or `key.other` by number."""
+    return t(f"{key}.{'one' if number == 1 else 'other'}", lang, **values)
+
+
+def width(text: str) -> int:
+    """Columns a terminal gives the text: Hangul and other wide letters take two."""
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
+def pad(text: str, size: int, align: str = "<") -> str:
+    """str.format padding by terminal columns; identical to it for ASCII text."""
+    gap = " " * max(0, size - width(text))
+    return text + gap if align == "<" else gap + text
+
+
+def wrap(text: str, size: int, indent: str) -> list[str]:
+    """Break on spaces by terminal columns, later lines indented."""
+    lead = text[: len(text) - len(text.lstrip(" "))]
+    lines: list[str] = []
+    line = lead
+    for word in text.lstrip(" ").split(" "):
+        candidate = f"{line} {word}" if line.strip() else line + word
+        if line.strip() and width(candidate) > size:
+            lines.append(line)
+            line = indent + word
+        else:
+            line = candidate
+    if line.strip():
+        lines.append(line)
+    return lines
+
+
+EN = {
+    # faildex --help and the options every command shares
+    "cli.description": "faildex: find the failures coding agents keep repeating.",
+    "cli.epilog": "New here? Run: faildex help",
+    "opt.lang": "output language, en or ko (see: faildex help lang)",
+    "opt.help": "show this help message and exit",
+    "opt.version": "show program's version number and exit",
+    "opt.store": "store directory",
+    "opt.min_sessions": "sessions a failure must span",
+    "opt.top": "how many to show",
+    "argparse.usage": "usage: ",
+    "argparse.positional": "positional arguments",
+    "argparse.options": "options",
+    # one line per command (faildex --help) and their options
+    "cmd.build-store": "rebuild the store from the public datasets",
+    "opt.build.data": "downloaded datasets",
+    "opt.build.out": "store directory",
+    "cmd.eval": "recurrence of failures in the store",
+    "cmd.rules": "propose rules from recurring failures",
+    "opt.rules.approve": "write these proposals",
+    "opt.rules.to": "rules file",
+    "opt.rules.evidence": "show the evidence log pointers (up to 3 per failure) in full",
+    "cmd.link": "install the faildex skill and your approved rules into Claude Code, Antigravity, Codex and Cursor",
+    "opt.link.rules": "rules file to link (default ~/faildex-rules.md)",
+    "opt.link.remove": "undo the links",
+    "opt.link.dry_run": "show what would change",
+    "cmd.check": "what is known to go wrong with a command",
+    "opt.check.command_line": "the command about to run, quoted",
+    "cmd.hook": "agent session and shell hooks (JSON on stdin)",
+    "opt.hook.log": "append one line per warning given",
+    "opt.hook.agent": "whose JSON event arrives on stdin",
+    "opt.hook.event": "session-start loads the rules file; pre-shell checks a command",
+    "opt.hook.rules": "rules file that session-start loads",
+    "cmd.report": "counts before and after a date, for your own store",
+    "opt.report.split": "compare before and from this day",
+    "opt.report.key": "count failures whose key contains this text",
+    "opt.report.hook_log": "the file given to hook --log",
+    "cmd.mcp": "serve preflight, evidence and recurring over MCP",
+    "cmd.ingest": "read your own agent logs into a private store on this machine",
+    "opt.ingest.claude": "a directory of Claude Code transcripts (*.jsonl), searched recursively",
+    "opt.ingest.codex": "a Codex trajectories jsonl file",
+    "opt.ingest.codex_sessions": "a directory of Codex CLI session files (~/.codex/sessions)",
+    "opt.ingest.cursor": "a directory of Cursor agent chats (~/.cursor/chats)",
+    "opt.ingest.antigravity": "an Antigravity data folder (~/.gemini/antigravity or ~/.gemini/antigravity-cli)",
+    "cmd.export-web": "write the store as JSON for the browser demo",
+    "opt.web.out": "output file",
+    "opt.web.store": "store directory (default: ./store or the public demo store; FAILDEX_STORE is ignored)",
+    "cmd.demo": "see faildex work on the public logs it ships with",
+    "cmd.sources": "list the pinned public datasets",
+    "cmd.help": "how to use faildex, in order; faildex help <command> for one command",
+    "opt.help.topic": "a command to explain",
+    "cmd.lang": "show or save the output language (en or ko)",
+    "opt.lang.choice": "the language to save",
+    # errors
+    "err.prefix": "error: {message}",
+    "err.whole_number": "expected a whole number of 1 or more, got {value}",
+    "err.day": "expected a day as YYYY-MM-DD, got {value}",
+    "err.no_store": "no store at {path}; `faildex ingest --store {path}` creates one from your logs",
+    "err.no_public_store": "this copy of faildex has no public store; reinstall it",
+    "err.no_logs": "no agent logs in the default folders ({folders}); give --claude, --codex-sessions, --cursor or --antigravity DIR",
+    "err.not_found": "not found: {paths}",
+    "err.no_hook_log": "no hook log at {path}; it is the file given to `faildex hook --log`",
+    "err.export_own_logs": "{store} holds {count} session(s) from your own logs, with local file paths, so nothing was written. Run this outside that folder to export the public store, or pass `--store` to export a store on purpose.",
+    "err.unknown_topic": "no command named {topic}. Commands: {commands}",
+    "err.config": "could not save the language: {message}",
+    # rules
+    "rules.added": "added {count} rule(s) to {path}",
+    "rules.label.yours": "Your logs (~/.faildex/store)",
+    "rules.label.public": "Public demo logs ({where})",
+    "rules.label.builtin": "built-in",
+    "rules.label.store": "Store ({path})",
+    "rules.summary": "{label}: {sessions} sessions, {failed} failed calls{recurring}",
+    "rules.summary.recurring": ", {count} recurring",
+    "rules.hint.yours": "Your logs: faildex rules --store ~/.faildex/store",
+    "rules.hint.ingest": "Index your own logs with: faildex ingest",
+    "rules.demo_note": "Note: this is demo data. {hint}",
+    "rules.showing": "Showing {shown} of {total} recurring (--top {count} for all)",
+    "rules.full_evidence": "full evidence paths: --evidence",
+    "rules.write": "Write a rule: {command}",
+    "rules.none": "No failure has recurred across sessions yet.",
+    "rules.more_commands.one": "+{count} more command",
+    "rules.more_commands.other": "+{count} more commands",
+    "rules.exited": "exited with code {code} (no error output)",
+    "rules.counts.sessions.one": "{count} session",
+    "rules.counts.sessions.other": "{count} sessions",
+    "rules.counts.calls.one": "{count} failed call",
+    "rules.counts.calls.other": "{count} failed calls",
+    "rules.counts": "{sessions}, {calls}",
+    "rules.recovered": "{recovered} of {calls} recovered within {hops} calls",
+    "rules.action": "Action:",
+    "rules.evidence": "evidence ({count}):",
+    "rules.evidence_more": ", +{count} more",
+    # what to do about a failure (rules: Action line; check: the rule sentence)
+    "fix.glob": "quote the glob, star included (`--include='*.py'`, not `--include=*.py`)",
+    "fix.equals": "quote words that start with `=` (`echo '===='`, not `echo ====`)",
+    "action.shell": "{fix}; the shell stops before any command runs.",
+    "action.none": "stop and check before retrying; no recovery on record yet.",
+    "action.share.one": "{top} of {recovered} recovery",
+    "action.share.other": "{top} of {recovered} recoveries",
+    "action.same_command": "the same command",
+    "action.it": "it",
+    "action.retry": "retry {what}; a later try worked in {share}.",
+    "action.fix_cause": "fix the cause, then run {what} again; a later, changed call of the same command worked in {share}.",
+    "action.run_first": "run `{fix}` first; {share} did that.",
+    "rule.when_text": "When {subject} fails with `{sig}`",
+    "rule.when_exit": "When `{command}` exits with code {code} and prints nothing useful",
+    "rule.seen": "seen in {sessions} sessions, {calls} calls",
+    "rule.seen_runs": ", {share} of this command's {runs} runs",
+    "rule.shell": "{head} ({seen}): the shell stops before the command runs; {fix}.",
+    "rule.none": "{head} ({seen}): no recovery on record yet; stop and check before retrying.",
+    "rule.share": "{top} of {recovered} recoveries",
+    "rule.retry": "{head} ({seen}): retry it; a later try of the same command worked ({share}).",
+    "rule.fix_cause": "{head} ({seen}): fix the cause, then run it again; a later, changed call of the same command worked ({share}).",
+    "rule.run_first": "{head} ({seen}): earlier sessions got past it by running `{fix}` first ({share}).",
+    # link
+    "link.rules_file": "rules file: {path}  (new sessions read it and use the skill)",
+    "link.claude_hook": "Claude Code warnings before each command: add `faildex hook` as a PreToolUse hook in ~/.claude/settings.json (see the README)",
+    "link.what.rules": "rules",
+    "link.what.skill": "skill",
+    "link.what.hooks": "hooks",
+    "link.status.linked": "linked",
+    "link.status.installed": "installed",
+    "link.status.updated": "updated",
+    "link.status.already": "already",
+    "link.status.removed": "removed",
+    "link.status.absent": "absent",
+    "link.status.skipped": "skipped",
+    "link.status.copied": "copied",
+    "link.status.would install": "would install",
+    "link.status.would link": "would link",
+    "link.status.would update": "would update",
+    "link.status.would remove": "would remove",
+    "link.note.symlink": "a symlink is there; left alone",
+    "link.note.other_skill": "a different skill is there; not replaced",
+    "link.note.not_ours": "not installed by faildex; left alone",
+    "link.note.other_plugin": "a different plugin already uses this folder",
+    "link.note.regular_file": "a regular file is there; not replaced",
+    "link.note.no_antigravity": "Antigravity is not installed (~/.gemini not found)",
+    "link.note.copy": "rules copy; run faildex link again after approving rules",
+    "link.note.not_plugin": "not a faildex plugin; left alone",
+    "link.note.rules_and_skill": "rules and skill",
+    "link.note.hooks_symlink": "hooks.json is a symlink; left alone",
+    "link.note.hooks_unsafe": "could not safely update hooks.json; left alone",
+    "link.note.codex_trust": "review and trust new hooks in Codex /hooks",
+    # ingest
+    "ingest.found": "found {path}",
+    "ingest.done": "ingested {count} calls from current logs into {where}",
+    "ingest.total": "  store total: sessions {sessions}  calls {calls}  failed {failed}  failure keys {keys}",
+    # export-web
+    "web.wrote": "wrote {out} ({size} MB) from {store}",
+    "web.note_own": "note: {count} session(s) come from your own logs, with local file paths; do not publish this file",
+    # build-store
+    "build.store": "store: {out}",
+    "build.size": "size on disk",
+    "build.time": "build time",
+    "build.memory": "peak memory",
+    # demo
+    "demo.rules": "== 1. Failures that came back across sessions, with the recovery on record\n",
+    "demo.check": "\n== 2. Before running a command (what the Claude Code hook prints)\n",
+    "demo.no_notice": "  (no notice: no recurring failure on record)",
+    "demo.eval": "\n== 3. How often later sessions repeated a failure the graph already held\n",
+    "demo.end": "\nThis ran on public session logs. Index your own with: faildex ingest --help",
+    # eval
+    "eval.by.dataset": "dataset",
+    "eval.by.agent": "agent",
+    "eval.all": "all",
+    "eval.by_agent": "No public dataset in this store, so sessions are grouped by agent.",
+    "eval.split": "Split: first {share} of each {by}'s sessions by start time = earlier, the rest = later.",
+    "eval.legend": "sessions = earlier/later; failures = later-period failed calls with a failure key.",
+    "eval.groups.one": "{count} {by}",
+    "eval.groups.other": "{count} {by}s",
+    "eval.nothing": "Nothing to score: no {by} has 2 or more sessions with a start time ({groups} found). For counts per failure, run: {command}",
+    "eval.all_keys": "All failure keys (failure text, or command + exit code when nothing usable was printed)",
+    "eval.text_only": "Failure text only",
+    "eval.col.sessions": "sessions",
+    "eval.col.failures": "failures",
+    "eval.col.recurring": "recurring",
+    "eval.col.recurrence": "recurrence",
+    "eval.col.warnable": "warnable",
+    "eval.col.of_recurring": "of recurring",
+    "eval.distinct": "Distinct later-period failure keys: {later}, already seen earlier: {seen}",
+    "eval.by_key": "Recurring later-period failures by key",
+    "eval.without_top": "Recurrence without the most common key: {without}/{base} = {share}",
+    "eval.shared": "Failure keys seen under more than one agent: {count}",
+    # report
+    "report.col.agent": "agent",
+    "report.col.sessions": "sessions",
+    "report.col.calls": "calls",
+    "report.col.failed": "failed",
+    "report.col.period": "period",
+    "report.col.days": "days",
+    "report.col.per_1000": "per 1000",
+    "report.col.matched": 'failed with "{key}"',
+    "report.col.hook": "hook warnings",
+    "report.shared": "failure keys seen under more than one agent: {count}",
+    "report.period.all": "all",
+    "report.period.before": "before {day}",
+    "report.period.from": "from {day}",
+    "report.legend": "per 1000 = per thousand calls. An observation, not a controlled comparison.",
+    "report.undated": "{count} call(s) without a timestamp are not counted above.",
+    "report.both_sides": "A session with calls on both sides of the split counts in both periods.",
+    # lang
+    "lang.now": "language: {language} ({origin})",
+    "lang.origin.option": "from --lang",
+    "lang.origin.env": "from the FAILDEX_LANG environment variable",
+    "lang.origin.config": "saved in {path}",
+    "lang.origin.default": "the default; save one with faildex lang ko or faildex lang en",
+    "lang.saved": "saved: {language} in {path}",
+    "lang.env_wins": "note: FAILDEX_LANG={value} is set, so it still decides the language in this shell",
+    "lang.env_ignored": "note: FAILDEX_LANG={value} is not en or ko, so it is ignored",
+    "lang.name.en": "English",
+    "lang.name.ko": "Korean",
+    # faildex help
+    "help.title": "faildex: how to use it, in order",
+    "help.step.1": "Install",
+    "help.change.1": "Adds the faildex command (and uv if missing); nothing else changes. Windows: see the README.",
+    "help.step.2": "Try it on public data",
+    "help.change.2": "Nothing is written; shows rules, a warning and the numbers on public logs.",
+    "help.step.3": "Index your own logs",
+    "help.change.3": "Writes your private store at ~/.faildex/store; it never leaves this machine.",
+    "help.step.4": "See the proposed rules",
+    "help.change.4": "Nothing is written; lists the failures that recurred across sessions, numbered.",
+    "help.step.5": "Approve the ones you want",
+    "help.change.5": "Appends those rules to ~/faildex-rules.md; nothing is written unasked.",
+    "help.step.6": "Connect your agents",
+    "help.change.6": "Installs the skill and the rules file into Claude Code, Antigravity, Codex and Cursor; faildex link --remove undoes it.",
+    "help.step.7": "Get a warning before a command runs",
+    "help.change.7": "Nothing is written; the hook and MCP server warn the agent, check shows the same to you.",
+    "help.step.8": "See the effect",
+    "help.change.8": "Nothing is written; eval scores recurrence, report compares before and after a day.",
+    "help.more": "Details for one command: faildex help <command>",
+    "help.commands": "Commands: {commands}",
+    "help.lang": "Language: faildex lang ko | faildex lang en  (now: {language})",
+    "help.examples": "Examples",
+    "help.options": "Options",
+    "help.see_also": "All options: faildex {command} --help",
+    "about.build-store": "Rebuilds store/ from the two public datasets that `make data` downloads, and prints node counts, size and memory.",
+    "about.eval": "Splits each dataset's sessions by start time (first 70% earlier, the rest later) and counts how many later failures had already happened earlier, and how many of those had a recovery on record.",
+    "about.rules": "Lists failures that came back in 2 or more sessions, best first, each with counts, the recovery on record and evidence pointers. --approve writes the ones you pick to a rules file.",
+    "about.link": "Installs the faildex skill and links your rules file into Claude Code, Antigravity, Codex and Cursor, and adds Codex and Cursor hooks. It changes only faildex-owned entries; --remove takes them out.",
+    "about.check": "Prints the recurring failures known for a command line, one rule each. Prints nothing when none is on record.",
+    "about.hook": "Run by an agent, not by hand: reads the agent's JSON event on stdin and answers with a warning when the command has a known recurring failure. Its output is English for the agent.",
+    "about.report": "Counts calls, failures and failures with a given key, over your whole store or before and from a day, so you can see whether an approved rule changed anything.",
+    "about.mcp": "Serves preflight, evidence and recurring as MCP tools over stdio, for any MCP client. Replies are JSON in English.",
+    "about.ingest": "Reads Claude Code, Codex, Cursor and Antigravity logs into a private store (default ~/.faildex/store). Running it again adds only what is new.",
+    "about.export-web": "Writes the store as JSON for the browser demo. Without --store it exports the public store only, never your own logs.",
+    "about.demo": "Shows rules, a pre-run warning and the evaluation on the public logs that ship with faildex. Needs no setup.",
+    "about.sources": "Lists the two public datasets with their pinned revisions.",
+    "about.help": "Shows how to use faildex, in order, or how to use one command.",
+    "about.lang": "Shows the output language and where it was chosen, or saves en or ko in ~/.faildex/config.json. --lang and FAILDEX_LANG override the saved one.",
+    "ex.build-store.1": "rebuild store/ after make data",
+    "ex.build-store.2": "write it somewhere else",
+    "ex.eval.1": "score the store this folder uses",
+    "ex.eval.2": "score your own logs",
+    "ex.rules.1": "the 10 best proposals",
+    "ex.rules.2": "three, with full evidence paths",
+    "ex.rules.3": "write proposals 1 and 3",
+    "ex.link.1": "see what would change, change nothing",
+    "ex.link.2": "install the skill and the rules",
+    "ex.link.3": "undo it",
+    "ex.check.1": "known failures of one command",
+    "ex.check.2": "a compound line is checked part by part",
+    "ex.hook.1": "the Claude Code PreToolUse hook",
+    "ex.hook.2": "the Codex shell hook, logging each warning",
+    "ex.report.1": "counts for your whole store",
+    "ex.report.2": "before and from a day, for one failure key",
+    "ex.report.3": "with the warnings the hook gave",
+    "ex.mcp.1": "serve the default store",
+    "ex.mcp.2": "serve your own logs",
+    "ex.ingest.1": "read every default log folder found",
+    "ex.ingest.2": "read one folder into another store",
+    "ex.export-web.1": "the public store, for the site",
+    "ex.export-web.2": "your own store, on purpose (do not publish it)",
+    "ex.demo.1": "the demo",
+    "ex.demo.2": "the demo in Korean",
+    "ex.sources.1": "dataset, repository, revision",
+    "ex.help.1": "how to use faildex, in order",
+    "ex.help.2": "one command",
+    "ex.lang.1": "the language now, and where it was chosen",
+    "ex.lang.2": "save Korean",
+    "ex.lang.3": "save English",
+}
+
+KO = {
+    "cli.description": "faildex: 코딩 에이전트가 되풀이하는 실패를 찾습니다.",
+    "cli.epilog": "처음이면: faildex help",
+    "opt.lang": "출력 언어, en 또는 ko (설명: faildex help lang)",
+    "opt.help": "이 도움말을 보여 주고 끝냅니다",
+    "opt.version": "버전을 보여 주고 끝냅니다",
+    "opt.store": "스토어(실패 기록 그래프) 폴더",
+    "opt.min_sessions": "실패가 나타나야 하는 최소 세션 수",
+    "opt.top": "보여 줄 개수",
+    "argparse.usage": "사용법: ",
+    "argparse.positional": "위치 인자",
+    "argparse.options": "옵션",
+    "cmd.build-store": "공개 데이터셋으로 스토어를 다시 만듭니다",
+    "opt.build.data": "내려받은 데이터셋 폴더",
+    "opt.build.out": "스토어 폴더",
+    "cmd.eval": "스토어에서 실패가 얼마나 반복되는지 셉니다",
+    "cmd.rules": "반복 실패에서 규칙을 제안합니다",
+    "opt.rules.approve": "이 번호의 제안을 규칙 파일에 씁니다",
+    "opt.rules.to": "규칙 파일",
+    "opt.rules.evidence": "근거 로그 위치(실패마다 최대 3개)를 전부 보여 줍니다",
+    "cmd.link": "faildex 스킬과 승인한 규칙을 Claude Code, Antigravity, Codex, Cursor에 설치합니다",
+    "opt.link.rules": "연결할 규칙 파일 (기본 ~/faildex-rules.md)",
+    "opt.link.remove": "연결을 되돌립니다",
+    "opt.link.dry_run": "바뀔 내용만 보여 줍니다",
+    "cmd.check": "어떤 명령에서 알려진 실패를 보여 줍니다",
+    "opt.check.command_line": "실행하려는 명령 (따옴표로 감싸서)",
+    "cmd.hook": "에이전트 세션·셸 훅 (stdin으로 JSON)",
+    "opt.hook.log": "경고를 줄 때마다 한 줄씩 덧붙여 기록합니다",
+    "opt.hook.agent": "stdin으로 JSON 이벤트를 보내는 에이전트",
+    "opt.hook.event": "session-start는 규칙 파일을 읽고, pre-shell은 명령을 확인합니다",
+    "opt.hook.rules": "session-start가 읽을 규칙 파일",
+    "cmd.report": "내 스토어에서 날짜 전후의 횟수를 셉니다",
+    "opt.report.split": "이 날짜 이전과 이후를 비교합니다",
+    "opt.report.key": "실패 키에 이 글자가 들어간 실패를 셉니다",
+    "opt.report.hook_log": "hook --log에 준 파일",
+    "cmd.mcp": "preflight, evidence, recurring을 MCP로 제공합니다",
+    "cmd.ingest": "내 에이전트 기록을 이 컴퓨터의 개인 스토어로 모읍니다",
+    "opt.ingest.claude": "Claude Code 대화 기록(*.jsonl) 폴더, 하위 폴더까지 찾음",
+    "opt.ingest.codex": "Codex trajectories jsonl 파일",
+    "opt.ingest.codex_sessions": "Codex CLI 세션 파일 폴더 (~/.codex/sessions)",
+    "opt.ingest.cursor": "Cursor 에이전트 대화 폴더 (~/.cursor/chats)",
+    "opt.ingest.antigravity": "Antigravity 데이터 폴더 (~/.gemini/antigravity 또는 ~/.gemini/antigravity-cli)",
+    "cmd.export-web": "브라우저 데모용으로 스토어를 JSON으로 씁니다",
+    "opt.web.out": "출력 파일",
+    "opt.web.store": "스토어 폴더 (기본: ./store 또는 공개 데모 스토어, FAILDEX_STORE는 보지 않음)",
+    "cmd.demo": "faildex에 들어 있는 공개 기록으로 동작을 봅니다",
+    "cmd.sources": "고정된 공개 데이터셋 목록",
+    "cmd.help": "faildex 사용 순서. 명령 하나는 faildex help <명령>",
+    "opt.help.topic": "설명할 명령",
+    "cmd.lang": "출력 언어를 보거나 저장합니다 (en 또는 ko)",
+    "opt.lang.choice": "저장할 언어",
+    "err.prefix": "오류: {message}",
+    "err.whole_number": "1 이상의 정수가 필요합니다. 받은 값: {value}",
+    "err.day": "YYYY-MM-DD 형식의 날짜가 필요합니다. 받은 값: {value}",
+    "err.no_store": "{path}에 스토어가 없습니다. `faildex ingest --store {path}`로 내 기록에서 만들 수 있습니다",
+    "err.no_public_store": "이 faildex에는 공개 스토어가 없습니다. 다시 설치하세요",
+    "err.no_logs": "기본 폴더({folders})에 에이전트 기록이 없습니다. --claude, --codex-sessions, --cursor, --antigravity DIR 중 하나로 폴더를 주세요",
+    "err.not_found": "찾을 수 없음: {paths}",
+    "err.no_hook_log": "{path}에 훅 기록이 없습니다. `faildex hook --log`에 준 파일이어야 합니다",
+    "err.export_own_logs": "{store}에는 내 기록에서 온 세션 {count}개와 로컬 파일 경로가 있어 아무것도 쓰지 않았습니다. 공개 스토어를 내보내려면 그 폴더 밖에서 실행하고, 이 스토어를 일부러 내보내려면 `--store`를 주세요.",
+    "err.unknown_topic": "'{topic}' 명령은 없습니다. 명령: {commands}",
+    "err.config": "언어를 저장하지 못했습니다: {message}",
+    "rules.added": "규칙 {count}개를 {path}에 추가했습니다",
+    "rules.label.yours": "내 기록 (~/.faildex/store)",
+    "rules.label.public": "공개 데모 기록 ({where})",
+    "rules.label.builtin": "내장",
+    "rules.label.store": "스토어 ({path})",
+    "rules.summary": "{label}: 세션 {sessions}개, 실패 호출 {failed}개{recurring}",
+    "rules.summary.recurring": ", 반복 실패 {count}개",
+    "rules.hint.yours": "내 기록: faildex rules --store ~/.faildex/store",
+    "rules.hint.ingest": "내 기록 모으기: faildex ingest",
+    "rules.demo_note": "참고: 데모 데이터입니다. {hint}",
+    "rules.showing": "반복 실패 {total}개 중 {shown}개 표시 (전부 보기: --top {count})",
+    "rules.full_evidence": "근거 경로 전체: --evidence",
+    "rules.write": "규칙으로 쓰기: {command}",
+    "rules.none": "아직 여러 세션에 걸쳐 반복된 실패가 없습니다.",
+    "rules.more_commands.one": "외 명령 {count}개",
+    "rules.more_commands.other": "외 명령 {count}개",
+    "rules.exited": "종료 코드 {code} (오류 출력 없음)",
+    "rules.counts.sessions.one": "세션 {count}개",
+    "rules.counts.sessions.other": "세션 {count}개",
+    "rules.counts.calls.one": "실패 호출 {count}개",
+    "rules.counts.calls.other": "실패 호출 {count}개",
+    "rules.counts": "{sessions}, {calls}",
+    "rules.recovered": "{calls}개 중 {recovered}개가 {hops}번 호출 안에 복구",
+    "rules.action": "할 일:",
+    "rules.evidence": "근거 ({count}):",
+    "rules.evidence_more": ", 외 {count}개",
+    "fix.glob": "글롭(*.py 같은 패턴)은 별표까지 따옴표로 감쌉니다 (`--include=*.py`가 아니라 `--include='*.py'`)",
+    "fix.equals": "`=`로 시작하는 단어는 따옴표로 감쌉니다 (`echo ====`가 아니라 `echo '===='`)",
+    "action.shell": "{fix}. 셸이 명령을 실행하기 전에 멈춥니다.",
+    "action.none": "다시 실행하기 전에 멈추고 원인을 확인하세요. 아직 복구 기록이 없습니다.",
+    "action.share.one": "복구 {recovered}건 중 {top}건",
+    "action.share.other": "복구 {recovered}건 중 {top}건",
+    "action.same_command": "같은 명령",
+    "action.it": "같은 명령",
+    "action.retry": "다시 실행하세요 ({what}). {share}에서 나중 시도가 성공했습니다.",
+    "action.fix_cause": "원인을 고친 뒤 다시 실행하세요 ({what}). {share}에서 고쳐서 다시 실행한 같은 명령이 성공했습니다.",
+    "action.run_first": "먼저 이 명령을 실행하세요: `{fix}`. {share}이 그렇게 복구했습니다.",
+    "rule.when_text": "{subject} 실행이 `{sig}` 오류로 실패할 때",
+    "rule.when_exit": "`{command}` 실행이 종료 코드 {code}로 끝나고 쓸 만한 출력이 없을 때",
+    "rule.seen": "세션 {sessions}개, 호출 {calls}회에서 봄",
+    "rule.seen_runs": ", 이 명령 실행 {runs}회 중 {share}",
+    "rule.shell": "{head} ({seen}): 셸이 명령을 실행하기 전에 멈춥니다. {fix}.",
+    "rule.none": "{head} ({seen}): 아직 복구 기록이 없습니다. 다시 실행하기 전에 멈추고 원인을 확인하세요.",
+    "rule.share": "복구 {recovered}건 중 {top}건",
+    "rule.retry": "{head} ({seen}): 다시 실행하세요. 같은 명령을 나중에 다시 시도해 성공했습니다 ({share}).",
+    "rule.fix_cause": "{head} ({seen}): 원인을 고친 뒤 다시 실행하세요. 고쳐서 다시 실행한 같은 명령이 성공했습니다 ({share}).",
+    "rule.run_first": "{head} ({seen}): 이전 세션은 `{fix}` 명령을 먼저 실행해 넘어갔습니다 ({share}).",
+    "link.rules_file": "규칙 파일: {path}  (새 세션이 이 파일을 읽고 스킬을 씁니다)",
+    "link.claude_hook": "Claude Code에서 명령마다 미리 경고를 받으려면 ~/.claude/settings.json에 `faildex hook`을 PreToolUse 훅으로 추가하세요 (README 참고)",
+    "link.what.rules": "규칙",
+    "link.what.skill": "스킬",
+    "link.what.hooks": "훅",
+    "link.status.linked": "연결함",
+    "link.status.installed": "설치함",
+    "link.status.updated": "갱신함",
+    "link.status.already": "이미 있음",
+    "link.status.removed": "제거함",
+    "link.status.absent": "없음",
+    "link.status.skipped": "건너뜀",
+    "link.status.copied": "복사함",
+    "link.status.would install": "설치 예정",
+    "link.status.would link": "연결 예정",
+    "link.status.would update": "갱신 예정",
+    "link.status.would remove": "제거 예정",
+    "link.note.symlink": "심볼릭 링크가 있어 그대로 둠",
+    "link.note.other_skill": "다른 스킬이 있어 바꾸지 않음",
+    "link.note.not_ours": "faildex가 설치한 것이 아니어서 그대로 둠",
+    "link.note.other_plugin": "다른 플러그인이 이 폴더를 쓰고 있음",
+    "link.note.regular_file": "일반 파일이 있어 바꾸지 않음",
+    "link.note.no_antigravity": "Antigravity가 설치되어 있지 않음 (~/.gemini 없음)",
+    "link.note.copy": "규칙 사본. 규칙을 승인한 뒤 faildex link를 다시 실행하세요",
+    "link.note.not_plugin": "faildex 플러그인이 아니어서 그대로 둠",
+    "link.note.rules_and_skill": "규칙과 스킬",
+    "link.note.hooks_symlink": "hooks.json이 심볼릭 링크여서 그대로 둠",
+    "link.note.hooks_unsafe": "hooks.json을 안전하게 고칠 수 없어 그대로 둠",
+    "link.note.codex_trust": "Codex의 /hooks에서 새 훅을 확인하고 신뢰로 표시하세요",
+    "ingest.found": "찾음: {path}",
+    "ingest.done": "현재 기록에서 호출 {count}개를 {where}에 모았습니다",
+    "ingest.total": "  스토어 합계: 세션 {sessions}  호출 {calls}  실패 {failed}  실패 키 {keys}",
+    "web.wrote": "{out}에 썼습니다 ({size} MB, 원본 {store})",
+    "web.note_own": "참고: 세션 {count}개가 내 기록에서 왔고 로컬 파일 경로가 들어 있습니다. 이 파일은 공개하지 마세요",
+    "build.store": "스토어: {out}",
+    "build.size": "디스크 크기",
+    "build.time": "만든 시간",
+    "build.memory": "최대 메모리",
+    "demo.rules": "== 1. 여러 세션에서 다시 나온 실패와 기록된 복구 방법\n",
+    "demo.check": "\n== 2. 명령을 실행하기 전 (Claude Code 훅이 출력하는 내용, 에이전트용이라 영어)\n",
+    "demo.no_notice": "  (알림 없음: 기록된 반복 실패가 없습니다)",
+    "demo.eval": "\n== 3. 그래프가 이미 알던 실패를 이후 세션이 얼마나 되풀이했나\n",
+    "demo.end": "\n공개 세션 기록으로 실행했습니다. 내 기록 모으기: faildex ingest --help",
+    "eval.by.dataset": "데이터셋",
+    "eval.by.agent": "에이전트",
+    "eval.all": "전체",
+    "eval.by_agent": "이 스토어에는 공개 데이터셋이 없어서 세션을 에이전트별로 묶었습니다.",
+    "eval.split": "나누기: {by}마다 세션을 시작 시각순으로 놓고 앞 {share} = 이전, 나머지 = 이후.",
+    "eval.legend": "세션 = 이전/이후, 실패 = 이후 기간에 실패 키가 있는 실패 호출 수.",
+    "eval.groups.one": "{by} {count}개",
+    "eval.groups.other": "{by} {count}개",
+    "eval.nothing": "채점할 것이 없습니다: 시작 시각이 있는 세션이 2개 이상인 {by}가 없습니다 ({groups} 찾음). 실패별 횟수는 다음으로 보세요: {command}",
+    "eval.all_keys": "모든 실패 키 (실패 문구, 쓸 만한 출력이 없으면 명령 + 종료 코드)",
+    "eval.text_only": "실패 문구만",
+    "eval.col.sessions": "세션",
+    "eval.col.failures": "실패",
+    "eval.col.recurring": "반복",
+    "eval.col.recurrence": "반복률",
+    "eval.col.warnable": "경고가능",
+    "eval.col.of_recurring": "반복 중 비율",
+    "eval.distinct": "이후 기간의 서로 다른 실패 키: {later}개, 그중 이전에 본 것: {seen}개",
+    "eval.by_key": "이후 기간에 반복된 실패, 키별",
+    "eval.without_top": "가장 흔한 키를 뺀 반복률: {without}/{base} = {share}",
+    "eval.shared": "두 에이전트 이상에서 나온 실패 키: {count}개",
+    "report.col.agent": "에이전트",
+    "report.col.sessions": "세션",
+    "report.col.calls": "호출",
+    "report.col.failed": "실패",
+    "report.col.period": "기간",
+    "report.col.days": "일수",
+    "report.col.per_1000": "1000회당",
+    "report.col.matched": '"{key}" 포함 실패',
+    "report.col.hook": "훅 경고",
+    "report.shared": "두 에이전트 이상에서 나온 실패 키: {count}개",
+    "report.period.all": "전체",
+    "report.period.before": "{day} 이전",
+    "report.period.from": "{day}부터",
+    "report.legend": "1000회당 = 호출 1000번당 횟수. 통제된 비교가 아니라 관찰입니다.",
+    "report.undated": "시각이 없는 호출 {count}개는 위 집계에 넣지 않았습니다.",
+    "report.both_sides": "나눈 날짜 양쪽에 호출이 있는 세션은 두 기간에 모두 셉니다.",
+    "lang.now": "언어: {language} ({origin})",
+    "lang.origin.option": "--lang 옵션",
+    "lang.origin.env": "FAILDEX_LANG 환경변수",
+    "lang.origin.config": "{path}에 저장됨",
+    "lang.origin.default": "기본값. faildex lang ko 또는 faildex lang en으로 저장할 수 있습니다",
+    "lang.saved": "저장했습니다: {language}, {path}",
+    "lang.env_wins": "참고: FAILDEX_LANG={value}가 설정되어 있어 이 셸에서는 그 값이 언어를 정합니다",
+    "lang.env_ignored": "참고: FAILDEX_LANG={value}는 en도 ko도 아니어서 무시합니다",
+    "lang.name.en": "영어",
+    "lang.name.ko": "한국어",
+    "help.title": "faildex 사용 순서",
+    "help.step.1": "설치",
+    "help.change.1": "faildex 명령(없으면 uv도)을 설치합니다. 다른 것은 바꾸지 않습니다. Windows는 README를 보세요.",
+    "help.step.2": "공개 데이터로 맛보기",
+    "help.change.2": "아무것도 쓰지 않습니다. 공개 기록으로 규칙, 경고, 수치를 보여 줍니다.",
+    "help.step.3": "내 기록 모으기",
+    "help.change.3": "개인 스토어 ~/.faildex/store를 만듭니다. 이 컴퓨터 밖으로 나가지 않습니다.",
+    "help.step.4": "규칙 제안 보기",
+    "help.change.4": "아무것도 쓰지 않습니다. 여러 세션에서 반복된 실패를 번호를 붙여 보여 줍니다.",
+    "help.step.5": "골라서 승인",
+    "help.change.5": "고른 규칙을 ~/faildex-rules.md에 덧붙입니다. 묻지 않고는 쓰지 않습니다.",
+    "help.step.6": "에이전트에 연결",
+    "help.change.6": "스킬과 규칙 파일을 Claude Code, Antigravity, Codex, Cursor에 설치합니다. faildex link --remove로 되돌립니다.",
+    "help.step.7": "실행 전 경고",
+    "help.change.7": "아무것도 쓰지 않습니다. 훅과 MCP 서버가 에이전트에게 경고하고, check는 같은 내용을 사람에게 보여 줍니다.",
+    "help.step.8": "효과 확인",
+    "help.change.8": "아무것도 쓰지 않습니다. eval은 반복률을, report는 날짜 전후를 비교합니다.",
+    "help.more": "명령별 자세한 설명: faildex help <명령>",
+    "help.commands": "명령: {commands}",
+    "help.lang": "언어: faildex lang ko | faildex lang en  (지금: {language})",
+    "help.examples": "예",
+    "help.options": "옵션",
+    "help.see_also": "모든 옵션: faildex {command} --help",
+    "about.build-store": "`make data`가 내려받은 두 공개 데이터셋으로 store/를 다시 만들고, 노드 수, 크기, 메모리를 보여 줍니다.",
+    "about.eval": "데이터셋마다 세션을 시작 시각순으로 나눠(앞 70% 이전, 나머지 이후), 이후의 실패 중 이전에 이미 나온 것이 몇 개인지, 그중 복구 기록이 있는 것이 몇 개인지 셉니다.",
+    "about.rules": "2개 이상의 세션에서 다시 나온 실패를 좋은 순서로 보여 줍니다. 실패마다 횟수, 기록된 복구 방법, 근거 위치가 붙습니다. --approve는 고른 것을 규칙 파일에 씁니다.",
+    "about.link": "faildex 스킬을 설치하고 규칙 파일을 Claude Code, Antigravity, Codex, Cursor에 연결하며, Codex와 Cursor에는 훅도 추가합니다. faildex가 만든 항목만 바꾸고, --remove로 그것만 뺍니다.",
+    "about.check": "명령에 대해 알려진 반복 실패를 규칙 한 줄씩 보여 줍니다. 기록이 없으면 아무것도 출력하지 않습니다.",
+    "about.hook": "사람이 아니라 에이전트가 실행합니다. stdin으로 에이전트의 JSON 이벤트를 읽고, 그 명령에 알려진 반복 실패가 있으면 경고로 답합니다. 에이전트가 읽으므로 출력은 영어입니다.",
+    "about.report": "스토어 전체, 또는 어떤 날짜 이전과 이후로 나눠 호출 수, 실패 수, 특정 키의 실패 수를 셉니다. 승인한 규칙이 무엇을 바꿨는지 볼 때 씁니다.",
+    "about.mcp": "preflight, evidence, recurring을 stdio MCP 도구로 제공합니다. 응답은 영어 JSON입니다.",
+    "about.ingest": "Claude Code, Codex, Cursor, Antigravity 기록을 개인 스토어(기본 ~/.faildex/store)로 모읍니다. 다시 실행하면 새로 생긴 것만 더합니다.",
+    "about.export-web": "브라우저 데모용으로 스토어를 JSON으로 씁니다. --store가 없으면 공개 스토어만 내보내고, 내 기록은 내보내지 않습니다.",
+    "about.demo": "faildex에 들어 있는 공개 기록으로 규칙, 실행 전 경고, 평가 수치를 보여 줍니다. 준비할 것이 없습니다.",
+    "about.sources": "두 공개 데이터셋과 고정한 리비전을 보여 줍니다.",
+    "about.help": "faildex 사용 순서, 또는 명령 하나의 사용법을 보여 줍니다.",
+    "about.lang": "지금 출력 언어와 그 언어가 어디서 정해졌는지 보여 주거나, en 또는 ko를 ~/.faildex/config.json에 저장합니다. --lang과 FAILDEX_LANG이 저장된 값보다 먼저입니다.",
+    "ex.build-store.1": "make data 뒤에 store/ 다시 만들기",
+    "ex.build-store.2": "다른 곳에 만들기",
+    "ex.eval.1": "이 폴더에서 쓰는 스토어 채점",
+    "ex.eval.2": "내 기록 채점",
+    "ex.rules.1": "가장 좋은 제안 10개",
+    "ex.rules.2": "3개만, 근거 경로 전체와 함께",
+    "ex.rules.3": "1번과 3번 제안을 규칙으로 쓰기",
+    "ex.link.1": "바뀔 내용만 보기, 아무것도 바꾸지 않음",
+    "ex.link.2": "스킬과 규칙 설치",
+    "ex.link.3": "되돌리기",
+    "ex.check.1": "명령 하나의 알려진 실패",
+    "ex.check.2": "여러 명령을 이은 줄은 부분마다 확인",
+    "ex.hook.1": "Claude Code PreToolUse 훅",
+    "ex.hook.2": "Codex 셸 훅, 경고마다 기록",
+    "ex.report.1": "스토어 전체의 횟수",
+    "ex.report.2": "어떤 날짜 전후, 실패 키 하나",
+    "ex.report.3": "훅이 준 경고 수와 함께",
+    "ex.mcp.1": "기본 스토어로 서버 실행",
+    "ex.mcp.2": "내 기록으로 서버 실행",
+    "ex.ingest.1": "찾은 기본 기록 폴더를 모두 읽기",
+    "ex.ingest.2": "폴더 하나를 다른 스토어로 읽기",
+    "ex.export-web.1": "사이트용 공개 스토어",
+    "ex.export-web.2": "내 스토어를 일부러 내보내기 (공개하지 마세요)",
+    "ex.demo.1": "데모",
+    "ex.demo.2": "한국어로 데모",
+    "ex.sources.1": "데이터셋, 저장소, 리비전",
+    "ex.help.1": "faildex 사용 순서",
+    "ex.help.2": "명령 하나",
+    "ex.lang.1": "지금 언어와 어디서 정해졌는지",
+    "ex.lang.2": "한국어로 저장",
+    "ex.lang.3": "영어로 저장",
+}
+
+CATALOG = {"en": EN, "ko": KO}

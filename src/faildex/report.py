@@ -96,31 +96,54 @@ def agents(db) -> dict[str, tuple[int, int, int]]:
     return {a: (len(sessions[a]), calls[a], failed[a]) for a in sorted(sessions)}
 
 
+def _period_name(name: str) -> str:
+    from faildex.i18n import t
+
+    if name == "all":
+        return t("report.period.all")
+    when, _, day = name.partition(" ")
+    return t(f"report.period.{when}", day=day)
+
+
 def render(db, split: str | None, key: str | None, hook_log: Path | None = None) -> str:
-    lines = [f"{'agent':<14}{'sessions':>10}{'calls':>10}{'failed':>10}"]
+    from faildex.i18n import pad, t
+
+    lines = [
+        pad(t("report.col.agent"), 14)
+        + pad(t("report.col.sessions"), 10, ">")
+        + pad(t("report.col.calls"), 10, ">")
+        + pad(t("report.col.failed"), 10, ">")
+    ]
     for agent, (sessions, calls, failed) in agents(db).items():
         lines.append(f"{agent:<14}{sessions:>10,}{calls:>10,}{failed:>10,}")
     shared = next(iter(db.execute(_SHARED)))["n"]
-    lines += [f"failure keys seen under more than one agent: {shared}", ""]
+    lines += [t("report.shared", count=shared), ""]
 
-    head = f"{'period':<20}{'days':>6}{'sessions':>10}{'calls':>9}{'failed':>8}{'per 1000':>10}"
+    per_1000 = t("report.col.per_1000")
+    head = (
+        pad(t("report.col.period"), 20)
+        + pad(t("report.col.days"), 6, ">")
+        + pad(t("report.col.sessions"), 10, ">")
+        + pad(t("report.col.calls"), 9, ">")
+        + pad(t("report.col.failed"), 8, ">")
+        + pad(per_1000, 10, ">")
+    )
     if key:  # the matched column means nothing without --key
-        label = f'failed with "{key}"'
-        head += f"  {label:>30}{'per 1000':>10}"
+        head += "  " + pad(t("report.col.matched", key=key), 30, ">") + pad(per_1000, 10, ">")
     with_log = hook_log is not None
-    lines.append(head + (f"{'hook warnings':>15}" if with_log else ""))
+    lines.append(head + (pad(t("report.col.hook"), 15, ">") if with_log else ""))
     for p in periods(db, split, key, hook_log):
         row = (
-            f"{p.name:<20}{len(p.days):>6}{len(p.sessions):>10,}{p.calls:>9,}{p.failed:>8,}"
-            f"{p.rate(p.failed):>10}"
+            f"{pad(_period_name(p.name), 20)}{len(p.days):>6}{len(p.sessions):>10,}"
+            f"{p.calls:>9,}{p.failed:>8,}{p.rate(p.failed):>10}"
         )
         if key:
             row += f"  {p.matched:>30,}{p.rate(p.matched):>10}"
         lines.append(row + (f"{p.warnings:>15,}" if with_log else ""))
-    lines.append("per 1000 = per thousand calls. An observation, not a controlled comparison.")
+    lines.append(t("report.legend"))
     undated = next(iter(db.execute(_UNDATED)))["n"]
     if undated:
-        lines.append(f"{undated:,} call(s) without a timestamp are not counted above.")
+        lines.append(t("report.undated", count=f"{undated:,}"))
     if split:
-        lines.append("A session with calls on both sides of the split counts in both periods.")
+        lines.append(t("report.both_sides"))
     return "\n".join(lines)
