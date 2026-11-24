@@ -1,7 +1,12 @@
 name: pages
 
 # Publishes the browser demo. GitHub Pages needs the repository to be public,
-# so the job is skipped while it is private.
+# so the jobs are skipped while it is private.
+#
+# Build and deploy are separate jobs, as in GitHub's Pages starter workflow.
+# deploy-pages looks the uploaded artifact up by name; in a single job it
+# sometimes ran before the upload was listed and failed with
+# "No artifacts named github-pages were found for this workflow run".
 on:
   push:
     branches: [main]
@@ -12,17 +17,16 @@ permissions:
   pages: write
   id-token: write
 
+# One deployment at a time. A newer push waits for a running deployment
+# instead of cancelling it halfway.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     if: github.event.repository.private == false
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -32,5 +36,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
