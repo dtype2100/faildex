@@ -28,7 +28,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-INDEX_VERSION = 1
+# 2: each failure's sessions carry their failed-call counts (`Failure.session_calls`).
+INDEX_VERSION = 2
 # A failed background rebuild is not retried sooner than this.
 REBUILD_PAUSE = 10 * 60
 
@@ -62,7 +63,10 @@ def _encode(item) -> dict:
         "sig": item.sig,
         "kind": item.kind,
         "calls": item.calls,
-        "sessions": sorted(item.sessions, key=str),
+        "sessions": sorted(
+            ([session, item.session_calls[session]] for session in item.sessions),
+            key=lambda pair: str(pair[0]),
+        ),
         "agents": sorted(item.agents, key=str),
         "commands": list(item.commands.items()),
         "tools": list(item.tools.items()),
@@ -88,9 +92,9 @@ def _decode(row: dict):
         and isinstance(row.get("kind"), str)
         and type(row.get("calls")) is int
         and type(row.get("recovered")) is int
-        and isinstance(row.get("sessions"), list)
         and isinstance(row.get("agents"), list)
-        and all(_pairs(row.get(key)) for key in ("commands", "tools", "fixes"))
+        and all(_pairs(row.get(key)) for key in ("sessions", "commands", "tools", "fixes"))
+        and all(isinstance(session, str) for session, _ in row["sessions"])
         and (row["commands"] or row["tools"])  # the rule names one of them
         and isinstance(row.get("evidence"), list)
         and all(isinstance(pointer, str) for pointer in row["evidence"])
@@ -100,13 +104,14 @@ def _decode(row: dict):
         sig=row["sig"],
         kind=row["kind"],
         calls=row["calls"],
-        sessions=set(row["sessions"]),
+        sessions={session for session, _ in row["sessions"]},
         agents=set(row["agents"]),
         commands=Counter(dict(row["commands"])),
         tools=Counter(dict(row["tools"])),
         fixes=Counter(dict(row["fixes"])),
         recovered=row["recovered"],
         evidence=list(row["evidence"]),
+        session_calls=Counter(dict(row["sessions"])),
     )
 
 

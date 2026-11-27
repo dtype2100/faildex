@@ -1,0 +1,125 @@
+{
+ "note": "r21 phase 1 (2026-11-27): the `error` texts 13 real `claude -p` runs (claude-haiku-5-5, Claude Code 2.1.332) handed a PostToolUseFailure hook, then 11 edge cases. Each must give the same key on the store's path and the hook's path.",
+ "inputs": [
+  {
+   "input": "command-not-found",
+   "command": "faildex_r21_nosuchcmd --version",
+   "error": "Exit code 127\n(eval):1: command not found: faildex_r21_nosuchcmd"
+  },
+  {
+   "input": "compound",
+   "command": "ls ./missing-dir-r21 && echo listed",
+   "error": "Exit code 1\nls: ./missing-dir-r21: No such file or directory"
+  },
+  {
+   "input": "empty-exit-1",
+   "command": "false",
+   "error": "Exit code 1"
+  },
+  {
+   "input": "git-outside-repo",
+   "command": "git status",
+   "error": "Exit code 128\nfatal: not a git repository (or any of the parent directories): .git"
+  },
+  {
+   "input": "long-output",
+   "command": "python3 -c \"import sys; print('line ' * 600); sys.exit('error: failed after a long log')\"",
+   "error": "Exit code 1\nerror: failed after a long log\nline line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line line"
+  },
+  {
+   "input": "missing-module",
+   "command": "python3 -c \"import faildex_r21_no_such_module\"",
+   "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import faildex_r21_no_such_module\nModuleNotFoundError: No module named 'faildex_r21_no_such_module'"
+  },
+  {
+   "input": "missing-path",
+   "command": "cat ./no-such-file-r21.txt",
+   "error": "Exit code 1\ncat: ./no-such-file-r21.txt: No such file or directory"
+  },
+  {
+   "input": "mixed-streams",
+   "command": "sh -c 'echo starting; echo \"error: config value missing\" >&2; echo more output; exit 3'",
+   "error": "Exit code 3\nstarting\nerror: config value missing\nmore output"
+  },
+  {
+   "input": "permission-denied",
+   "command": "cat locked.txt",
+   "error": "Exit code 1\ncat: locked.txt: Permission denied"
+  },
+  {
+   "input": "timeout",
+   "command": "sleep 20",
+   "error": "Exit code 143\nCommand timed out after 3s"
+  },
+  {
+   "input": "traceback",
+   "command": "python3 -c \"import json; json.loads('{not json')\"",
+   "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; json.loads('{not json')\n                 ~~~~~~~~~~^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py\", line 361, in raw_decode\n    obj, end = self.scan_once(s, idx)\n               ~~~~~~~~~~~~~~^^^^^^^^\njson.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+  },
+  {
+   "input": "zsh-nomatch",
+   "command": "ls *.nomatch-r21",
+   "error": "Exit code 1\n(eval):1: no matches found: *.nomatch-r21"
+  },
+  {
+   "input": "zsh-syntax",
+   "command": "echo $(( 1 + ))",
+   "error": "Exit code 1\n(eval):1: bad math expression: operand expected at end of string"
+  },
+  {
+   "input": "edge: error past 2,000 chars",
+   "command": "make build",
+   "error": "Exit code 2\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nerror: only after the scan window"
+  },
+  {
+   "input": "edge: <error> wrapper",
+   "command": "npm test",
+   "error": "<error>Exit code 1\nnpm ERR! missing script: test</error>"
+  },
+  {
+   "input": "edge: CRLF",
+   "command": "dotnet build",
+   "error": "Exit code 1\r\nerror CS1002: ; expected\r\n"
+  },
+  {
+   "input": "edge: no exit line",
+   "command": "pytest -q",
+   "error": "ERROR: file or directory not found: tests/x.py"
+  },
+  {
+   "input": "edge: exit line only",
+   "command": "make",
+   "error": "Exit code 2"
+  },
+  {
+   "input": "edge: grep exit 1 (no result)",
+   "command": "grep -r foo .",
+   "error": "Exit code 1"
+  },
+  {
+   "input": "edge: script",
+   "command": "bash ./run.sh",
+   "error": "Exit code 3"
+  },
+  {
+   "input": "edge: compound",
+   "command": "cd a && make && ./bin/x",
+   "error": "Exit code 1\nmake: *** No rule to make target 'all'.  Stop."
+  },
+  {
+   "input": "edge: traceback",
+   "command": "python3 x.py",
+   "error": "Exit code 1\nTraceback (most recent call last):\n  File \"x.py\", line 1\nValueError: bad value 42"
+  },
+  {
+   "input": "edge: unicode",
+   "command": "node a.js",
+   "error": "Exit code 1\nError: 파일을 찾을 수 없음 — ENOENT"
+  },
+  {
+   "input": "edge: empty",
+   "command": "true",
+   "error": ""
+  }
+ ]
+}

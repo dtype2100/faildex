@@ -80,19 +80,19 @@ faildex link
 
 바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄과 `~/.claude/skills/faildex/`의 스킬, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`의 훅 두 개(세션 시작 때 규칙, 셸 명령 전에 경고)를 넣습니다. `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
 
-**6. Claude Code 실행 전 경고 켜기**
+**6. Claude Code 실패 직후 알림 켜기**
 
-`~/.claude/settings.json`에 아래를 추가합니다. 파일에 이미 `hooks`가 있으면 그 `PreToolUse` 목록에 항목을 더합니다.
+`~/.claude/settings.json`에 아래를 추가합니다. 파일에 이미 `hooks`가 있으면 그 `PostToolUseFailure` 목록에 항목을 더합니다.
 
 ```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
   {"type": "command", "command": "faildex hook", "timeout": 5}
 ]}]}}
 ```
 
-바뀌는 것: `faildex link`는 이 단계를 하지 않습니다. 그 뒤에 시작한 Claude Code 세션부터 경고할 만큼 잦은 반복 실패가 있는 셸 명령 전에 한 줄 안내가 뜹니다(7단계가 보여 주는 것).
+바뀌는 것: `faildex link`는 이 단계를 하지 않습니다. 그 뒤에 시작한 Claude Code 세션부터 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 Claude에게 그 사실과 기록된 복구 방법을 알리고 화면에 한 줄 안내를 띄웁니다. 다른 세션 2개 이상(`--min-sessions`)에서 겪었을 때 말하고, 지금 세션과 그 서브에이전트는 세지 않습니다.
 
-범위: 실행 전 경고는 셸 명령에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령에도 뜨고, MCP 도구나 파일 도구를 부르기 전에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다.
+범위: 0이 아닌 종료 코드로 끝난 셸 호출에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령도 포함합니다. 파이프나 `; echo`로 가린 실패는 종료 코드가 0이라 훅에 닿지 않고, MCP 도구나 파일 도구에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다. 같은 명령을 `PreToolUse` 훅으로 등록하면 경고할 만큼 잦은 반복 실패가 있는 명령 전에 경고합니다(7단계가 보여 주는 것). `PostToolUseFailure` 대신, 또는 둘 다에 등록할 수 있습니다. Codex와 Cursor는 `faildex link`가 설치하는 셸 명령 전 경고를 그대로 씁니다.
 
 **7. 잘 됐는지 확인**
 
@@ -100,7 +100,7 @@ faildex link
 faildex check "git status"
 ```
 
-바뀌는 것: 아무것도 쓰지 않습니다. 그 명령의 반복된 실패 중 경고할 만큼 잦은 것을 훅과 같은 조회로 최대 3개, 복구 기록과 함께 보여 주고, 없으면 아무것도 출력하지 않습니다.
+바뀌는 것: 아무것도 쓰지 않습니다. 그 명령의 반복된 실패 중 경고할 만큼 잦은 것을 명령 전 경고와 같은 조회로 최대 3개, 복구 기록과 함께 보여 주고, 없으면 아무것도 출력하지 않습니다.
 
 ### 평소에 (새 세션이 쌓일 때마다 되풀이)
 
@@ -172,7 +172,7 @@ faildex는 이것을 다음 도구로 바꿉니다.
 | 실행 | 얻는 것 |
 |---|---|
 | `faildex rules` | 세션을 넘어 되풀이된 실패에 대한 규칙 제안. 각 제안에는 기록된 복구 방법과 로그 위치가 붙습니다. 승인한 것만 규칙 파일에 기록됩니다. |
-| `faildex hook` | Claude Code `PreToolUse` 훅. 되풀이된 실패가 알려진 명령을 실행하기 전에 세션에 한 줄 알림을 띄우고, Claude에게 앞선 세션이 배운 내용을 전달합니다. 그 실패가 해당 명령 실행의 3% 이상이거나(명령을 합쳐 묶은 `zsh` 셸 실패, 즉 따옴표 없는 글롭의 `no matches found`와 `==`로 시작하는 따옴표 없는 단어의 `=<word> not found`는 `min_sessions` 세션 이상에서 반복되고 명령줄에 그 구문이 있을 때) 말하고, 그 밖에는 아무것도 출력하지 않습니다. |
+| `faildex hook` | Claude Code `PostToolUseFailure` 훅. 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 세션에 한 줄 알림을 띄우고 Claude에게 그 세션들이 배운 내용을 전달합니다. 그 밖에는 아무것도 출력하지 않습니다. `PreToolUse` 훅으로 등록하면(Codex와 Cursor처럼) 명령을 실행하기 전에 경고하고, 그 실패가 해당 명령 실행의 3% 이상일 때만(명령을 합쳐 묶은 `zsh` 셸 실패, 즉 따옴표 없는 글롭의 `no matches found`와 `==`로 시작하는 따옴표 없는 단어의 `=<word> not found`는 `min_sessions` 세션 이상에서 반복되고 명령줄에 그 구문이 있을 때) 말합니다. |
 | `faildex mcp` | MCP 도구 `preflight`, `evidence`, `recurring`. 어떤 MCP 에이전트든 실행 전에 물어볼 수 있습니다. |
 | `faildex eval` | 위 수치를 저장소의 스토어로 다시 계산합니다. 공개 데이터셋이 없는 내 스토어(`--store ~/.faildex/store`)에서는 같은 분할을 에이전트별로 합니다. |
 | `faildex ingest` | 내 Claude Code, Codex CLI, Cursor, Antigravity 기록을 내 컴퓨터의 개인 스토어(`~/.faildex/store`)에 적재합니다. 위의 모든 명령이 이 스토어를 씁니다. |
@@ -182,6 +182,8 @@ faildex는 이것을 다음 도구로 바꿉니다.
 
 에이전트가 저장소가 아닌 폴더에서 `git status`를 실행합니다. 결과가 나오기 전에
 faildex 훅이 앞선 세션들이 배운 것을 보여 주고, Claude가 그에 따라 행동합니다.
+(`PreToolUse`로 등록한 훅의 화면입니다. 권장 설정인 `PostToolUseFailure`로 등록하면
+같은 종류의 줄이 명령이 실패한 직후에 뜹니다.)
 
 ![Claude Code 세션: Bash(git status) 아래에 "PreToolUse:Bash says: faildex: `git status` failed with `fatal: not a git repository` in 24 earlier sessions; no recovery on record" 줄이 뜨고, Claude가 "A faildex hook in this project flagged that this same failure has come up in 24 earlier sessions, so I didn't retry."라고 답하는 화면](docs/images/claude-code-hook.jpg)
 
@@ -384,15 +386,20 @@ Claude Code에서 쓰기. 프로젝트의 `.claude/settings.json`(모든 세션�
 그 전에는 공개 스토어를 읽습니다.
 
 ```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
   {"type": "command", "command": "faildex hook", "timeout": 5}
 ]}]}}
 ```
+
+같은 명령을 `PreToolUse`에 등록하면 명령 전에 경고합니다. Codex와 Cursor는 그대로입니다
+(`faildex link`가 설치).
 
 `faildex ingest`를 손으로 돌리지 않고 스토어를 최신으로 두려면 그 명령에
 `--refresh-every 200`을 붙이세요(`"command": "faildex hook --refresh-every 200"`).
 훅 호출 200번마다, 그리고 적어도 하루에 한 번 훅이 `faildex ingest`를 백그라운드로 띄우고
 바로 끝납니다. 지난 갱신을 시작한 뒤 30분 안에는 다시 띄우지 않습니다.
+`PostToolUseFailure`에서는 훅이 셸 호출이 실패했을 때만 불리므로 실패한 호출만 세고,
+갱신은 대개 하루 한 번 기준으로 일어납니다.
 `--store`나 `FAILDEX_STORE`로 지정한 스토어를, 둘 다 없으면 `~/.faildex/store`를 갱신하고, `./store`는 갱신하지 않습니다.
 자세한 내용은 [스토어를 최신으로 두기](docs/agent-hooks.md#keeping-the-store-current)를 보세요.
 

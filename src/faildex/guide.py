@@ -14,10 +14,11 @@ from faildex.i18n import CATALOG, DEFAULT, t, wrap
 INSTALL = "curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/install.sh | sh"
 APPROVE = "faildex rules --approve 1 3 --to ~/faildex-rules.md"
 
-# Claude Code's PreToolUse hook. `faildex link` does not add it; the person pastes it into
-# ~/.claude/settings.json. The README shows this same text.
+# Claude Code's PostToolUseFailure hook (the same command works as a PreToolUse hook).
+# `faildex link` does not add it; the person pastes it into ~/.claude/settings.json. The
+# README shows this same text.
 CLAUDE_HOOK = (
-    '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [\n'
+    '{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [\n'
     '  {"type": "command", "command": "faildex hook", "timeout": 5}\n'
     "]}]}}"
 )

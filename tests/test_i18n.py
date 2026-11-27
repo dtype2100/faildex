@@ -277,7 +277,7 @@ def test_every_example_and_step_command_parses():
 
 
 def test_the_claude_code_hook_is_valid_json_that_runs_faildex_hook():
-    hook = json.loads(CLAUDE_HOOK)["hooks"]["PreToolUse"][0]
+    hook = json.loads(CLAUDE_HOOK)["hooks"]["PostToolUseFailure"][0]
     assert hook["matcher"] == "Bash"
     assert hook["hooks"][0]["command"] == "faildex hook"
 
@@ -360,7 +360,7 @@ def test_every_claude_code_hook_in_the_readme_is_the_one_help_shows(readme):
     hooks = [
         b
         for b in re.findall(r"^```json\n(.*?)\n```$", text, re.MULTILINE | re.DOTALL)
-        if "PreToolUse" in b
+        if "PostToolUseFailure" in b or "PreToolUse" in b
     ]
     assert len(hooks) == 2 and set(hooks) == {CLAUDE_HOOK}
 

@@ -182,6 +182,8 @@ class Failure:
     recovered: int = 0
     evidence: list[str] = field(default_factory=list)
     runs: int = 0  # all runs of the command, set when the failure is looked up for one command
+    # Failed calls per session, so a hook can leave out the session it is in.
+    session_calls: Counter = field(default_factory=Counter)
 
     @property
     def command(self) -> str | None:
@@ -201,15 +203,18 @@ class Failure:
         """Sessions that hit it, weighted up when the recoveries agree on a fix."""
         return len(self.sessions) * (1 + self.consistency)
 
-    def notice(self) -> str:
-        """One line for the person at the keyboard; rule() is the full text for the agent."""
+    def notice(self, step: bool = True) -> str:
+        """One line for the person at the keyboard; rule() is the full text for the agent.
+        Without `step`, no next step is named (see `rule`)."""
         subject = f"`{self.command or self.tools.most_common(1)[0][0]}`"
         what = (
             f"failed with `{self.sig}`"
             if self.kind == "text"
             else f"exited with code {self.sig.rsplit(' ', 1)[-1]} and no useful output"
         )
-        if self.sig in SHELL_FIXES:
+        if not step:
+            after = "the line runs several programs, so no next step is named"
+        elif self.sig in SHELL_FIXES:
             after = SHELL_FIXES[self.sig]
         elif not self.fix:
             after = "no recovery on record"
@@ -221,9 +226,12 @@ class Failure:
             after = f"sessions got past it by running `{self.fix}` first"
         return f"faildex: {subject} {what} in {len(self.sessions)} earlier sessions; {after}."
 
-    def rule(self, lang: str = "en") -> str:
+    def rule(self, lang: str = "en", step: bool = True) -> str:
         """The rule sentence. English unless asked: agents read it, and rules files are
-        deduplicated on its English wording (`faildex check` asks for the person's language)."""
+        deduplicated on its English wording (`faildex check` asks for the person's language).
+
+        Without `step`, the sentence names no next step, only the precedent: for a line
+        that runs several programs, where which one failed is not known."""
         from faildex.i18n import t
 
         subject = f"`{self.command or self.tools.most_common(1)[0][0]}`"
@@ -240,6 +248,8 @@ class Failure:
         seen = t("rule.seen", lang, sessions=len(self.sessions), calls=self.calls)
         if self.runs:
             seen += t("rule.seen_runs", lang, share=f"{self.calls / self.runs:.0%}", runs=self.runs)
+        if not step:
+            return t("rule.compound", lang, head=head, seen=seen)
         if self.sig in SHELL_FIXES:
             return t("rule.shell", lang, head=head, seen=seen, fix=shell_fix(self.sig, lang))
         if not self.fix:
@@ -286,6 +296,7 @@ def failures(
         item.calls += 1
         fresh = row["session"] not in item.sessions
         item.sessions.add(row["session"])
+        item.session_calls[row["session"]] += 1
         item.agents.add(row["agent"])
         item.tools[row["tool"]] += 1
         if row["command"]:

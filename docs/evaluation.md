@@ -192,6 +192,91 @@ are test functions under `tests/`.
 | The replay numbers in the documents are what `make eval` prints; the other cuts and the overlap with recoveries are recomputed from the committed store | `test_docs.py::test_the_hook_replay_in_the_documents_matches_the_committed_store`, `test_docs.py::test_the_replay_claims_about_cuts_and_recoveries_hold` |
 | A second engine build reaches the same numbers | `test_docs.py::test_relate_webassembly_reaches_the_same_numbers` |
 | The bench table and its claims are the committed runs | `test_docs.py::test_the_bench_table_in_the_documents_is_the_committed_runs` |
+| The notice after a failure keys it as the store does | `test_post_failure.py::test_the_hook_keys_a_failure_as_the_store_does` |
+| The notice leaves out the hook's own session and its subagents | `test_post_failure.py::test_the_own_session_and_its_subagents_are_left_out_of_the_counts` |
+| The notice names no next step on a compound line | `test_post_failure.py::test_a_compound_line_gets_the_precedent_and_no_next_step` |
+
+## Notices right after a failure (Claude Code `PostToolUseFailure`)
+
+The recommended Claude Code setting runs `faildex hook` right after a shell call
+fails (`PostToolUseFailure`), instead of before every call. When other sessions
+had the same failure of the same command, the hook tells the agent so, with the
+recovery on record. This section says how it decides, what was measured before it
+was built, and what was not measured.
+
+- **Same key as the store.** The hook reads the `error` text the way the store
+  reads a tool result: the exit code, the error signature over the whole text (its
+  first 2,000 characters scanned) and the same failure key
+  (`adapters.claude_code.failed_call`, shared with the adapter). It looks the key
+  up under the line's stored command template, its first program, and nowhere
+  else: no lookup by failure key alone.
+- **Other sessions only.** The session the hook runs in and its subagents
+  (`<session>/agent-*`) are left out of both the session count and the call
+  count, so a failure a refresh has just stored is no precedent for itself. The
+  hook speaks when at least `--min-sessions` (2) other sessions remain.
+- **A precedent is enough.** The 3% share of the pre-run warning does not apply,
+  since the call has already failed, and no recovery is required. A stricter rule
+  that also wanted a usable next step (a strict recovery, a shell fix, or a retry
+  for a transient failure) on a line that is not compound would almost never
+  speak: 0 of 52 keyed Claude Code failures in the table below. Most failures are
+  on compound lines, and a compound line is used neither as a next step nor as
+  evidence of a recovery.
+- **The words.** The rule sentence of `faildex rules`, in English, with the
+  counts above: no "retry it" for a lasting error, no next step at all on a line
+  that runs several programs, no paths and no evidence pointers. The quoted error
+  is marked as what earlier sessions recorded, data and not instructions, with
+  control characters removed and each line capped at 1,000 characters.
+- **Silence.** Not Bash; an empty or non-string `error`; an interrupted call
+  (`is_interrupt`, exit 130 or 143); a payload over 1,000,000 characters; no key;
+  no match; too few other sessions. A session is told again each time it repeats
+  the failure: the hook keeps no state on its normal path, and a repeat is when
+  the notice matters again.
+
+Replayed on the public `store/` in time order, with only what was known before
+each failure (a precedent is any agent's earlier failure of the same command and
+key in another session):
+
+| Claude Code shell calls in `store/` | 1,415 |
+|---|---|
+| marked failed | 65 |
+| with a non-zero exit (the hook runs) | 57 |
+| not interrupted (exit 130 or 143) | 55 |
+| with a failure key | 52 |
+| of those, on a compound line | 44 |
+| with a precedent in at least 1 / 2 other sessions | 1 / 0 |
+| of those, with a usable next step on a line that is not compound | 0 |
+
+At the default of 2 sessions the hook would not have spoken on this data. The
+public Claude Code sample is small and its sessions rarely share a failure; how
+often the hook speaks depends on how many sessions a store holds.
+
+- **Every agent.** Counted over Codex failures too, under the stricter rule and
+  once per session and key, 50 (m = 1) or 47 (m = 2) failures would have been
+  told, all of them Codex and 47 and 46 of them `command timed out after <n>
+  milliseconds`, from the one Windows Codex project of the public data. Codex has
+  no `PostToolUseFailure` hook, so this does not measure the Claude Code case.
+- **The hook sees the store's key.** In 13 real `claude -p` runs
+  (`claude-haiku-5-5`, Claude Code 2.1.332), each failing one way, the hook's
+  `error` text was the transcript's `tool_result` text and gave the same key: 13
+  of 13. The same texts plus 11 edge cases (an error past 2,000 characters, CRLF,
+  no exit line, empty text and others) give the same key on the store's path and
+  the hook's path in 24 of 24; they are a test
+  (`tests/fixtures/post_failure/key_inputs.json`). grep with no match is not
+  marked failed, and `echo ====` exits 0, because Claude Code's shell no longer
+  expands a leading `=`.
+- **The effect was not measured.** No bench and no replay asks whether a notice
+  reduces repeats. In a trial of 8 made-up tasks run 4 times each without any
+  notice, on the same model, the first failure never came back later in a run, so
+  that measure had nothing to reduce there.
+- **Hidden failures never reach it.** A failure behind a pipe, `; echo` or
+  `2>/dev/null` exits 0 and fires no `PostToolUseFailure`. In 5 of those 8 tasks
+  the hook ran in at most 2 of 4 runs: the model checked first, quoted, or hid
+  the exit code.
+- **Out of scope.** Tools other than Bash, Codex and Cursor keep the warning
+  before a shell command. With `--refresh-every`, the hook counts failed calls
+  only.
+- **One-off counts.** The table and the trial were counted by scripts that are
+  not in the repository; the key contract and the hook's rules are tests.
 
 ## Limits
 

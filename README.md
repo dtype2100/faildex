@@ -80,19 +80,19 @@ faildex link
 
 What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md` and the skill in `~/.claude/skills/faildex/`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and two hooks in their `hooks.json` (rules at session start, warnings before shell commands). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
 
-**6. Turn on warnings in Claude Code**
+**6. Turn on failure notices in Claude Code**
 
-Add this to `~/.claude/settings.json`; if the file already has `hooks`, add the entry to its `PreToolUse` list:
+Add this to `~/.claude/settings.json`; if the file already has `hooks`, add the entry to its `PostToolUseFailure` list:
 
 ```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
   {"type": "command", "command": "faildex hook", "timeout": 5}
 ]}]}}
 ```
 
-What changes: `faildex link` does not do this step. Claude Code sessions started afterwards show a one-line notice before a shell command with a recurring failure frequent enough to warn about (what step 7 prints).
+What changes: `faildex link` does not do this step. In Claude Code sessions started afterwards, right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other sessions had it (`--min-sessions`); the session itself and its subagents do not count.
 
-Scope: warnings come only before shell commands, including those run by skills, plugins and subagents; none come before MCP tools or file tools. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts.
+Scope: only failed shell calls that end with a non-zero exit code, including those run by skills, plugins and subagents. A failure hidden behind a pipe or `; echo` exits 0 and never reaches the hook; MCP tools and file tools get nothing. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts. The same command also works as a `PreToolUse` hook, for a warning before a command with a recurring failure frequent enough to warn about (what step 7 prints); register it under `PreToolUse` instead, or under both. Codex and Cursor keep their warnings before shell commands, which `faildex link` sets up.
 
 **7. Check that it works**
 
@@ -100,7 +100,7 @@ Scope: warnings come only before shell commands, including those run by skills, 
 faildex check "git status"
 ```
 
-What changes: nothing is written. It prints up to three recurring failures of that command that are frequent enough to warn about, from the same lookup the hook uses, each with the recovery on record; nothing when there are none.
+What changes: nothing is written. It prints up to three recurring failures of that command that are frequent enough to warn about, from the same lookup the warning before a command uses, each with the recovery on record; nothing when there are none.
 
 ### Day to day (repeat as new sessions pile up)
 
@@ -173,7 +173,7 @@ faildex turns it into three things:
 | You run | You get |
 |---|---|
 | `faildex rules` | Rule proposals for failures that recurred across sessions, each with the recovery on record and pointers to the log lines. Only the ones you approve are written to a rules file. |
-| `faildex hook` | A Claude Code `PreToolUse` hook. Before a command with a known recurring failure it shows a one-line notice in the session and gives Claude what earlier sessions learned. It speaks only when that failure is at least 3% of the command's runs (or, for the pooled `zsh` shell failures, `no matches found` for an unquoted glob and `=<word> not found` for an unquoted word starting with `==`, when the command line has that construct and the failure recurred across `min_sessions` sessions), and prints nothing otherwise. |
+| `faildex hook` | A Claude Code `PostToolUseFailure` hook. Right after a shell command fails, when other sessions had the same failure of the same command, it shows a one-line notice in the session and gives Claude what they learned; otherwise it prints nothing. Registered as a `PreToolUse` hook (as Codex and Cursor use it), it warns before a command instead, only when the failure is at least 3% of the command's runs (or, for the pooled `zsh` shell failures, `no matches found` for an unquoted glob and `=<word> not found` for an unquoted word starting with `==`, when the command line has that construct and the failure recurred across `min_sessions` sessions). |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. On your own store (`--store ~/.faildex/store`), which has no public datasets, the same split runs per agent. |
 | `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
@@ -183,7 +183,9 @@ faildex turns it into three things:
 
 The agent runs `git status` in a folder that is not a repository. Before the
 result comes back, the faildex hook prints what earlier sessions learned, and
-Claude acts on it:
+Claude acts on it. (This is the hook registered as `PreToolUse`; registered as
+`PostToolUseFailure`, as recommended, the same kind of line comes right after the
+command fails.)
 
 ![A Claude Code session: under Bash(git status) the line "PreToolUse:Bash says: faildex: `git status` failed with `fatal: not a git repository` in 24 earlier sessions; no recovery on record", then Claude's answer "A faildex hook in this project flagged that this same failure has come up in 24 earlier sessions, so I didn't retry."](docs/images/claude-code-hook.jpg)
 
@@ -394,15 +396,20 @@ Use it in Claude Code. Add this to `.claude/settings.json` (your project's, or
 have run `faildex ingest`, and the public one until then:
 
 ```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
   {"type": "command", "command": "faildex hook", "timeout": 5}
 ]}]}}
 ```
+
+The same command under `PreToolUse` warns before a command instead; Codex and Cursor
+are unchanged (`faildex link` sets them up).
 
 To keep your store current without running `faildex ingest` by hand, add
 `--refresh-every 200` to that command (`"command": "faildex hook --refresh-every 200"`).
 Every 200 hook calls, and at least once a day, the hook starts `faildex ingest` in the
 background and returns at once; no refresh starts within 30 minutes of the previous one.
+Under `PostToolUseFailure` the hook runs only after a failed shell call, so it counts
+failed calls only, and the daily refresh does most of the work.
 It refreshes the store named with `--store` or `FAILDEX_STORE`, else `~/.faildex/store`, never a `./store`.
 See [keeping the store current](docs/agent-hooks.md#keeping-the-store-current).
 

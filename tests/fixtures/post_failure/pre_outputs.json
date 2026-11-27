@@ -1,0 +1,164 @@
+{
+ "note": "Output of faildex e2c4ae6 (before the PostToolUseFailure path) on the public demo store; the hook must still give these bytes.",
+ "cases": [
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    }
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls && git status"
+    }
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls README* readme*"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "npm test"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    },
+    "hook_event_name": "PreToolUse",
+    "session_id": "s-golden"
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "claude",
+   "payload": {
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "x"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    }
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls && git status"
+    }
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls README* readme*"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "npm test"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    },
+    "hook_event_name": "PreToolUse",
+    "session_id": "s-golden"
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "x"
+    }
+   },
+   "out": ""
+  },
+  {
+   "agent": "codex",
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    },
+    "hook_event_name": "PostToolUseFailure",
+    "error": "Exit code 128\nfatal: not a git repository (or any of the parent directories): .git",
+    "session_id": "s-golden",
+    "is_interrupt": false
+   },
+   "out": "{\"systemMessage\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}}"
+  },
+  {
+   "agent": "cursor",
+   "payload": {
+    "command": "git status"
+   },
+   "out": "{\"permission\": \"allow\", \"user_message\": \"faildex: `git status` failed with `fatal: not a git repository (or any of the parent directories): .git` in 24 earlier sessions; no recovery on record.\", \"agent_message\": \"faildex: `git status` has failed the same way in earlier sessions.\\n- When `git status` fails with `fatal: not a git repository (or any of the parent directories): .git` (seen in 24 sessions, 25 calls, 15% of this command's 169 runs): no recovery on record yet; stop and check before retrying.\"}"
+  },
+  {
+   "agent": "cursor",
+   "payload": {
+    "command": "ls README* readme*"
+   },
+   "out": "{\"permission\": \"allow\"}"
+  },
+  {
+   "agent": "cursor",
+   "payload": {
+    "command": "npm test"
+   },
+   "out": "{\"permission\": \"allow\"}"
+  }
+ ]
+}

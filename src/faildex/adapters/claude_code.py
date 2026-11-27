@@ -97,6 +97,34 @@ def _command(tool: str, tool_input: object) -> tuple[str | None, bool]:
     return command_template(command), is_compound(command)
 
 
+def result_failure(text: str, shell: bool) -> tuple[str | None, int | None]:
+    """(error signature, exit code) of a failed tool result's whole text, as the store
+    keeps them. The exit code is read only from a shell call's result, and only read:
+    the text keeps its first line for the signature."""
+    found = _EXIT_CODE.match(text) if shell else None
+    return error_signature(text), int(found.group(1)) if found else None
+
+
+def failed_call(command: str, text: str, session_id: str = "") -> CallRecord:
+    """The record the store would hold for a failed Bash call with this command line and
+    this result text (a PostToolUseFailure hook's `error`). Its `command` and `failure`
+    are the store's keys: the same steps as `read_session`, so the hook and the store
+    cannot disagree on them."""
+    template, compound = _command(SHELL_TOOL, {"command": command})
+    sig, code = result_failure(text, True)
+    return CallRecord(
+        agent=AGENT,
+        session_id=session_id,
+        seq=0,
+        tool=SHELL_TOOL,
+        ok=False,
+        command=template,
+        error_sig=sig,
+        exit_code=code,
+        compound=compound,
+    )
+
+
 def count_tool_uses(path: str | Path) -> int:
     """Number of tool_use blocks in the file, with or without a result."""
     return sum(
@@ -145,10 +173,9 @@ def read_session(path: str | Path) -> list[CallRecord]:
             failed = bool(block.get("is_error"))
             sig = code = None
             if failed:
-                text = _text(block.get("content"))
-                sig = error_signature(text)
-                found = _EXIT_CODE.match(text) if tools.get(tool_use_id) == SHELL_TOOL else None
-                code = int(found.group(1)) if found else None
+                sig, code = result_failure(
+                    _text(block.get("content")), tools.get(tool_use_id) == SHELL_TOOL
+                )
             arrived = record.get("timestamp")
             results[tool_use_id] = (
                 failed,
