@@ -1,7 +1,7 @@
 """What the graph knows about recurring failures.
 
-One set of queries serves every surface: `faildex rules`, the pre-run hook and
-the MCP tools all call the functions here, so they cannot disagree.
+One set of queries serves every surface: `faildex rules`, `faildex check`, the hook
+and the MCP tools all call the functions here, so they cannot disagree.
 
 A recovery is read off the graph, not guessed: after a failed call, follow
 NEXT for a few hops to the first call that runs the same command and succeeds.
@@ -347,7 +347,8 @@ def rank(found: Iterable[Failure], min_sessions: int = 2) -> list[Failure]:
 def warns(
     calls: int, sessions: int, runs: int, min_sessions: int = 2, min_rate: float = MIN_RATE
 ) -> bool:
-    """The pre-run hook's rule for one failure of one command: seen in `min_sessions`
+    """The rule `faildex check` and the MCP preflight use for one failure of one command,
+    and the earlier hook used before a command (it is gone): seen in `min_sessions`
     sessions and in at least `min_rate` of that command's runs. `faildex eval` replays it."""
     return sessions >= min_sessions and runs > 0 and calls / runs >= min_rate
 

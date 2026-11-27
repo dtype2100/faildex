@@ -1,5 +1,9 @@
 # Local agent hook verification — 2026-11-20
 
+A dated record. The faildex hooks it checks before a shell command (Cursor
+`beforeShellExecution`, Codex `pre-shell`) have since been removed; see
+[agent hooks](agent-hooks.md) for what `faildex link` installs now.
+
 ## Cursor CLI
 
 Cursor CLI `2026.11.19-f005e9d`, using `grok-4.7-xhigh`, was checked outside the
@@ -108,6 +112,11 @@ only check 1 produced `1-events.jsonl`. Private configuration backups are
 not committed. No additional hook experiments were run for this documentation.
 
 ## Codex interactive session
+
+A dated record (2026-11-20) of a hook that faildex no longer has: the `pre-shell`
+hook below warned before a shell command and has since been removed. `faildex link`
+now installs only the `SessionStart` hook for Codex and takes the `pre-shell` one out,
+and `faildex hook` stays silent on it.
 
 A fresh worker ran Codex `0.170.0` outside the repository. `/hooks` showed
 both faildex commands enabled and **Trusted** in the user configuration:

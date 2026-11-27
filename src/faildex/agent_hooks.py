@@ -116,12 +116,14 @@ WOULD = {"installed": "would install", "moved": "would move", "updated": "would 
 def _faildex_hook_command(command: object) -> bool:
     """A `faildex hook ...` command line, however faildex is named: `faildex hook`, an
     absolute path to it (`/x/.venv/bin/faildex hook --store ...`), `faildex.exe`. A line
-    that chains other commands (`&&`, `||`, `;`, `|`, a line break) is not faildex's
-    alone, so link neither moves nor removes it."""
+    that runs anything else (`&`, `&&`, `||`, `;`, `|`, a line break, `$(...)` or
+    backticks) is not faildex's alone, so link neither moves nor removes it."""
     import shlex
     from pathlib import PureWindowsPath
 
-    if not isinstance(command, str) or any(op in command for op in ("&&", "||", ";", "|", "\n")):
+    if not isinstance(command, str) or any(
+        op in command for op in ("&", ";", "|", "\n", "$(", "`")
+    ):
         return False
     try:
         words = shlex.split(command, posix=False)
@@ -233,16 +235,16 @@ def configure_claude(
         if remove and created and data in ({}, {"hooks": {}}):
             path.unlink()  # it held only faildex's hook
             return "removed", ""
+        # Encoded first: text that cannot be UTF-8 stops here, before any backup or write.
+        body = (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
         if path.exists():
             shutil.copy2(path, path.with_name(f"{path.name}.faildex-backup-{time.time_ns()}"))
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = None
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=path.parent, delete=False
-            ) as out:
+            with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent, delete=False) as out:
                 temp = Path(out.name)
-                out.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+                out.write(body)
             temp.replace(path)
         finally:
             if temp is not None:
@@ -253,6 +255,8 @@ def configure_claude(
             status,
             "new Claude Code sessions use it; in a running session, review it with /hooks",
         )
+    except UnicodeError:  # a lone surrogate escape (`\ud800`) cannot be written as UTF-8
+        return "skipped", "settings.json holds text that cannot be written as UTF-8; left alone"
     except _Unsafe as why:
         return "skipped", str(why)
     except OSError:

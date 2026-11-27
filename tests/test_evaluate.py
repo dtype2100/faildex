@@ -302,8 +302,8 @@ def test_the_hook_replay_runs_per_agent_on_a_private_store():
     assert set(by_agent) == {"claude_code", "all"}
     assert (by_agent["claude_code"].warned, by_agent["claude_code"].came_true) == (2, 1)
     text = report(db)
-    assert "Would the hook have spoken?" in text
-    assert "The hook would have spoken before 2 of 3 later shell calls (66.7%)" in " ".join(
+    assert "Would the earlier hook have spoken?" in text
+    assert "The earlier hook would have spoken before 2 of 3 later shell calls (66.7%)" in " ".join(
         text.split()
     )
 
@@ -314,7 +314,7 @@ def test_the_report_shows_the_replay_in_both_languages():
     text = report(_replay_graph())
     for line in (
         "later failures with a failure key",
-        "in at least 3% of its runs (the hook speaks)",
+        "in at least 3% of its runs (the earlier hook spoke)",
         "1 succeeded, 1 failed with the failure it named, 0 ended another way.",
         "git push      rejected",
         "2 of 9 runs, 2 sessions",
@@ -427,7 +427,7 @@ def test_the_replay_counts_local_codex_shell_calls():
 def test_a_private_store_is_not_said_to_hold_no_warnings():
     text = " ".join(report(_replay_graph(sources=False)).split())
     assert "Nobody was warned in these logs" not in text
-    assert "a warning the hook really gave is not in the store" in text
+    assert "a warning it really gave is not in the store" in text
     assert "Nobody was warned in these logs" in " ".join(report(_replay_graph()).split())
 
 

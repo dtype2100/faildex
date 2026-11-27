@@ -22,11 +22,11 @@ the same table on any machine.
 A private store made by `faildex ingest` has no public datasets, so its sessions
 are grouped by agent instead and split the same way, one agent at a time.
 
-The same split also replays the pre-run hook's own rule (`insight.warns`) on the
-later period, with only the earlier period known: would the hook have spoken
-before each later shell call, and did the failure it named follow? Nobody was
-warned in these logs, so this shows when the hook would have spoken, not what an
-agent would have done. It looks only at the stored first program of each line,
+The same split also replays the rule of faildex's earlier hook, which warned before
+a command and is gone (`insight.warns`), on the later period, with only the earlier
+period known: would that hook have spoken before each later shell call, and did the
+failure it named follow? Nobody was warned in these logs, so this shows when it
+would have spoken, not what an agent would have done. It looks only at the stored first program of each line,
 and leaves out the two zsh rules, which need the raw command line.
 """
 

@@ -2,8 +2,9 @@
 
 `faildex report --split 2026-11-17 --key "not found"` shows, before and after
 a date, how many calls ran, how many failed, and how many failed with a key
-containing the given text. With `--hook-log` it also counts the warnings the
-hook gave. It is an observation of one person's logs, not a controlled test:
+containing the given text. With `--hook-log` it also counts the notices the
+hook gave (a log from the earlier hook, which warned before a command, counts the
+same way). It is an observation of one person's logs, not a controlled test:
 the two periods differ in more than the rule that was added.
 """
 
@@ -46,7 +47,7 @@ class Period:
 
 
 def hook_warnings(path: Path | None) -> Counter:
-    """Warnings per day from the hook's log; lines that do not parse are skipped."""
+    """Notices per day from the hook's log; lines that do not parse are skipped."""
     days: Counter = Counter()
     if path is None or not path.is_file():
         return days

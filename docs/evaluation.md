@@ -60,7 +60,7 @@ tables.
 | whose key the earlier period held | 66 |
 | held for that same command | 63 |
 | in 2 or more sessions | 55 |
-| and in at least 3% of that command's runs (the hook speaks) | 10 |
+| and in at least 3% of that command's runs (the earlier hook spoke) | 10 |
 
 The hook would have spoken before 206 of the 5,070 later shell calls (4.1%).
 188 of those calls succeeded, 10 failed with the failure it named, and 8 ended
@@ -94,8 +94,9 @@ recomputed from the committed store by `tests/test_docs.py`.
 - Only the stored first program of each line is looked up; the hook itself also
   reads the later parts of a line.
 
-A next step to measure, not built: warning only when the same command has just
-failed in the same session.
+What came next was measured and shipped instead of the warning before a command:
+a notice right after a command fails, when other sessions had the same failure
+(see [notices right after a failure](#notices-right-after-a-failure-claude-code-posttoolusefailure)).
 
 ## Controlled bench
 
@@ -215,9 +216,12 @@ was built, and what was not measured.
   up under the line's stored command template, its first program, and nowhere
   else: no lookup by failure key alone.
 - **Other sessions only.** The session the hook runs in and its subagents
-  (`<session>/agent-*`) are left out of both the session count and the call
-  count, so a failure a refresh has just stored is no precedent for itself. The
-  hook speaks when at least `--min-sessions` (2) other sessions remain.
+  (`<session>/agent-*`) are left out of the session count, the call count and the
+  recoveries, so a failure a refresh has just stored is no precedent for itself
+  and its own way out is not offered as another session's. The
+  hook speaks when at least `--min-sessions` (2) other conversations remain, a
+  session and its subagents counting once; the words still give stored sessions,
+  as `faildex rules` counts them.
 - **A precedent is enough.** The 3% share of the earlier warning before a command does not apply,
   since the call has already failed, and no recovery is required. A stricter rule
   that also wanted a usable next step (a strict recovery, a shell fix, or a retry

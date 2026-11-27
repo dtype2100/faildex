@@ -73,7 +73,7 @@
   .progress span { display: block; height: 2px; width: 0; background: var(--ink); transition: width .2s ease, opacity .4s ease; }
   @media (max-width: 860px) { nav a:not(.gh) { display: none; } }
 
-  /* hero: one crisp sentence, the warning example with when it triggers, and one next-step line */
+  /* hero: one crisp sentence, the notice example with when it shows, and one next-step line */
   .hero { padding: 16px 0 12px; }
   .eyebrow { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
   h1 { font-size: clamp(24px, 2.9vw, 33px); line-height: 1.1; letter-spacing: -0.03em; font-weight: 600; margin: 0; max-width: 100%; text-wrap: balance; }
@@ -259,7 +259,7 @@
     <a class="brand" href="#top" aria-label="faildex home"><i></i>faildex</a>
     <span class="status" id="status"><b></b><span class="status-long" id="status-text" data-i18n="status.loading">Loading Relate WebAssembly…</span><span class="status-short" id="status-short">…</span></span>
     <nav aria-label="Sections">
-      <a href="#failures" data-i18n="nav.failures">1 Failures</a><a href="#failure" data-i18n="nav.failure">2 One failure</a><a href="#check" data-i18n="nav.check">3 Warning</a><a href="#evaluation" data-i18n="nav.evaluation">4 Proof</a><a href="#query" data-i18n="nav.query">Query</a>
+      <a href="#failures" data-i18n="nav.failures">1 Failures</a><a href="#failure" data-i18n="nav.failure">2 One failure</a><a href="#check" data-i18n="nav.check">3 Notice</a><a href="#evaluation" data-i18n="nav.evaluation">4 Proof</a><a href="#query" data-i18n="nav.query">Query</a>
       <a class="gh" href="https://github.com/dtype2100/faildex">GitHub</a>
     </nav>
     <div class="lang" id="lang">
@@ -276,7 +276,7 @@
 <main class="wrap" id="top">
   <section class="hero">
     <p class="eyebrow" data-i18n="hero.eyebrow">faildex · coding agent failure index · 422 public sessions</p>
-    <h1 data-i18n-html="hero.title">Coding agents repeat the same failures. <span>faildex tells them what worked, right after the failure.</span></h1>
+    <h1 data-i18n-html="hero.title">Coding agents repeat the same failures. <span>faildex tells them what other sessions saw, right after the failure.</span></h1>
     <p class="lede" data-i18n="hero.lede"></p>
     <div class="mini" aria-label="What the agent sees">
       <div class="mini-when" data-i18n="hero.when">WHEN SHOWN · Right after a shell command fails the way it failed in other sessions</div>
@@ -326,7 +326,7 @@
     <div class="rail"><span>3</span></div>
     <div class="body">
       <div class="head">
-        <div><h2 data-i18n="check.title">The agent hears what worked, right after it fails</h2><p data-i18n-html="check.intro"></p></div>
+        <div><h2 data-i18n="check.title">The agent hears what other sessions saw, right after it fails</h2><p data-i18n-html="check.intro"></p></div>
         <button class="ghost" type="button" data-show="q-check" data-i18n="cypher.show">Show Cypher</button>
       </div>
       <pre class="cypher" id="q-check" hidden></pre>
@@ -362,7 +362,7 @@
           <hr>
           <div class="result-sub"><strong id="r-warn">—</strong><span id="r-warn-text"></span></div>
           <div class="meter" aria-hidden="true" style="margin-top:10px"><span class="g" id="r-fixed"></span><span class="n" id="r-unfixed"></span></div>
-          <p class="caveat" data-i18n="result.caveat">How often a later failure had already happened before. It is not a measured effect of the warning.</p>
+          <p class="caveat" data-i18n="result.caveat">How often a later failure had already happened before. It is not a measured effect of a notice.</p>
         </div>
         <div>
           <div class="evallegend"><span><i style="background:var(--red)"></i><span data-i18n="eval.lRecurring">recurring: seen in an earlier session</span></span><span><i style="background:var(--green)"></i><span data-i18n="eval.lWarnable">warnable: a recovery on record too</span></span><span><i style="background:var(--line-strong)"></i><span data-i18n="eval.lRest">the rest</span></span></div>

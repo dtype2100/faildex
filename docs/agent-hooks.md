@@ -66,16 +66,21 @@ targets local sessions.
 ## Keeping the store current
 
 The store learns from new sessions only when `faildex ingest` runs. Add
-`--refresh-every N` to a `faildex hook` command, `N = 200` recommended, and the hook
+`--refresh-every N` to a `faildex hook` command, `N = 10` recommended, and the hook
 keeps it current. In `~/.claude/settings.json`:
 
-    {"type": "command", "command": "faildex hook --refresh-every 200", "timeout": 5}
+    {"type": "command", "command": "faildex hook --refresh-every 10", "timeout": 5}
+
+The hook runs only after a failed shell call (`PostToolUseFailure`), so only failed
+calls count, and whether the store is older than a day is checked when a failure
+comes. 10 failed calls keep about the pace of 200 calls: in the public Claude Code
+logs, 65 of 1,415 shell calls failed.
 
 Each call counts itself, and the call that finds the store due starts
 `faildex ingest --store <the hook's store>` as a detached background process and
 returns at once, so the notice is not delayed. The store is due when either holds:
 
-- `N` hook calls have gathered since the last refresh started;
+- `N` failed calls have gathered since the last refresh started;
 - the store has not been written for 24 hours (a manual `faildex ingest` counts).
 
 No refresh starts within 30 minutes of the previous start, and only the call that
@@ -187,7 +192,7 @@ called (another agent, the hook turned off, a quiet week) still reach the store
 by the next day.
 
 `faildex link` does not add the option to the Claude Code hook it installs; add
-`--refresh-every 200` to its `faildex hook` command yourself if you want it (a later
+`--refresh-every 10` to its `faildex hook` command yourself if you want it (a later
 `faildex link` keeps the command as it is). Under `PostToolUseFailure` the hook runs
 only after a failed shell call, so only failed calls count. The Codex and Cursor hooks
 run only at session start, where the option does nothing.

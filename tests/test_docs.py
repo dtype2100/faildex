@@ -168,7 +168,7 @@ def test_the_hook_replay_in_the_documents_matches_the_committed_store(replayed):
         f"| whose key the earlier period held | {funnel['known']} |",
         f"| held for that same command | {funnel['command']} |",
         f"| in 2 or more sessions | {funnel['sessions']} |",
-        f"(the hook speaks) | {funnel['rate']} |",
+        f"(the earlier hook spoke) | {funnel['rate']} |",
         (
             f"before {r.warned} of the {r.shell_calls:,} later shell calls "
             f"({r.warned / r.shell_calls:.1%})"
@@ -341,8 +341,10 @@ def test_the_bench_quotes_the_hook_command(tmp_path):
 
 # Words that would offer a warning before a command again (faildex removed it). The
 # evaluation record (docs/evaluation.md, the README's evaluation sections, the hook
-# verification notes) keeps its history and is left out.
+# verification notes) keeps its history and is left out; elsewhere a line that says it
+# is about the earlier, removed hook may name it.
 PRE_RUN_GUIDANCE = (
+    "pre-run",
     "--event pre-shell",
     "shell hook",
     "session and shell",
@@ -355,6 +357,17 @@ PRE_RUN_GUIDANCE = (
     "실행 전 경고",
     "명령 전 경고",
     "명령마다 미리",
+)
+EARLIER_HOOK = (
+    "earlier hook",
+    "earlier version",
+    "removed hook",
+    "is gone",
+    "no longer",
+    "이전 훅",
+    "이전 버전",
+    "지금은 없",
+    "없어졌",
 )
 RECORD_SECTIONS = {
     "README.md": ("## Evaluation", "## Across agents, on real logs"),
@@ -376,12 +389,10 @@ def test_nothing_offers_a_warning_before_a_command(capsys):
         name: _without((ROOT / name).read_text(encoding="utf-8"), heads)
         for name, heads in RECORD_SECTIONS.items()
     }
-    texts["docs/agent-hooks.md"] = (ROOT / "docs" / "agent-hooks.md").read_text(encoding="utf-8")
+    for name in ("docs/agent-hooks.md", "install.sh", "install.ps1", "bench/README.md"):
+        texts[name] = (ROOT / name).read_text(encoding="utf-8")
     texts["i18n"] = "\n".join(
-        f"{key}: {value}"
-        for catalog in CATALOG.values()
-        for key, value in catalog.items()
-        if not key.startswith("eval.")
+        f"{key}: {value}" for catalog in CATALOG.values() for key, value in catalog.items()
     )
     texts["examples"] = "\n".join([*commands(), *(c for ex in EXAMPLES.values() for c in ex)])
     for lang in ("en", "ko"):
@@ -389,9 +400,11 @@ def test_nothing_offers_a_warning_before_a_command(capsys):
             assert main(["--lang", lang, *argv]) == 0
             texts[f"faildex --lang {lang} {' '.join(argv)}"] = capsys.readouterr().out
     found = [
-        (name, phrase)
+        (name, phrase, line.strip()[:120])
         for name, text in texts.items()
+        for line in text.splitlines()
+        if not any(mark in line.lower() for mark in EARLIER_HOOK)
         for phrase in PRE_RUN_GUIDANCE
-        if phrase.lower() in text.lower()
+        if phrase.lower() in line.lower()
     ]
     assert found == []

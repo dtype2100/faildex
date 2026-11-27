@@ -221,7 +221,7 @@ def _hook(args: argparse.Namespace) -> int:
         use("en")  # an agent reads this, whatever language the person chose
         if args.store is None:
             args.store = _hook_store(args)
-        raw = sys.stdin.read(MAX_STDIN + 1)  # more than that is not read, let alone answered
+        raw = _read_stdin(sys.stdin, MAX_STDIN)
         payload = failure_payload(raw, args.agent)
         out = respond(
             raw,
@@ -252,6 +252,22 @@ def _hook(args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001, S110 - the warning is out; a refresh problem stays quiet
             pass
     return 0
+
+
+def _read_stdin(stream, limit: int) -> str:
+    """The hook's payload: at most `limit` bytes read (one more tells it is longer, and then
+    it is not answered), as UTF-8 whatever the console's code page is (Windows). Bytes
+    that are not UTF-8 give nothing to answer."""
+    binary = getattr(stream, "buffer", None)
+    if binary is None:  # a text stream without bytes under it (tests)
+        return stream.read(limit + 1)
+    data = binary.read(limit + 1)
+    if len(data) > limit:
+        return "x" * (limit + 1)  # too long: stays silent, never parsed
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return ""
 
 
 def _hook_store(args: argparse.Namespace) -> Path:

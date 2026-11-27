@@ -29,5 +29,5 @@ if ($LASTEXITCODE -ne 0) { Write-Host "faildex: could not add uv's tool folder t
 
 Write-Host ""
 Write-Host "faildex is installed. Open a new terminal, then try:"
-Write-Host "  faildex demo                 # rules, a pre-run warning and the numbers, on public logs"
+Write-Host "  faildex demo                 # rules, a notice after a failure and the numbers, on public logs"
 Write-Host "  faildex check `"git status`"   # what is known to go wrong with a command"

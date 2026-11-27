@@ -3,7 +3,7 @@ rules at session start for Claude Code, Codex and Cursor.
 
 Reads the hook's JSON from stdin. When the failed Bash call's failure key (`error` read
 as the store reads a tool result, `adapters.claude_code.failed_call`) is on record for
-the same command template in at least `min_sessions` other sessions (the session the
+the same command template in at least `min_sessions` other conversations (the session the
 hook runs in and its subagents left out), it tells the agent so as `additionalContext`,
 with the recovery on record, and shows the person one line (`systemMessage`). A
 precedent alone is enough. On a line that runs several programs it names no next step.
@@ -169,11 +169,6 @@ def failure_payload(raw: str, agent: str = "claude") -> dict | None:
     return None
 
 
-def after_failure(raw: str, agent: str = "claude") -> bool:
-    """Whether `raw` is a PostToolUseFailure event the hook answers (`failure_payload`)."""
-    return failure_payload(raw, agent) is not None
-
-
 def _failed_call(payload: dict):
     """The store's record of the failed Bash call a PostToolUseFailure payload reports,
     with a failure key and a command; None for anything to stay silent about."""
@@ -210,7 +205,7 @@ def _clean(text: str, limit: int = MAX_LINE) -> str:
 
 
 def _precedent(source, record, min_sessions: int):
-    """The same failure of the same command in at least `min_sessions` other sessions,
+    """The same failure of the same command in at least `min_sessions` other conversations,
     counted without the hook's own session family; None when there is none."""
     from collections import Counter
     from dataclasses import replace
@@ -229,7 +224,9 @@ def _precedent(source, record, min_sessions: int):
         return None
     own = _family(record)
     others = {session for session in item.sessions if not own(session)}
-    if len(others) < min_sessions:
+    # Counted by conversation: a session and its subagents are one (`parent/agent-*`).
+    # The words still give stored sessions, as `faildex rules` counts them.
+    if len({session.split("/agent-")[0] for session in others}) < min_sessions:
         return None
     mine = sum(n for session, n in item.session_calls.items() if own(session))
     fixes = Counter(item.fixes)

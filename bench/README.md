@@ -1,4 +1,11 @@
-# Controlled bench for the pre-run hook
+# Controlled bench for the earlier hook that warned before a command
+
+> **A record of a removed hook.** This bench measured faildex's earlier hook, which
+> warned before a command (`PreToolUse`). That hook is gone: in this checkout,
+> `faildex hook` stays silent on `PreToolUse` and speaks only right after a failed
+> shell call (`PostToolUseFailure`), so running the bench here measures nothing. To run
+> it again, check out the commit whose hook it measured, `03313cc`, build its
+> environment there, and pass that checkout's `.venv/bin/faildex` as `--hook`.
 
 The same tasks run headless in Claude Code with the faildex hook off and on, and
 the runs are compared. Results and what they show are in

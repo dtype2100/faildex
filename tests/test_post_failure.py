@@ -23,6 +23,7 @@ PUSH_ERROR = "fatal: the current branch has no upstream branch"
 CONFIG_ERROR = "error: config value missing"
 NPM_ERROR = "npm ERR! cipm can only install with a lockfile"
 TF_ERROR = "Error: No configuration files"
+KO_ERROR = "error: 메모.txt를 열 수 없습니다"
 SESSION = "sess-me"
 
 
@@ -95,7 +96,7 @@ def seeded(tmp_path_factory):
         if name == "a":
             calls = calls + [("npm ci", NPM_ERROR)]
         if name in ("a", "b"):
-            calls = calls + [("terraform plan", TF_ERROR)]
+            calls = calls + [("terraform plan", TF_ERROR), ("cat 메모.txt", KO_ERROR)]
         _session(logs / f"{name}.jsonl", f"sess-{name}", calls)
     _session(logs / "d.jsonl", "sess-d", [("make", None)] * 100)
     mine = [("git push", PUSH_ERROR), ("git push", PUSH_ERROR), ("cargo build", "error[E0425]")]
@@ -264,7 +265,10 @@ def test_the_own_session_and_its_subagents_are_left_out_of_the_counts(seeded):
     assert "(seen in 3 sessions, 3 calls)" in respond(_failed("git push", PUSH_ERROR), seeded)
     cargo = ("cargo build", "error[E0425]")
     assert respond(_failed(*cargo), seeded, min_sessions=1) == ""
-    assert "(seen in 2 sessions, 2 calls)" in respond(_failed(*cargo, "new"), seeded)
+    # From a new session, `me` and its subagent are one other conversation: not two.
+    assert respond(_failed(*cargo, "new"), seeded) == ""
+    one = respond(_failed(*cargo, "new"), seeded, min_sessions=1)
+    assert "(seen in 2 sessions, 2 calls)" in one  # the words count stored sessions
 
 
 def test_the_own_sessions_recoveries_are_not_offered_as_earlier_sessions(seeded):
@@ -470,3 +474,38 @@ def test_the_payload_is_parsed_once(seeded, monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", io.StringIO(SPEAKS))
     assert main(["hook", "--store", str(seeded), "--refresh-every", "200"]) == 0
     assert _said(capsys.readouterr().out) and parsed == [1]
+
+
+def test_a_parent_and_its_subagent_in_one_other_conversation_are_one_precedent(seeded):
+    """`cargo build` failed only in `me` and `me/agent-x`: one conversation."""
+    cargo = ("cargo build", "error[E0425]")
+    assert respond(_failed(*cargo, "someone-else"), seeded) == ""
+    assert respond(_failed(*cargo, "someone-else"), seeded, min_sessions=1)
+
+
+def test_korean_text_arrives_whole_whatever_the_console_code_page(seeded, monkeypatch, capsys):
+    """Read as bytes and decoded as UTF-8: a Windows code page does not mangle it."""
+    from faildex.adapters.claude_code import failed_call
+
+    raw = json.dumps(json.loads(_failed("cat 메모.txt", KO_ERROR)), ensure_ascii=False)
+    assert "메모" in raw  # raw UTF-8 bytes on stdin, not \\u escapes
+    stdin = io.TextIOWrapper(io.BytesIO(raw.encode("utf-8")), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdin", stdin)
+    assert main(["hook", "--store", str(seeded)]) == 0
+    data = _said(capsys.readouterr().out)
+    key = failed_call("cat 메모.txt", f"Exit code 1\n{KO_ERROR}").failure[0]
+    assert key in data["hookSpecificOutput"]["additionalContext"]
+    assert "를 열 수 없습니다" in key
+
+
+def test_a_payload_over_the_byte_bound_is_silent(seeded, monkeypatch, capsys):
+    from faildex.hook import MAX_STDIN
+
+    raw = json.dumps(
+        {**json.loads(SPEAKS), "padding": "가" * (MAX_STDIN // 3 + 1)}, ensure_ascii=False
+    )
+    assert len(raw) < MAX_STDIN < len(raw.encode("utf-8"))  # short in characters, long in bytes
+    stdin = io.TextIOWrapper(io.BytesIO(raw.encode("utf-8")), encoding="utf-8")
+    monkeypatch.setattr(sys, "stdin", stdin)
+    assert main(["hook", "--store", str(seeded)]) == 0
+    assert capsys.readouterr().out == ""

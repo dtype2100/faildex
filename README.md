@@ -91,7 +91,7 @@ What changes: for each agent on this machine, Claude Code gets an `@` import lin
 ]}]}}
 ```
 
-What changes: in Claude Code sessions started afterwards (in a session already running, review the new hook with `/hooks`), right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other sessions had it (`--min-sessions`); the session itself and its subagents do not count.
+What changes: in Claude Code sessions started afterwards (in a session already running, review the new hook with `/hooks`), right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other conversations had it (`--min-sessions`; a session and its subagents count as one); the session itself and its subagents do not count.
 
 Scope: only failed shell calls that end with a non-zero exit code, including those run by skills, plugins and subagents. A failure hidden behind a pipe or `; echo` exits 0 and never reaches the hook; MCP tools and file tools get nothing. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts. Codex and Cursor get the rules at session start only: `faildex link` installs no hook before a shell command for any agent, and takes out the ones earlier versions installed. A notice right after a failure is out of scope for them (Cursor has `postToolUseFailure`, which faildex does not use; Codex has no failure event).
 
@@ -396,11 +396,12 @@ Codex and Cursor get the rules at session start only (`faildex link` sets that u
 notice right after a failure is out of scope for them.
 
 To keep your store current without running `faildex ingest` by hand, add
-`--refresh-every 200` to that command (`"command": "faildex hook --refresh-every 200"`).
-Every 200 hook calls, and at least once a day, the hook starts `faildex ingest` in the
-background and returns at once; no refresh starts within 30 minutes of the previous one.
-Under `PostToolUseFailure` the hook runs only after a failed shell call, so it counts
-failed calls only, and the daily refresh does most of the work.
+`--refresh-every 10` to that command (`"command": "faildex hook --refresh-every 10"`).
+The hook runs only after a failed shell call, so it counts failed calls only: every 10 of
+them, and at least once a day (checked when a failure comes), it starts `faildex ingest`
+in the background and returns at once; no refresh starts within 30 minutes of the
+previous one. 10 keeps about the pace of the earlier 200 calls: in the public Claude Code
+logs, 65 of 1,415 shell calls failed.
 It refreshes the store named with `--store` or `FAILDEX_STORE`, else `~/.faildex/store`, never a `./store`.
 See [keeping the store current](docs/agent-hooks.md#keeping-the-store-current).
 

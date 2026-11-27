@@ -290,6 +290,9 @@ def test_configure_claude_alone(tmp_path):
         ("faildex hook; other-tool", False),
         ("faildex hook | tee /tmp/x", False),
         ("faildex hook\nother-tool", False),
+        ("faildex hook & other-tool", False),
+        ("faildex hook --store $(pwd)/s", False),
+        ("faildex hook --store `pwd`/s", False),
         ('faildex hook "unclosed', False),
     ],
 )
@@ -308,3 +311,13 @@ def test_the_cli_shows_the_step_and_what_to_do_next(home, capsys):
     line = next(x for x in out.splitlines() if "settings.json" in x)
     assert "제거함" in line
     assert not _settings(home).exists()
+
+
+def test_text_that_cannot_be_written_as_utf8_is_left_alone(home, tmp_path):
+    """A lone surrogate escape reads as JSON but cannot be written back as UTF-8."""
+    text = '{"note": "\\ud800", "hooks": {}}\n'
+    path = _write(home, text)
+    step = _link(home, tmp_path)
+    assert step.status == "skipped" and "UTF-8" in step.note
+    assert path.read_text() == text and _backups(home) == []
+    assert not list(path.parent.glob("tmp*"))

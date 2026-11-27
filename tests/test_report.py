@@ -79,7 +79,7 @@ def test_hook_log_records_the_template_only_and_report_counts_it(tmp_path, capsy
     assert "alice" not in log.read_text()
 
     assert main(["report", "--store", str(store), "--hook-log", str(log)]) == 0
-    assert "hook warnings" in capsys.readouterr().out
+    assert "hook notices" in capsys.readouterr().out
 
 
 def test_report_rejects_a_split_that_is_not_a_day(tmp_path, capsys):

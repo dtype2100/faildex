@@ -66,7 +66,7 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "check": ('faildex check "git status"', "faildex check 'ls *.py && git push'"),
     "hook": (
         "faildex hook",
-        "faildex hook --log ~/.faildex/hook.jsonl --refresh-every 200",
+        "faildex hook --log ~/.faildex/hook.jsonl --refresh-every 10",
     ),
     "report": (
         "faildex report",

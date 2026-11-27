@@ -31,6 +31,6 @@ esac
 
 say ""
 say "Installed. Try it:"
-say "  faildex demo                      # rules, a pre-run warning and the numbers, on public logs"
+say "  faildex demo                      # rules, a notice after a failure and the numbers, on public logs"
 say "  faildex check \"git status\"        # what is known to go wrong with a command"
 say "  faildex ingest --claude ~/.claude/projects   # index your own Claude Code logs (stays on your machine)"
