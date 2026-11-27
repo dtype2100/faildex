@@ -17,7 +17,7 @@ faildex demo
 
 On Windows, see [Install](#install) for the PowerShell line.
 
-![The faildex browser demo: 68.4% of later failures had already happened in an earlier session, and a map of the failures that came back, sized by sessions and coloured by whether a recovery is on record](docs/images/overview.jpg)
+![The faildex browser demo: "Coding agents repeat the same failures. faildex tells them what other sessions saw, right after the failure.", an example of the notice Claude Code shows right after `git status` fails ("PostToolUseFailure:Bash says: faildex: `git status` failed with `fatal: not a git repository …` in 24 earlier sessions; no recovery on record."), and the failures that came back, as bars sized by sessions and coloured by whether a recovery is on record](docs/images/overview.jpg)
 
 *The browser demo rebuilds the graph from 422 public sessions inside Relate
 WebAssembly and recomputes every number on the page. Open it at

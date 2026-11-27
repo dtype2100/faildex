@@ -17,7 +17,7 @@ faildex demo
 
 Windows는 [설치](#설치)의 PowerShell 한 줄을 쓰세요.
 
-![faildex 브라우저 데모: 뒤 기간 실패의 68.4%가 앞선 세션에서 이미 일어났다는 결과와, 되풀이된 실패를 세션 수 크기와 복구 기록 여부 색으로 보여 주는 실패 지도](docs/images/overview.jpg)
+![faildex 브라우저 데모: "Coding agents repeat the same failures. faildex tells them what other sessions saw, right after the failure." 제목, `git status`가 실패한 직후 Claude Code에 뜨는 알림 예시("PostToolUseFailure:Bash says: faildex: `git status` failed with `fatal: not a git repository …` in 24 earlier sessions; no recovery on record."), 되풀이된 실패를 세션 수 길이와 복구 기록 여부 색으로 보여 주는 막대 목록](docs/images/overview.jpg)
 
 *브라우저 데모는 공개 세션 422개로 그래프를 Relate WebAssembly 안에서 다시 만들고
 화면의 모든 수치를 다시 계산합니다. <https://dtype2100.github.io/faildex/>에서 바로 열거나,
