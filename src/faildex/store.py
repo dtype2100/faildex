@@ -237,33 +237,41 @@ def _recover(out: Path) -> None:
     _unmark(out)
 
 
-def swapping(path: Path) -> bool:
-    """Whether a writer is between the two renames of a swap of the store at `path`.
+def swapping(path: Path) -> Path | None:
+    """The store set aside by a writer that is between the two renames of a swap of the
+    store at `path`, or None when there is no such writer.
 
     Then its set-aside store `.<store>.old-<token>` and its new copy
     `.<store>.writing-<token>` both exist, each marked with this store's path and the
-    same token. (A writer killed right there leaves them so until the next ingest puts
-    the store back.) Reads only; names are compared as text.
+    same token, and the set-aside one still holds a readable `manifest.json`. (A writer
+    killed right there leaves them so until the next ingest puts the store back.) Reads
+    only; names are compared as text.
     """
     path = Path(path).resolve()
     try:
         names = {entry.name for entry in os.scandir(path.parent)}
     except OSError:
-        return False
+        return None
     old_prefix = f".{path.name}.old-"
+    found = []
     for name in names:
         if not name.startswith(old_prefix):
             continue
         token = name[len(old_prefix) :]
         writing = f".{path.name}.writing-{token}"
-        if writing in names and all(
-            (mark := _mark_of(path.parent / folder)) is not None
-            and mark.get("store") == str(path)
-            and mark.get("token") == token
-            for folder in (name, writing)
+        marks = [_mark_of(path.parent / folder) for folder in (name, writing)]
+        if writing not in names or not all(
+            mark is not None and mark.get("store") == str(path) and mark.get("token") == token
+            for mark in marks
         ):
-            return True
-    return False
+            continue
+        try:
+            (path.parent / name / "manifest.json").read_bytes()
+        except OSError:
+            continue  # nothing there to answer from: no evidence
+        stamp = marks[0].get("time")
+        found.append((stamp if isinstance(stamp, (int, float)) else 0, name))
+    return path.parent / max(found)[1] if found else None
 
 
 def _swap(work: Path, out: Path, old: Path, token: str) -> bool:
@@ -389,9 +397,10 @@ def default_store() -> Path:
 def hook_store() -> Path:
     """`default_store` for the hook, which must neither write nor fail.
 
-    The same order, with two differences. The private store counts as there while an
-    ingest is between the two renames of a swap (`swapping`), when its manifest is gone
-    for an instant; a private store that was deleted does not count, index or not. And
+    The same order, with two differences. `./store` and the private store count as
+    there while an ingest is between the two renames of a swap (`swapping`), when the
+    manifest is gone for an instant; a store that was deleted does not count, index or
+    not. And
     the public store is never copied into the cache here: the cache copy if one exists,
     else the shipped store itself, which the hook only reads (through an index, if one
     exists). Paths are resolved, so a symlinked store and its index agree.
@@ -401,7 +410,7 @@ def hook_store() -> Path:
         return Path(named).expanduser()
     private = PRIVATE_STORE.expanduser().resolve()
     local = Path("store")
-    if (local / "manifest.json").is_file():
+    if (local / "manifest.json").is_file() or swapping(local):
         # Run from inside ~/.faildex, ./store is the private store: name it so.
         return private if local.resolve() == private else local
     if (private / "manifest.json").is_file() or swapping(private):

@@ -130,9 +130,11 @@ write, and the ingest publishes it while it still holds the write lock, so the
 fingerprint and the data come from the same store. The hook uses the index when the
 fingerprint matches, and also while an ingest is between the two renames of a swap:
 the manifest is then missing for an instant, and both marked folders,
-`.<store>.old-<token>` and `.<store>.writing-<token>`, show it (the index describes the
-store just moved aside). A store that is missing without that evidence was deleted:
-its index is not used, and without `--store` the hook goes back to the public demo
+`.<store>.old-<token>` and `.<store>.writing-<token>`, show it. Then only an index whose
+fingerprint is the manifest of the store just moved aside is used, and a moved-aside
+folder without a readable manifest is no evidence. A store that is missing without
+that evidence was deleted: its index is not used, and without `--store` the hook goes
+on from `./store` or the private store to the next one, down to the public demo
 store. On the index path the hook does not load Relate at all. When the fingerprint differs, or anything in the
 index cannot be read (no index yet, a store from an older faildex, a damaged file or
 entry, another format version), the hook reads the store itself, read-only, and says

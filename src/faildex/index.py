@@ -212,14 +212,17 @@ def candidates(store: Path) -> list[Index]:
 
     An index qualifies when its format is right and its fingerprint is the store's
     manifest. While the manifest is missing because an ingest is between the two
-    renames of a swap (`store.swapping`), a well-formed index is still used: it
-    describes the store just set aside. A store that is simply gone has no index.
+    renames of a swap (`store.swapping`), the fingerprint must be that of the store
+    just set aside, so an index of an older generation is never taken for it. A store
+    that is simply gone has no index.
     """
     want = fingerprint(store)
     if want is None:
         from faildex.store import swapping
 
-        if not swapping(store):
+        aside = swapping(store)
+        want = fingerprint(aside) if aside else None
+        if want is None:
             return []  # not mid-swap: the store is gone, and so is what its index said
     found = []
     for path in (beside(store), cached(store)):
@@ -233,7 +236,7 @@ def candidates(store: Path) -> list[Index]:
             and isinstance(data.get("manifest_sha256"), str)
             and isinstance(data.get("commands"), dict)
             and isinstance(data.get("pooled"), dict)
-            and (want is None or data["manifest_sha256"] == want)
+            and data["manifest_sha256"] == want
         ):
             found.append(Index(data))
     return found
@@ -335,6 +338,8 @@ def start_rebuild(store: Path) -> None:
             if not got:
                 return  # another hook is starting it right now
             now = time.time()
+            if now - refresh._mtime(tried) < REBUILD_PAUSE:
+                return  # another hook started one since the check above
             if lock.exists():
                 if now - _lock_token(lock)[1] < REBUILD_STALE:
                     return
