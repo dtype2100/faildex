@@ -78,11 +78,11 @@ faildex rules --approve 1 3 --to ~/faildex-rules.md
 faildex link
 ```
 
-바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄과 `~/.claude/skills/faildex/`의 스킬, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`의 훅 두 개(세션 시작 때 규칙, 셸 명령 전에 경고)를 넣습니다. `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
+바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄, `~/.claude/skills/faildex/`의 스킬, `~/.claude/settings.json`의 6단계 훅, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`의 훅 두 개(세션 시작 때 규칙, 셸 명령 전에 경고)를 넣습니다. `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
 
-**6. Claude Code 실패 직후 알림 켜기**
+**6. Claude Code 실패 직후 알림**
 
-`~/.claude/settings.json`에 아래를 추가합니다. 파일에 이미 `hooks`가 있으면 그 `PostToolUseFailure` 목록에 항목을 더합니다.
+`faildex link`(5단계)가 `~/.claude/settings.json`에 아래 훅을 넣었습니다(`faildex hook --agent claude`로). `PreToolUse`에 있던 `faildex hook`은 명령 그대로 이곳으로 옮겼습니다. 한 프로젝트에서만 쓰려면 대신 그 프로젝트의 `.claude/settings.json`에 넣습니다(이미 `hooks`가 있으면 그 `PostToolUseFailure` 목록에 더합니다).
 
 ```json
 {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
@@ -90,7 +90,7 @@ faildex link
 ]}]}}
 ```
 
-바뀌는 것: `faildex link`는 이 단계를 하지 않습니다. 그 뒤에 시작한 Claude Code 세션부터 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 Claude에게 그 사실과 기록된 복구 방법을 알리고 화면에 한 줄 안내를 띄웁니다. 다른 세션 2개 이상(`--min-sessions`)에서 겪었을 때 말하고, 지금 세션과 그 서브에이전트는 세지 않습니다.
+바뀌는 것: 그 뒤에 시작한 Claude Code 세션부터(이미 실행 중인 세션에서는 `/hooks`에서 새 훅을 검토합니다) 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 Claude에게 그 사실과 기록된 복구 방법을 알리고 화면에 한 줄 안내를 띄웁니다. 다른 세션 2개 이상(`--min-sessions`)에서 겪었을 때 말하고, 지금 세션과 그 서브에이전트는 세지 않습니다.
 
 범위: 0이 아닌 종료 코드로 끝난 셸 호출에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령도 포함합니다. 파이프나 `; echo`로 가린 실패는 종료 코드가 0이라 훅에 닿지 않고, MCP 도구나 파일 도구에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다. 같은 명령을 `PreToolUse` 훅으로 등록하면 경고할 만큼 잦은 반복 실패가 있는 명령 전에 경고합니다(7단계가 보여 주는 것). `PostToolUseFailure` 대신, 또는 둘 다에 등록할 수 있습니다. Codex와 Cursor는 `faildex link`가 설치하는 셸 명령 전 경고를 그대로 씁니다.
 
@@ -146,7 +146,7 @@ faildex link --remove
 ```
 
 - 이 명령은 `faildex link`가 설치하는 가져오기 줄, 스킬, 플러그인, 훅을 지웁니다. `~/faildex-rules.md`는 남습니다.
-- `~/.claude/settings.json`의 `faildex hook` 항목은 직접 지웁니다.
+- `~/.claude/settings.json`의 `PostToolUseFailure`와 `PreToolUse`에서 `faildex hook` 항목도 빼고, 다른 훅과 설정은 그대로 둡니다. 프로젝트의 `.claude/settings.json`에 직접 넣은 `faildex hook`은 남습니다.
 - `~/.faildex`를 지우면 개인 스토어와 저장된 언어가 사라지고, `--store` 없이 실행한 명령은 `FAILDEX_STORE`나 `./store`가 없으면 공개 데모 스토어를 씁니다.
 
 ### 출력 언어
@@ -380,9 +380,9 @@ Action은 저절로 풀리는 실패(시간 초과, 연결 거부나 재설정, 
 옵션 없이 실행하면 `~/.claude/projects`, `~/.codex/sessions`, `~/.cursor/chats`,
 `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` 중 있는 폴더를 모두 읽습니다.
 
-Claude Code에서 쓰기. 프로젝트의 `.claude/settings.json`(모든 세션에 쓰려면
-`~/.claude/settings.json`)에 추가하세요. [처음 설치할 때](#처음-설치할-때-한-번-이-순서대로)의 6단계이고,
-`faildex link`가 대신하지 않습니다. `faildex ingest`를 실행한 뒤에는 내 스토어를,
+Claude Code에서 쓰기. `faildex link`가 모든 세션용으로 `~/.claude/settings.json`에 넣습니다
+([처음 설치할 때](#처음-설치할-때-한-번-이-순서대로)의 6단계). 한 프로젝트에서만 쓰려면 그 프로젝트의
+`.claude/settings.json`에 직접 넣으세요. `faildex ingest`를 실행한 뒤에는 내 스토어를,
 그 전에는 공개 스토어를 읽습니다.
 
 ```json

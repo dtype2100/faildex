@@ -78,11 +78,11 @@ What changes: `faildex rules` writes nothing and numbers the failures that recur
 faildex link
 ```
 
-What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md` and the skill in `~/.claude/skills/faildex/`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and two hooks in their `hooks.json` (rules at session start, warnings before shell commands). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
+What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md`, the skill in `~/.claude/skills/faildex/` and the hook of step 6 in `~/.claude/settings.json`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and two hooks in their `hooks.json` (rules at session start, warnings before shell commands). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
 
-**6. Turn on failure notices in Claude Code**
+**6. Failure notices in Claude Code**
 
-Add this to `~/.claude/settings.json`; if the file already has `hooks`, add the entry to its `PostToolUseFailure` list:
+`faildex link` (step 5) has added this hook to `~/.claude/settings.json` (as `faildex hook --agent claude`); a `faildex hook` it found under `PreToolUse` was moved here with its command unchanged. To use it in one project only instead, add it to that project's `.claude/settings.json` (into its `PostToolUseFailure` list if it has `hooks`):
 
 ```json
 {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
@@ -90,7 +90,7 @@ Add this to `~/.claude/settings.json`; if the file already has `hooks`, add the 
 ]}]}}
 ```
 
-What changes: `faildex link` does not do this step. In Claude Code sessions started afterwards, right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other sessions had it (`--min-sessions`); the session itself and its subagents do not count.
+What changes: in Claude Code sessions started afterwards (in a session already running, review the new hook with `/hooks`), right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other sessions had it (`--min-sessions`); the session itself and its subagents do not count.
 
 Scope: only failed shell calls that end with a non-zero exit code, including those run by skills, plugins and subagents. A failure hidden behind a pipe or `; echo` exits 0 and never reaches the hook; MCP tools and file tools get nothing. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts. The same command also works as a `PreToolUse` hook, for a warning before a command with a recurring failure frequent enough to warn about (what step 7 prints); register it under `PreToolUse` instead, or under both. Codex and Cursor keep their warnings before shell commands, which `faildex link` sets up.
 
@@ -146,7 +146,7 @@ faildex link --remove
 ```
 
 - That command takes out the import line, skills, plugin and hooks that `faildex link` installs; `~/faildex-rules.md` stays.
-- Delete the `faildex hook` entry from `~/.claude/settings.json` yourself.
+- It also takes the `faildex hook` entries out of `PostToolUseFailure` and `PreToolUse` in `~/.claude/settings.json`, keeping every other hook and setting; a `faildex hook` you added to a project's `.claude/settings.json` stays.
 - Deleting `~/.faildex` removes your private store and the saved language; commands without `--store` then use the public demo store, unless `FAILDEX_STORE` or `./store` applies.
 
 ### Output language
@@ -390,10 +390,10 @@ own logs, and exports any other store only when you pass it with `--store`.
 With no options, `faildex ingest` reads `~/.claude/projects`, `~/.codex/sessions`,
 `~/.cursor/chats`, `~/.gemini/antigravity-cli` and `~/.gemini/antigravity`, whichever exist.
 
-Use it in Claude Code. Add this to `.claude/settings.json` (your project's, or
-`~/.claude/settings.json` for every session); it is step 6 of
-[First install](#first-install-once-in-this-order), and `faildex link` does not add it. It reads your own store once you
-have run `faildex ingest`, and the public one until then:
+Use it in Claude Code. `faildex link` adds this to `~/.claude/settings.json` for every
+session (step 6 of [First install](#first-install-once-in-this-order)); to use it in one
+project only, add it to that project's `.claude/settings.json` yourself. It reads your
+own store once you have run `faildex ingest`, and the public one until then:
 
 ```json
 {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [

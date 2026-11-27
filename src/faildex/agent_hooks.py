@@ -1,4 +1,4 @@
-"""Install faildex's two hooks without replacing other tools' hooks."""
+"""Install faildex's hooks (Codex, Cursor, Claude Code) without replacing other tools' hooks."""
 
 from __future__ import annotations
 
@@ -98,3 +98,151 @@ def configure(agent: str, path: Path, rules: Path, remove: bool, dry_run: bool) 
         return ("removed" if remove else "installed"), note
     except (OSError, ValueError, TypeError):
         return "skipped", "could not safely update hooks.json; left alone"
+
+
+# Claude Code: faildex's hook in ~/.claude/settings.json, after a failed shell call.
+CLAUDE_EVENT = "PostToolUseFailure"
+CLAUDE_COMMAND = "faildex hook --agent claude"  # shell-safe tokens only, as above
+WOULD = {"installed": "would install", "moved": "would move"}
+
+
+def _faildex_hook_command(command: object) -> bool:
+    """A `faildex hook ...` command line, however faildex is named: `faildex hook`, an
+    absolute path to it (`/x/.venv/bin/faildex hook --store ...`), `faildex.exe`."""
+    import shlex
+    from pathlib import PureWindowsPath
+
+    if not isinstance(command, str):
+        return False
+    try:
+        words = shlex.split(command, posix=False)
+    except ValueError:
+        return False
+    words = [word.strip("'\"") for word in words]
+    return (
+        len(words) >= 2
+        and PureWindowsPath(words[0]).name.lower() in ("faildex", "faildex.exe")
+        and words[1] == "hook"
+    )
+
+
+class _Unsafe(Exception):
+    """settings.json is not what faildex can safely edit; the message is the link note."""
+
+
+def _groups(hooks: dict, event: str) -> list:
+    groups = hooks.get(event, [])
+    if not isinstance(groups, list) or any(not isinstance(g, dict) for g in groups):
+        raise _Unsafe("settings.json: a hook event is not a list of objects; left alone")
+    for group in groups:
+        children = group.get("hooks", [])
+        if not isinstance(children, list) or any(not isinstance(c, dict) for c in children):
+            raise _Unsafe("settings.json: a hook event is not a list of objects; left alone")
+    return groups
+
+
+def _split(groups: list) -> tuple[list, list]:
+    """(the groups without faildex's hooks, the faildex hooks of each group as new groups)."""
+    kept, taken = [], []
+    for group in groups:
+        children = group.get("hooks", [])
+        ours = [child for child in children if _faildex_hook_command(child.get("command"))]
+        if not ours:
+            kept.append(group)
+            continue
+        rest = [child for child in children if child not in ours]
+        if rest:
+            kept.append({**group, "hooks": rest})
+        taken.append({**group, "hooks": ours})
+    return kept, taken
+
+
+def configure_claude(
+    path: Path, remove: bool, dry_run: bool, created: bool = False
+) -> tuple[str, str]:
+    """Put faildex's hook under PostToolUseFailure in Claude Code's settings.json, or take
+    it out of PostToolUseFailure and PreToolUse. Return (status, note).
+
+    A faildex hook already under PostToolUseFailure is left as it is; one only under
+    PreToolUse (the earlier recommendation) moves there with its command unchanged,
+    the other hooks of its group staying behind. Other keys, hooks and their order are
+    kept; the file is written only when it changes, after a backup, through a temporary
+    file. A symlink, invalid JSON or an unexpected shape is left alone, with the reason.
+    With `created` (faildex link made the file), a removal that leaves nothing else in
+    it deletes the file.
+    """
+    if path.is_symlink():
+        return "skipped", "settings.json is a symlink; left alone"
+    if remove and not path.exists():
+        return "absent", ""
+    try:
+        try:
+            original = json.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+        except ValueError:
+            raise _Unsafe("settings.json is not a valid JSON object; left alone") from None
+        if not isinstance(original, dict):
+            raise _Unsafe("settings.json is not a valid JSON object; left alone")
+        if not isinstance(original.get("hooks", {}), dict):
+            raise _Unsafe("settings.json: hooks is not an object; left alone")
+        data = copy.deepcopy(original)
+        hooks = data.setdefault("hooks", {})
+        post, pre = _groups(hooks, CLAUDE_EVENT), _groups(hooks, "PreToolUse")
+        post_kept, post_ours = _split(post)
+        pre_kept, pre_ours = _split(pre)
+        status = "installed"
+        if remove:
+            for event, kept, ours in (
+                (CLAUDE_EVENT, post_kept, post_ours),
+                ("PreToolUse", pre_kept, pre_ours),
+            ):
+                if not ours:
+                    continue
+                if kept:
+                    hooks[event] = kept
+                else:
+                    hooks.pop(event, None)
+        elif post_ours:
+            pass  # already there; a PreToolUse one someone also keeps stays too
+        elif pre_ours:
+            status = "moved"
+            if pre_kept:
+                hooks["PreToolUse"] = pre_kept
+            else:
+                hooks.pop("PreToolUse", None)
+            hooks[CLAUDE_EVENT] = post + pre_ours
+        else:
+            entry = {"type": "command", "command": CLAUDE_COMMAND, "timeout": 5}
+            hooks[CLAUDE_EVENT] = post + [{"matcher": "Bash", "hooks": [entry]}]
+        if not hooks and "hooks" not in original:
+            data.pop("hooks")
+        if data == original:
+            return ("absent" if remove else "already"), ""
+        if dry_run:
+            return ("would remove" if remove else WOULD[status]), ""
+        if remove and created and data in ({}, {"hooks": {}}):
+            path.unlink()  # it held only faildex's hook
+            return "removed", ""
+        if path.exists():
+            shutil.copy2(path, path.with_name(f"{path.name}.faildex-backup-{time.time_ns()}"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=path.parent, delete=False
+            ) as out:
+                temp = Path(out.name)
+                out.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            temp.replace(path)
+        finally:
+            if temp is not None:
+                temp.unlink(missing_ok=True)
+        if remove:
+            return "removed", ""
+        return (
+            status,
+            "new Claude Code sessions use it; in a running session, review it with /hooks",
+        )
+    except _Unsafe as why:
+        return "skipped", str(why)
+    except OSError:
+        return "skipped", "could not safely update settings.json; left alone"

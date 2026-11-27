@@ -203,9 +203,15 @@ def _snapshot(root: Path) -> dict[str, tuple[str, str]]:
     def walk(folder: Path) -> None:
         for child in sorted(folder.iterdir(), key=lambda p: p.name):
             rel = child.relative_to(root).as_posix()
-            # Hook configs and retained backups have separate coverage in test_agent_hooks.py.
+            # Hook configs and retained backups have separate coverage in test_agent_hooks.py
+            # (Codex, Cursor) and test_link_claude_hook.py (Claude Code).
             if child.parent.name in {".codex", ".cursor"} and (
                 child.name == "hooks.json" or child.name.startswith("hooks.json.faildex-backup-")
+            ):
+                continue
+            if child.parent.name == ".claude" and (
+                child.name == "settings.json"
+                or child.name.startswith("settings.json.faildex-backup-")
             ):
                 continue
             if child.is_symlink():

@@ -186,7 +186,6 @@ def _link(args: argparse.Namespace) -> int:
     if not args.remove and not args.dry_run:
         where = str(args.rules.expanduser().resolve()).replace(str(Path.home()), "~", 1)
         print(t("link.rules_file", path=where))
-        print(t("link.claude_hook"))
     return 0
 
 

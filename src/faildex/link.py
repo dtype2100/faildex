@@ -5,8 +5,9 @@ them once its own instructions load that file. The faildex skill tells an agent
 when to ask faildex (before retrying a failed command, when asked what keeps
 going wrong). This module wires both in, and takes them out again:
 
-- Claude Code: an `@<file>` import line in `~/.claude/CLAUDE.md`, and the skill
-  at `~/.claude/skills/faildex/SKILL.md`.
+- Claude Code: an `@<file>` import line in `~/.claude/CLAUDE.md`, the skill at
+  `~/.claude/skills/faildex/SKILL.md`, and the hook after a failed shell call
+  (PostToolUseFailure) in `~/.claude/settings.json`.
 - Antigravity: a plugin at `~/.gemini/config/plugins/faildex-rules/` whose
   `rules/AGENTS.md` is a link to the file and whose `skills/faildex/SKILL.md` is
   the skill (Antigravity loads plugin rules and skills in every workspace).
@@ -100,6 +101,7 @@ def _symlink_path(path: Path, home: Path) -> bool:
 def _link_paths() -> tuple[set[str], set[str]]:
     files = {
         ".claude/CLAUDE.md",
+        ".claude/settings.json",
         ".claude/skills/faildex/SKILL.md",
         ".codex/skills/faildex/SKILL.md",
         ".cursor/skills/faildex/SKILL.md",
@@ -200,6 +202,23 @@ def _is_copy(target: Path, rules: Path) -> bool:
         return False
 
 
+def _claude_hook(
+    home: Path, remove: bool, dry_run: bool, owned: dict[str, list[str]] | None = None
+) -> Step:
+    """faildex's PostToolUseFailure hook in ~/.claude/settings.json (`configure_claude`);
+    a settings file that faildex link created goes again once nothing else is in it."""
+    from faildex.agent_hooks import configure_claude
+
+    settings = home / ".claude" / "settings.json"
+    if _symlink_path(settings, home):
+        return Step(
+            "Claude Code", "skipped", settings, "settings.json is a symlink; left alone", "hooks"
+        )
+    created = owned is not None and ".claude/settings.json" in owned["files"]
+    status, note = configure_claude(settings, remove, dry_run, created)
+    return Step("Claude Code", status, settings, note, "hooks")
+
+
 def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[Step]:
     home = home or Path.home()
     rules = rules.expanduser().resolve()
@@ -233,6 +252,7 @@ def link(rules: Path, home: Path | None = None, dry_run: bool = False) -> list[S
     steps.append(
         _install_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run, home)
     )
+    steps.append(_claude_hook(home, False, dry_run))
 
     # Antigravity: a plugin whose rules file is a link to ours.
     plugin = _plugin(home)
@@ -369,6 +389,7 @@ def unlink(rules: Path, home: Path | None = None, dry_run: bool = False) -> list
             claude.write_text(leftover, encoding="utf-8")
         steps.append(Step("Claude Code", "removed", claude, line))
 
+    steps.append(_claude_hook(home, True, dry_run, owned))
     steps.append(
         _remove_skill("Claude Code", home / ".claude" / "skills" / "faildex", dry_run, home, owned)
     )

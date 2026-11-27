@@ -15,8 +15,8 @@ INSTALL = "curl -fsSL https://raw.githubusercontent.com/dtype2100/faildex/main/i
 APPROVE = "faildex rules --approve 1 3 --to ~/faildex-rules.md"
 
 # Claude Code's PostToolUseFailure hook (the same command works as a PreToolUse hook).
-# `faildex link` does not add it; the person pastes it into ~/.claude/settings.json. The
-# README shows this same text.
+# `faildex link` puts it into ~/.claude/settings.json (agent_hooks.configure_claude); this
+# text is for a project's .claude/settings.json. The README shows this same text.
 CLAUDE_HOOK = (
     '{"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [\n'
     '  {"type": "command", "command": "faildex hook", "timeout": 5}\n'
