@@ -115,11 +115,13 @@ WOULD = {"installed": "would install", "moved": "would move", "updated": "would 
 
 def _faildex_hook_command(command: object) -> bool:
     """A `faildex hook ...` command line, however faildex is named: `faildex hook`, an
-    absolute path to it (`/x/.venv/bin/faildex hook --store ...`), `faildex.exe`."""
+    absolute path to it (`/x/.venv/bin/faildex hook --store ...`), `faildex.exe`. A line
+    that chains other commands (`&&`, `||`, `;`, `|`, a line break) is not faildex's
+    alone, so link neither moves nor removes it."""
     import shlex
     from pathlib import PureWindowsPath
 
-    if not isinstance(command, str):
+    if not isinstance(command, str) or any(op in command for op in ("&&", "||", ";", "|", "\n")):
         return False
     try:
         words = shlex.split(command, posix=False)

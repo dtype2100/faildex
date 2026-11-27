@@ -182,8 +182,10 @@ class Failure:
     recovered: int = 0
     evidence: list[str] = field(default_factory=list)
     runs: int = 0  # all runs of the command, set when the failure is looked up for one command
-    # Failed calls per session, so a hook can leave out the session it is in.
+    # Failed calls and recoveries (fix -> count) per session, so a hook can leave out
+    # the session it is in.
     session_calls: Counter = field(default_factory=Counter)
+    session_fixes: dict = field(default_factory=dict)
 
     @property
     def command(self) -> str | None:
@@ -310,6 +312,7 @@ def failures(
         if scoped
         else db.execute(scope + _RECOVERIES, params)
     )
+    session_of = {row["call"]: row["session"] for row in failed}
     for row in recoveries:
         sig = shell_sig(row["sig"]) or row["sig"]
         item = found.get(sig)
@@ -318,7 +321,9 @@ def failures(
         item.recovered += 1
         step = row["step"] or row["tool"]
         retried = row["hops"] == 1 or step == row["command"]
-        item.fixes[RETRY if retried else step] += 1
+        fix = RETRY if retried else step
+        item.fixes[fix] += 1
+        item.session_fixes.setdefault(session_of.get(row["call"]), Counter())[fix] += 1
     return found
 
 

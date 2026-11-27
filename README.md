@@ -339,7 +339,7 @@ of [First install](#first-install-once-in-this-order), which says what each one 
 faildex ingest    # reads every default folder it finds; or pass --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 cd ~ && faildex rules --approve 1 3   # write the ones you want to ~/faildex-rules.md
-faildex link      # install the skill and rules, including Codex/Cursor session and shell hooks; --remove undoes it
+faildex link      # install the skill and rules, the Claude Code hook after a failure and Codex/Cursor session-start hooks; --remove undoes it
 ```
 
 Example `faildex rules --top 2` output (on the public store):
@@ -503,7 +503,7 @@ your own logs to get yours.
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer; the same graph and queries running in Relate WebAssembly in the browser demo, with each failure's neighbourhood drawn |
 | Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS, Linux and Windows |
-| Usefulness | 68% of later failures were already in the graph; in a real Claude Code run (`claude -p`, Haiku) Claude received the hook's notice right after a failed command and quoted it word for word; it speaks only when other sessions had the same failure and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
+| Usefulness | 68% of later failures were already in the graph; in one real Claude Code run (`claude -p`, Haiku) on a synthetic seeded store, Claude received the hook's notice right after a failed command and quoted it word for word: delivery, not an effect (whether it reduces repeats [was not measured](docs/evaluation.md#notices-right-after-a-failure-claude-code-posttoolusefailure)); it speaks only when other sessions had the same failure and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md` (each rule of the method mapped to the test that guards it); every number comes from `make eval` on the committed store, a test fails if a document disagrees, and the WebAssembly build reaches the same numbers |
 | Creativity | Failures learned by one agent become rules and notices for the next session, with the log lines as evidence |
 

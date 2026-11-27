@@ -31,7 +31,7 @@ def _answer(out: str) -> None:
     assert out == "" or json.loads(out)["hookSpecificOutput"]["hookEventName"] == POST
 
 
-def test_hook_takes_scripts_containing_double_lt_without_error(public_copy):
+def test_hook_is_silent_for_lines_with_a_heredoc(public_copy):
     for command in [
         "git status <<'EOF'\nhello\nEOF",
         "cat <<EOF | git status\n$(private_customer_command)\nEOF",
@@ -41,9 +41,9 @@ def test_hook_takes_scripts_containing_double_lt_without_error(public_copy):
         "cat <<-EOF\n\t$(private_customer_command)\n\tEOF\ngit status",
         "cat <<EOF | grep x",
     ]:
-        out = respond(git_status(command), public_copy)
-        _answer(out)
-        assert "private_customer_command" not in out
+        # A line with a heredoc gets no command template, so no key and no notice, even
+        # when it fails the way the public store knows `git status` fails.
+        assert respond(git_status(command), public_copy) == ""
 
 
 def test_zsh_glob_fixtures_record_one_shared_failure():

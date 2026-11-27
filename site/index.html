@@ -397,7 +397,7 @@
 
 <script type="module">
 import init, { RelateDb } from "./vendor/relate.js";
-import { load, run, evaluate, Q } from "./graph.js";
+import { load, run, evaluate, notices, shellSig, Q } from "./graph.js";
 import { LANGS, applyStatic, lang, switchTo, t } from "./i18n.js";
 
 applyStatic();
@@ -792,8 +792,8 @@ async function main() {
   drawMap();
 
   {
-    const g = run(db, Q.preflight, { command: "git status" })[0];
-    $("mini-hook").textContent = g ? `  ⎿ Error: ${g.known_failure}\n  ⎿ PostToolUseFailure:Bash says: faildex: \`git status\` failed with \`${g.known_failure}\` in ${g.sessions} earlier sessions; no recovery on record.` : "";
+    const g = notices(db, run, "git status")[0];
+    $("mini-hook").textContent = g ? `  ⎿ Error: ${g.known_failure}\n  ⎿ PostToolUseFailure:Bash says: ${g.notice}` : "";
   }
 
   // ---- the notice right after a failure
@@ -802,7 +802,7 @@ async function main() {
   $("templates").innerHTML = templates.map((t) => `<option value="${esc(t)}">`).join("");
   $("tries").innerHTML = [...warned.slice(0, 4), "ls", "npm test", "python app.py"].filter((v, i, a) => a.indexOf(v) === i)
     .map((t) => `<button type="button">${esc(t)}</button>`).join("");
-  $("q-check").textContent = [Q.preflight, Q.recovery].join("\n\n");
+  $("q-check").textContent = [Q.preflight, Q.recoveryOf].join("\n\n");
   const templateOf = (line) => {
     const s = line.trim().replace(/\s+/g, " ");
     let best = null;
@@ -813,24 +813,20 @@ async function main() {
     const line = $("cmd").value;
     const template = templateOf(line);
     if (!template) { $("term").innerHTML = `<span class="dim">${t("check.type")}</span>`; $("check-note").textContent = ""; return; }
-    const known = run(db, Q.preflight, { command: template });
+    const known = notices(db, run, template);
     const shown = esc(line.trim() || template);
     if (!known.length) {
       $("term").innerHTML = `<div>● Bash(${shown})</div><div class="quiet">  ⎿ ${t("check.noNotice")}</div><div class="dim" style="margin-top:14px">${t("check.silent", { cmd: `<span class="quiet">${esc(template)}</span>` })}</div>`;
       $("check-note").textContent = t("check.silentNote", { cmd: template });
       return;
     }
-    const k = known[0];
-    const fixes = run(db, Q.recovery, { failure: k.known_failure }).filter((r) => r.command === template);
-    let after = "no recovery on record";
-    if (fixes.length) {
-      const top = fixes[0];
-      after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
-    }
-    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="dim">  ⎿ Error: ${esc(k.known_failure)}</div><div class="hook">  ⎿ PostToolUseFailure:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
-    const allStats = totalsByFailure[k.known_failure];
+    // The failure picked in step 2, if this command had it; else the command's most common one.
     const picked = recurring[current];
-    const sameFailure = picked && picked.failure === k.known_failure;
+    const pickedSig = picked && (shellSig(picked.failure) || picked.failure);
+    const k = known.find((x) => x.known_failure === pickedSig) || known[0];
+    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="dim">  ⎿ Error: ${esc(k.known_failure)}</div><div class="hook">  ⎿ PostToolUseFailure:Bash says: ${esc(k.notice)}</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
+    const allStats = totalsByFailure[k.known_failure];
+    const sameFailure = pickedSig === k.known_failure;
     const diffScope = allStats && (allStats.sessions !== k.sessions || allStats.calls !== k.calls);
     const scopeVars = {
       totalS: allStats ? allStats.sessions : k.sessions,

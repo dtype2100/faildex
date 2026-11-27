@@ -230,8 +230,8 @@ was built, and what was not measured.
   that runs several programs, no paths and no evidence pointers. The quoted error
   is marked as what earlier sessions recorded, data and not instructions, with
   control characters removed and each line capped at 1,000 characters.
-- **Silence.** Not Bash; an empty or non-string `error`; an interrupted call
-  (`is_interrupt`, exit 130 or 143); a payload over 1,000,000 characters; no key;
+- **Silence.** Not Bash; an empty or non-string `error`; a call stopped from
+  outside (`is_interrupt`, exit 130 or 143); a payload over 1,000,000 characters; no key;
   no match; too few other sessions. A session is told again each time it repeats
   the failure: the hook keeps no state on its normal path, and a repeat is when
   the notice matters again.
@@ -276,6 +276,10 @@ often the hook speaks depends on how many sessions a store holds.
   `2>/dev/null` exits 0 and fires no `PostToolUseFailure`. In 5 of those 8 tasks
   the hook ran in at most 2 of 4 runs: the model checked first, quoted, or hid
   the exit code.
+- **Timeouts are silent too.** Exit 143 is SIGTERM, and Claude Code's own Bash
+  timeout ends that way (`Exit code 143`, `Command timed out after <n>s`). Its key
+  matches the store's, but the hook says nothing about it, as for any call stopped
+  from outside.
 - **Out of scope.** Tools other than Bash; Codex and Cursor, which get the rules
   at session start only (Cursor has `postToolUseFailure`, which faildex does not
   use; Codex has no failure event). With `--refresh-every`, the hook counts failed

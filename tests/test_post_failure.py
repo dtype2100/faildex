@@ -22,6 +22,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "post_failure"
 PUSH_ERROR = "fatal: the current branch has no upstream branch"
 CONFIG_ERROR = "error: config value missing"
 NPM_ERROR = "npm ERR! cipm can only install with a lockfile"
+TF_ERROR = "Error: No configuration files"
 SESSION = "sess-me"
 
 
@@ -82,6 +83,8 @@ def seeded(tmp_path_factory):
     `make` fails with CONFIG_ERROR in sessions a and b and works on the next try; d
     runs it 100 times without a failure, so the failure is under 3% of its runs.
     `npm ci` fails in session a only, and `cargo build` only in `me` and `x`.
+    `terraform plan` fails with TF_ERROR in a and b with no way out, and in `me`, which
+    got past it by running `cd` (into the right folder) first.
     """
     base = tmp_path_factory.mktemp("seeded")
     logs = base / "logs"
@@ -91,10 +94,13 @@ def seeded(tmp_path_factory):
         calls = push + [("make", CONFIG_ERROR), ("make", None)] if name != "c" else push
         if name == "a":
             calls = calls + [("npm ci", NPM_ERROR)]
+        if name in ("a", "b"):
+            calls = calls + [("terraform plan", TF_ERROR)]
         _session(logs / f"{name}.jsonl", f"sess-{name}", calls)
     _session(logs / "d.jsonl", "sess-d", [("make", None)] * 100)
     mine = [("git push", PUSH_ERROR), ("git push", PUSH_ERROR), ("cargo build", "error[E0425]")]
-    _session(logs / "me.jsonl", SESSION, mine)
+    terraform = [("terraform plan", TF_ERROR), ("cd infra", None), ("terraform plan", None)]
+    _session(logs / "me.jsonl", SESSION, mine + terraform)
     _session(logs / "me-x.jsonl", SESSION, mine, agent="x")
     store = base / "store"
     with pytest.MonkeyPatch.context() as mp:  # module scope: before conftest's own home
@@ -261,6 +267,17 @@ def test_the_own_session_and_its_subagents_are_left_out_of_the_counts(seeded):
     assert "(seen in 2 sessions, 2 calls)" in respond(_failed(*cargo, "new"), seeded)
 
 
+def test_the_own_sessions_recoveries_are_not_offered_as_earlier_sessions(seeded):
+    """Only `me` got past the terraform failure: from `me`, the other two sessions have
+    no recovery on record; from a new session, `me`'s recovery counts."""
+    data = _said(respond(_failed("terraform plan", TF_ERROR), seeded))
+    context = data["hookSpecificOutput"]["additionalContext"]
+    assert "(seen in 2 sessions, 2 calls): no recovery on record" in context
+    assert "`cd`" not in context and "`cd`" not in data["systemMessage"]
+    other = respond(_failed("terraform plan", TF_ERROR, "new"), seeded)
+    assert "running `cd` first (1 of 1 recoveries)" in other
+
+
 def test_a_payload_that_is_not_json_is_silent(seeded):
     assert respond('{"hook_event_name": "PostToolUseFailure", ', seeded) == ""
 
@@ -389,3 +406,67 @@ def test_stored_text_is_handed_on_without_control_characters_and_capped():
     assert _clean("a\x1b[31mb\x07c" + chr(0x202E) + "d\n") == "a [31mb c d "
     long = _clean("x" * (MAX_LINE * 2))
     assert len(long) == MAX_LINE and long.endswith("…")
+
+
+# --refresh-every on the error paths, and the stdin bound ---------------------------------
+
+
+def test_refresh_every_with_a_store_that_cannot_be_chosen_stays_quiet(monkeypatch, capsys):
+    from faildex import cli
+
+    def broken(args):
+        raise RuntimeError("Symlink loop from '~/.faildex/store'")
+
+    monkeypatch.setattr(cli, "_hook_store", broken)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(SPEAKS))
+    assert main(["hook", "--refresh-every", "200"]) == 0
+    out = capsys.readouterr()
+    assert (out.out, out.err) == ("", "")
+
+
+def test_refresh_every_with_stdin_that_is_not_utf8_stays_quiet(seeded, monkeypatch, capsys):
+    noted = []
+    monkeypatch.setattr(refresh, "note", lambda store, every: noted.append(store))
+    stdin = io.TextIOWrapper(io.BytesIO(b'{"error": "\xff\xfe"}'), encoding="utf-8")
+    monkeypatch.setattr(sys, "stdin", stdin)
+    assert main(["hook", "--store", str(seeded), "--refresh-every", "200"]) == 0
+    out = capsys.readouterr()
+    assert (out.out, out.err, noted) == ("", "", [])
+
+
+def test_stdin_is_read_up_to_the_bound_and_a_longer_payload_is_not_counted(
+    seeded, monkeypatch, capsys
+):
+    from faildex.hook import MAX_STDIN
+
+    asked = []
+
+    class Stdin(io.StringIO):
+        def read(self, size=-1):
+            asked.append(size)
+            return super().read(size)
+
+    noted = []
+    monkeypatch.setattr(refresh, "note", lambda store, every: noted.append(store))
+    long = json.dumps({**json.loads(SPEAKS), "padding": "x" * MAX_STDIN})
+    monkeypatch.setattr(sys, "stdin", Stdin(long))
+    assert main(["hook", "--store", str(seeded), "--refresh-every", "200"]) == 0
+    assert capsys.readouterr().out == "" and noted == []
+    assert asked == [MAX_STDIN + 1]
+
+
+def test_the_payload_is_parsed_once(seeded, monkeypatch, capsys):
+    from faildex import hook
+
+    real, parsed = json.loads, []
+
+    def loads(text, *args, **kwargs):
+        if text == SPEAKS:
+            parsed.append(1)
+        return real(text, *args, **kwargs)
+
+    monkeypatch.setattr(hook.json, "loads", loads)
+    monkeypatch.setattr(refresh, "note", lambda store, every: None)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(SPEAKS))
+    assert main(["hook", "--store", str(seeded), "--refresh-every", "200"]) == 0
+    assert _said(capsys.readouterr().out) and parsed == [1]

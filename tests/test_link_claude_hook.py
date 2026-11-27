@@ -285,6 +285,11 @@ def test_configure_claude_alone(tmp_path):
         ("echo faildex hook", False),
         ("python -m faildex hook", False),
         (None, False),
+        ("faildex hook && other-tool notify", False),
+        ("faildex hook || true", False),
+        ("faildex hook; other-tool", False),
+        ("faildex hook | tee /tmp/x", False),
+        ("faildex hook\nother-tool", False),
         ('faildex hook "unclosed', False),
     ],
 )

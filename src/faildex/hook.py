@@ -7,8 +7,8 @@ the same command template in at least `min_sessions` other sessions (the session
 hook runs in and its subagents left out), it tells the agent so as `additionalContext`,
 with the recovery on record, and shows the person one line (`systemMessage`). A
 precedent alone is enough. On a line that runs several programs it names no next step.
-Interrupted calls (exit 130 and 143), empty errors and payloads over MAX_STDIN
-characters get nothing.
+Calls stopped from outside (exit 130, and exit 143, which includes Claude Code's own
+Bash timeout), empty errors and payloads over MAX_STDIN characters get nothing.
 
 Anything else is silence: a PreToolUse payload, a Codex or Cursor shell event (from a
 setup an earlier faildex made, or one made by hand), any other event. faildex gives no
@@ -153,26 +153,33 @@ def _found(store: Path, payload: object, rebuild: bool, speak):
             index.start_rebuild(store)
 
 
-def after_failure(raw: str, agent: str = "claude") -> bool:
-    """Whether a payload is a Claude Code PostToolUseFailure event: the only one the hook
-    answers besides session start, and the only one `--refresh-every` counts."""
+def failure_payload(raw: str, agent: str = "claude") -> dict | None:
+    """The payload of a Claude Code PostToolUseFailure event, parsed once: the only event
+    the hook answers besides session start, and the only one `--refresh-every` counts.
+    None for another agent, a payload over MAX_STDIN characters (not even parsed), text
+    that is not JSON, and any other event."""
+    if agent != "claude" or len(raw) > MAX_STDIN:
+        return None
     try:
         payload = json.loads(raw)
     except (ValueError, RecursionError):
-        return False
-    return (
-        agent == "claude"
-        and isinstance(payload, dict)
-        and payload.get("hook_event_name") == POST_FAILURE
-    )
+        return None
+    if isinstance(payload, dict) and payload.get("hook_event_name") == POST_FAILURE:
+        return payload
+    return None
 
 
-def _failed_call(raw: str, payload: object):
+def after_failure(raw: str, agent: str = "claude") -> bool:
+    """Whether `raw` is a PostToolUseFailure event the hook answers (`failure_payload`)."""
+    return failure_payload(raw, agent) is not None
+
+
+def _failed_call(payload: dict):
     """The store's record of the failed Bash call a PostToolUseFailure payload reports,
     with a failure key and a command; None for anything to stay silent about."""
     from faildex.adapters.claude_code import failed_call
 
-    if len(raw) > MAX_STDIN or _shell_command(payload) is None:
+    if _shell_command(payload) is None:
         return None
     error = payload.get("error")
     if not isinstance(error, str) or not error.strip() or payload.get("is_interrupt") is True:
@@ -205,6 +212,7 @@ def _clean(text: str, limit: int = MAX_LINE) -> str:
 def _precedent(source, record, min_sessions: int):
     """The same failure of the same command in at least `min_sessions` other sessions,
     counted without the hook's own session family; None when there is none."""
+    from collections import Counter
     from dataclasses import replace
 
     from faildex.insight import failures
@@ -224,7 +232,19 @@ def _precedent(source, record, min_sessions: int):
     if len(others) < min_sessions:
         return None
     mine = sum(n for session, n in item.session_calls.items() if own(session))
-    return replace(item, sessions=others, calls=item.calls - mine, runs=0)
+    fixes = Counter(item.fixes)
+    for session, found in item.session_fixes.items():
+        if isinstance(session, str) and own(session):
+            fixes.subtract(found)
+    fixes = Counter({fix: n for fix, n in fixes.items() if n > 0})
+    return replace(
+        item,
+        sessions=others,
+        calls=item.calls - mine,
+        fixes=fixes,
+        recovered=sum(fixes.values()),
+        runs=0,
+    )
 
 
 def _post_warning(source, record, min_sessions: int) -> tuple[str, str] | None:
@@ -241,6 +261,9 @@ def _post_warning(source, record, min_sessions: int) -> tuple[str, str] | None:
         ]
     )
     return context, _clean(item.notice(step=step))
+
+
+_UNREAD = object()  # respond() parses the payload itself
 
 
 def quiet(agent: str = "claude", event: str = "tool") -> str:
@@ -260,11 +283,13 @@ def respond(
     event: str = "tool",
     rules: Path | None = None,
     rebuild: bool = False,
+    payload: object = _UNREAD,
 ) -> str:
     """Hook stdout for one stdin payload; empty when there is nothing to say.
 
     With `rebuild`, a missing or stale index is rebuilt in the background (the CLI asks
-    for it; a test calling this directly does not)."""
+    for it; a test calling this directly does not). `payload` is `failure_payload(raw,
+    agent)` when the caller has parsed it already."""
     silent = quiet(agent, "tool")
     try:
         if event == "session-start":
@@ -284,10 +309,11 @@ def respond(
                     }
                 }
             )
-        if not after_failure(raw, agent):
+        if payload is _UNREAD:
+            payload = failure_payload(raw, agent)
+        if payload is None:
             return silent  # no warning before a command: PreToolUse, Codex, Cursor
-        payload = json.loads(raw)
-        record = _failed_call(raw, payload)
+        record = _failed_call(payload)
         if record is None:
             return silent
         warning = _found(

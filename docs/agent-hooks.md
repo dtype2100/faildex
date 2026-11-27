@@ -31,9 +31,14 @@ This encoding is not encryption.
 
 An event before a shell command (Codex `PreToolUse`, Cursor `beforeShellExecution`,
 or a Claude Code `PreToolUse` from an earlier setup) gets no answer: nothing for Claude
-Code and Codex, only `allow` for Cursor, so nothing is blocked and old command lines
-such as `faildex hook --agent codex --event pre-shell` still run. faildex warns no
-agent before a command; `faildex link` takes such entries out.
+Code and Codex, only `allow` for Cursor, so nothing is blocked and the command lines an
+earlier `faildex link` wrote still run. faildex gives no agent anything before its
+command runs; `faildex link` takes such entries out.
+
+The Claude Code hook also stays silent after a call stopped from outside: exit 130
+(SIGINT) and exit 143 (SIGTERM), which includes Claude Code's own Bash timeout
+(`Command timed out after <n>s`). It stays silent too for an empty error, a payload
+over 1,000,000 characters, and a failure no other session had.
 
 Codex requires new or changed hooks to be reviewed and trusted in `/hooks`.
 Trust the faildex command, then start a new session. A session started before
@@ -53,7 +58,7 @@ See [the three checks, restored configuration and remaining work](agent-hook-ver
 Official protocol references, checked 2026-11-19:
 
 - [Codex hooks](https://learn.chatgpt.com/docs/hooks): configuration, trust, input and output.
-- [Cursor hooks](https://cursor.com/docs/hooks): session and shell event schemas.
+- [Cursor hooks](https://cursor.com/docs/hooks): event schemas.
 
 Cursor Cloud does not load user-home hooks or support `sessionStart`; this setup
 targets local sessions.
@@ -68,7 +73,7 @@ keeps it current. In `~/.claude/settings.json`:
 
 Each call counts itself, and the call that finds the store due starts
 `faildex ingest --store <the hook's store>` as a detached background process and
-returns at once, so the warning is not delayed. The store is due when either holds:
+returns at once, so the notice is not delayed. The store is due when either holds:
 
 - `N` hook calls have gathered since the last refresh started;
 - the store has not been written for 24 hours (a manual `faildex ingest` counts).
@@ -91,7 +96,7 @@ calls since are the size now minus that). `<store>-refresh.log` gets one line wh
 refresh starts (pid, calls, reason) and one when it ends (exit code, sessions and
 calls in the store, seconds), with the ingest's own output between them. If the
 counter or lock cannot be written, or the ingest cannot be started, the hook still
-prints its warning and says nothing about the refresh.
+prints its notice and says nothing about the refresh.
 
 `faildex ingest` writes on a copy of the store and swaps the copy in when it is
 done, as `faildex build-store` does, so the store a reader sees is never half
@@ -121,9 +126,10 @@ Opening a Relate store takes most of a hook call, and a hook that opens the stor
 can meet an ingest replacing it. So after writing the store, `faildex ingest` writes
 `<store>-index.json` next to it: for each command template that has failed, its run
 count and every one of its failures (sessions, calls, recoveries, fixes, evidence),
-and the failures pooled across commands for the shell rules. It holds data, not
-sentences; the hook builds the same text as before from it, so any `--min-sessions`
-or `--top` gives what the store would. The file is written to a temporary file in
+with the failed calls and the recoveries of each session, so the hook can leave out
+the session it runs in (index format 2). It holds data, not sentences; the hook
+builds its notice from it with the same functions as from the store, so any
+`--min-sessions` gives what the store would. The file is written to a temporary file in
 the same folder, flushed to disk and renamed over the old one, so a reader sees the
 old index or the new one.
 
@@ -143,7 +149,7 @@ entry, another format version), the hook reads the store itself, read-only, and 
 nothing if that fails, with one exception. A store never opened on this machine (a
 fresh clone, a fresh install, a store copied from another machine) refuses a
 read-only open, so the hook prepares it, as every faildex
-command does on a first open, and warns from the first call. faildex's own public
+command does on a first open, and speaks from the first call. faildex's own public
 demo store (shipped in the package or the checkout) is prepared as its cache copy
 (`~/.cache/faildex/store-<hash>/`, the copy other faildex commands use), never inside
 the package. Any other folder is prepared where it is, and only if it looks like a

@@ -208,19 +208,21 @@ def _hook(args: argparse.Namespace) -> int:
     """Whatever goes wrong, the hook answers as it does when it has nothing to say."""
     import sys
 
-    from faildex.hook import after_failure, quiet, respond
+    from faildex.hook import MAX_STDIN, failure_payload, quiet, respond
 
     if args.write_index is not None:  # started in the background by a hook with no index
         from faildex.index import rebuild
 
         return rebuild(args.store or _hook_store(args), args.write_index or None)
+    raw, payload = "", None
     try:
         from faildex.i18n import use
 
         use("en")  # an agent reads this, whatever language the person chose
         if args.store is None:
             args.store = _hook_store(args)
-        raw = sys.stdin.read()
+        raw = sys.stdin.read(MAX_STDIN + 1)  # more than that is not read, let alone answered
+        payload = failure_payload(raw, args.agent)
         out = respond(
             raw,
             args.store,
@@ -230,6 +232,7 @@ def _hook(args: argparse.Namespace) -> int:
             event=args.event,
             rules=args.encoded_rules or args.rules,
             rebuild=True,
+            payload=payload,
         )
     except Exception:  # noqa: BLE001 - the hook must never break the session it watches
         out = quiet(args.agent, args.event)
@@ -238,10 +241,10 @@ def _hook(args: argparse.Namespace) -> int:
             print(out)
     except Exception:  # noqa: BLE001, S110 - a closed pipe is not worth a traceback
         pass
-    if args.refresh_every and after_failure(raw, args.agent):
+    if args.refresh_every:
         try:
             sys.stdout.flush()  # the notice first; counting comes after and cannot hide it
-            target = _refresh_target(args)
+            target = _refresh_target(args) if payload is not None else None  # failures only
             if target is not None:
                 from faildex.refresh import note
 

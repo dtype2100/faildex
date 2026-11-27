@@ -261,6 +261,7 @@ def test_rule_text_in_both_languages_is_identical(which, request):
                         i.score,
                         i.evidence,
                         dict(i.session_calls),
+                        {s: dict(f) for s, f in i.session_fixes.items()},
                     )
                     for i in items
                 )

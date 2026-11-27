@@ -1,5 +1,6 @@
 """The numbers in the documents are the numbers `make eval` prints."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -64,6 +65,64 @@ def test_relate_webassembly_reaches_the_same_numbers(results, tmp_path):
         both.recurring,
         both.warnable,
     )
+
+
+def test_the_browser_demo_says_what_the_hook_says_after_a_failure(public_copy):
+    """For every command with a failure seen in two or more sessions of the public store
+    (and a few without), the demo's notice is the hook's own, word for word, from a
+    session that is not in the store: no 3% share, the same branches of the wording."""
+    import json
+    import shutil
+    import subprocess
+    from types import SimpleNamespace
+
+    from faildex.hook import _post_warning
+    from faildex.insight import failures
+
+    site = ROOT / "site"
+    if not shutil.which("node") or not (site / "vendor" / "relate_bg.wasm").is_file():
+        pytest.skip("run `make site` first (needs Node)")
+    if not (site / "data.json").is_file():
+        pytest.skip("run `make site` first")
+    db = open_store(public_copy)
+    try:
+        rows = db.execute(
+            "MATCH (k:Command)<-[:RAN]-(f:Call)-[:FAILED_WITH]->(:ErrorSig), "
+            "(f)<-[:HAS_CALL]-(s:Session) RETURN DISTINCT k.template AS t"
+        )
+        commands = sorted({r["t"] for r in rows}) + ["ls", "npm test"]
+        expected = {}
+        for command in commands:
+            said = {}
+            for sig, item in failures(db, command).items():
+                record = SimpleNamespace(
+                    command=command,
+                    failure=(sig, item.kind),
+                    compound=False,
+                    session_id="demo",
+                    session_key="claude-code:demo",
+                )
+                found = _post_warning(db, record, 2)
+                if found:
+                    said[sig] = found[1]
+            expected[command] = said
+    finally:
+        db.close()
+    out = subprocess.run(
+        ["node", str(site / "check.mjs"), *commands],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
+    shown = {
+        command: {item["known_failure"]: item["notice"] for item in items}
+        for command, items in json.loads(out.stdout)["notices"].items()
+    }
+    assert shown == expected
+    assert sum(map(len, expected.values())) > 0
+    for command in ("Get-ChildItem", "rg", "git status"):  # under 3% of runs, or not
+        assert expected[command], command
 
 
 def test_every_test_named_in_the_evaluation_doc_exists():
@@ -278,3 +337,61 @@ def test_the_bench_quotes_the_hook_command(tmp_path):
     [entry] = config["hooks"]["PreToolUse"][0]["hooks"]
     assert shlex.split(entry["command"]) == [exe, "hook", "--store", str(store), "--log", str(log)]
     assert bench.settings("off", {"on": exe}, store, log) == {}
+
+
+# Words that would offer a warning before a command again (faildex removed it). The
+# evaluation record (docs/evaluation.md, the README's evaluation sections, the hook
+# verification notes) keeps its history and is left out.
+PRE_RUN_GUIDANCE = (
+    "--event pre-shell",
+    "shell hook",
+    "session and shell",
+    "before a command",
+    "before each command",
+    "warns before",
+    "warning before",
+    "셸 훅",
+    "세션·셸",
+    "실행 전 경고",
+    "명령 전 경고",
+    "명령마다 미리",
+)
+RECORD_SECTIONS = {
+    "README.md": ("## Evaluation", "## Across agents, on real logs"),
+    "README.ko.md": ("## 평가", "## 여러 에이전트에 걸쳐, 실제 기록에서"),
+}
+
+
+def _without(text: str, headings: tuple[str, ...]) -> str:
+    parts = re.split(r"(?m)^(?=## )", text)
+    return "".join(p for p in parts if not p.startswith(headings))
+
+
+def test_nothing_offers_a_warning_before_a_command(capsys):
+    from faildex.cli import main
+    from faildex.guide import EXAMPLES, commands
+    from faildex.i18n import CATALOG
+
+    texts = {
+        name: _without((ROOT / name).read_text(encoding="utf-8"), heads)
+        for name, heads in RECORD_SECTIONS.items()
+    }
+    texts["docs/agent-hooks.md"] = (ROOT / "docs" / "agent-hooks.md").read_text(encoding="utf-8")
+    texts["i18n"] = "\n".join(
+        f"{key}: {value}"
+        for catalog in CATALOG.values()
+        for key, value in catalog.items()
+        if not key.startswith("eval.")
+    )
+    texts["examples"] = "\n".join([*commands(), *(c for ex in EXAMPLES.values() for c in ex)])
+    for lang in ("en", "ko"):
+        for argv in (["help"], ["help", "hook"], ["help", "link"]):
+            assert main(["--lang", lang, *argv]) == 0
+            texts[f"faildex --lang {lang} {' '.join(argv)}"] = capsys.readouterr().out
+    found = [
+        (name, phrase)
+        for name, text in texts.items()
+        for phrase in PRE_RUN_GUIDANCE
+        if phrase.lower() in text.lower()
+    ]
+    assert found == []

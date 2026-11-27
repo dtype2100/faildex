@@ -28,7 +28,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-# 2: each failure's sessions carry their failed-call counts (`Failure.session_calls`), and
+# 2: each failure's sessions carry their failed-call counts and recoveries
+# (`Failure.session_calls`, `Failure.session_fixes`), and
 # the failures pooled for the warning before a command (gone) are no longer kept.
 INDEX_VERSION = 2
 # A failed background rebuild is not retried sooner than this.
@@ -74,6 +75,14 @@ def _encode(item) -> dict:
         "fixes": list(item.fixes.items()),
         "recovered": item.recovered,
         "evidence": item.evidence,
+        "session_fixes": sorted(
+            (
+                [session, fix, n]
+                for session, fixes in item.session_fixes.items()
+                for fix, n in fixes.items()
+            ),
+            key=lambda row: (str(row[0]), str(row[1])),
+        ),
     }
 
 
@@ -96,6 +105,11 @@ def _decode(row: dict):
         and isinstance(row.get("agents"), list)
         and all(_pairs(row.get(key)) for key in ("sessions", "commands", "tools", "fixes"))
         and all(isinstance(session, str) for session, _ in row["sessions"])
+        and isinstance(row.get("session_fixes"), list)
+        and all(
+            isinstance(entry, list) and len(entry) == 3 and type(entry[2]) is int
+            for entry in row["session_fixes"]
+        )
         and (row["commands"] or row["tools"])  # the rule names one of them
         and isinstance(row.get("evidence"), list)
         and all(isinstance(pointer, str) for pointer in row["evidence"])
@@ -113,7 +127,15 @@ def _decode(row: dict):
         recovered=row["recovered"],
         evidence=list(row["evidence"]),
         session_calls=Counter(dict(row["sessions"])),
+        session_fixes=_session_fixes(row["session_fixes"]),
     )
+
+
+def _session_fixes(rows: list) -> dict:
+    out: dict = {}
+    for session, fix, n in rows:
+        out.setdefault(session, Counter())[fix] = n
+    return out
 
 
 _FAILED_COMMANDS = """

@@ -334,7 +334,7 @@ make serve     # http://localhost:8765
 faildex ingest    # 기본 폴더를 찾아 모두 읽음. 다른 위치는 --claude, --codex-sessions, --cursor, --antigravity DIR
 faildex rules
 cd ~ && faildex rules --approve 1 3   # 원하는 규칙만 ~/faildex-rules.md에 기록
-faildex link      # 스킬·규칙 및 Codex/Cursor 세션·셸 훅 설치. --remove로 되돌림
+faildex link      # 스킬·규칙, Claude Code 실패 직후 훅, Codex/Cursor 세션 시작 훅 설치. --remove로 되돌림
 ```
 
 `faildex rules --top 2` 출력 예시(공개 스토어 기준):
@@ -488,7 +488,7 @@ PowerShell, 다른 하나는 Linux의 bash라서 둘 다에 나오는 실패가 
 |---|---|
 | Relate와 연결된 맥락의 활용 | 공유 `Command`/`ErrorSig` 노드가 있는 스키마, `NEXT` 경로로 읽는 복구, 제약, 커밋된 디렉터리 스토어, 쓰는 쪽 옆의 읽기 전용 읽는 쪽, 브라우저 데모의 Relate WebAssembly에서 도는 같은 그래프와 질의, 실패마다 그려지는 이웃 |
 | 기능 | 한 줄 설치와 `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; Relate WebAssembly 브라우저 데모; macOS·Linux·Windows CI |
-| 유용성 | 뒤 기간 실패의 68%가 이미 그래프에 있었음; 실제 Claude Code 실행(`claude -p`, Haiku)에서 Claude가 명령이 실패한 직후 훅의 알림을 받아 그대로 인용함; 다른 세션도 같은 실패를 겪었을 때만 말하고 나머지에는 침묵; 작성자 기록에서 세 에이전트가 공유한 실패 키 12개 |
+| 유용성 | 뒤 기간 실패의 68%가 이미 그래프에 있었음; 합성 시드 스토어로 한 실제 Claude Code 실행 1회(`claude -p`, Haiku)에서 Claude가 명령이 실패한 직후 훅의 알림을 받아 그대로 인용함. 전달 확인이며 효과가 아님(반복 감소는 [측정하지 않음](docs/evaluation.md#notices-right-after-a-failure-claude-code-posttoolusefailure)); 다른 세션도 같은 실패를 겪었을 때만 말하고 나머지에는 침묵; 작성자 기록에서 세 에이전트가 공유한 실패 키 12개 |
 | 문서와 재현성 | 이 파일, `docs/schema.md`, `docs/evaluation.md`(방법의 각 규칙을 지키는 테스트와 짝지음); 모든 수치는 커밋된 스토어에서 `make eval`로 나오고, 문서가 다르면 테스트가 실패하며, WebAssembly 빌드도 같은 수치에 도달 |
 | 창의성 | 한 에이전트가 배운 실패가 다음 세션의 규칙과 알림이 되고, 로그 위치가 근거로 붙음 |
 
