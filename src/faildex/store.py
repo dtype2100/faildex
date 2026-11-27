@@ -21,8 +21,12 @@ STORE_PARTS = ("manifest.json", "nodes", "relationships", ".cypherlite")
 _HERE = Path(__file__).resolve().parent
 
 
-def open_store(path: str | Path, read_only: bool = True):
-    """Connect to the store at `path`. Raises FileNotFoundError when there is none."""
+def open_store(path: str | Path, read_only: bool = True, *, wait: bool = True):
+    """Connect to the store at `path`. Raises FileNotFoundError when there is none.
+
+    A fresh copy is prepared first (`_prepare`); with `wait=False`, a copy whose write
+    lock someone else holds raises instead of waiting.
+    """
     path = Path(path)
     if not (path / "manifest.json").is_file():
         from faildex.i18n import t
@@ -35,11 +39,11 @@ def open_store(path: str | Path, read_only: bool = True):
     try:
         return relate.connect(str(path), read_only=True)
     except relate.OperationalError:
-        _prepare(path)
+        _prepare(path, wait)
         return relate.connect(str(path), read_only=True)
 
 
-def _prepare(path: Path) -> None:
+def _prepare(path: Path, wait: bool = True) -> None:
     """The one writable open that creates the per-machine files of a fresh copy.
 
     Always under the write lock (created if missing), so it can never run while
@@ -50,7 +54,9 @@ def _prepare(path: Path) -> None:
 
     from faildex.locks import held
 
-    with held(_write_lock(path)):
+    with held(_write_lock(path), wait=wait) as got:
+        if not got:
+            raise relate.OperationalError(f"{path} is being written")
         if not _has_store(Path(path)):
             raise relate.OperationalError(f"{path} is being replaced")
         relate.connect(str(path)).close()
@@ -402,8 +408,8 @@ def hook_store() -> Path:
     manifest is gone for an instant; a store that was deleted does not count, index or
     not. And
     the public store is never copied into the cache here: the cache copy if one exists,
-    else the shipped store itself, which the hook only reads (through an index, if one
-    exists). Paths are resolved, so a symlinked store and its index agree.
+    else the shipped store itself, which the hook reads through an index if one exists
+    (and otherwise as `hook._open_source` says). Paths are resolved, so a symlinked store and its index agree.
     """
     named = os.environ.get("FAILDEX_STORE")
     if named:

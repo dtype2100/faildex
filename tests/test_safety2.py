@@ -166,7 +166,10 @@ def test_p1b_after_one_fallback_the_next_hook_answers_from_the_rebuilt_index(tmp
         cwd, extra = clone, ()
     else:
         cwd, extra = tmp_path, ("--store", str(clone / "store"))
-    assert _clone_hook(clone, cwd, home, extra) == ""  # unreadable; a rebuild starts
+    # Unreadable as it is: the hook answers from the public store's cache copy (since the
+    # 4th fix, as `main` did, from the first call), and a rebuild starts.
+    first = _clone_hook(clone, cwd, home, extra)
+    assert "git status" in first
     deadline = time.monotonic() + 90
     out = ""
     while time.monotonic() < deadline:
@@ -175,7 +178,7 @@ def test_p1b_after_one_fallback_the_next_hook_answers_from_the_rebuilt_index(tmp
             out = _clone_hook(clone, cwd, home, extra)
             if out:
                 break
-    assert "git status" in out
+    assert out == first
 
 
 # P2: the rebuild lock -----------------------------------------------------------------

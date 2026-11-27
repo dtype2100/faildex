@@ -52,8 +52,34 @@ def _stamp() -> str:
 
 
 def _log(log: Path, text: str) -> None:
-    with log.open("a", encoding="utf-8") as out:
-        out.write(f"{_stamp()} {text}\n")
+    with open_append(log) as out:
+        out.write(f"{_stamp()} {text}\n".encode())
+
+
+def open_append(path: Path):
+    """`path` opened for appending (binary), so that every write lands at the end of the
+    file, whoever else writes to it: the hooks' lines and the child they started.
+
+    POSIX `O_APPEND` already does that. On Windows, Python's append mode only moves to
+    the end before each of its own writes, and a child handed the handle writes at the
+    handle's position, over lines written since. So there the file is opened with
+    `FILE_APPEND_DATA` and without `FILE_WRITE_DATA`: the system then appends every
+    write, from any handle.
+    """
+    if os.name != "nt":
+        return open(path, "ab")
+    import _winapi
+    import msvcrt
+
+    access = 0x0004 | 0x0080 | 0x00100000  # FILE_APPEND_DATA | READ_ATTRIBUTES | SYNCHRONIZE
+    share = 0x1 | 0x2 | 0x4  # read, write, delete
+    handle = _winapi.CreateFile(str(path), access, share, 0, 4, 0x80, 0)  # OPEN_ALWAYS, NORMAL
+    try:
+        fd = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_APPEND)
+    except BaseException:
+        _winapi.CloseHandle(handle)
+        raise
+    return open(fd, "ab")
 
 
 def _mtime(path: Path) -> float:
@@ -299,7 +325,7 @@ def spawn(argv: list[str], log: Path) -> int:
         options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         options["start_new_session"] = True
-    with log.open("ab") as out:
+    with open_append(log) as out:
         child = subprocess.Popen(
             argv,
             stdin=subprocess.DEVNULL,
