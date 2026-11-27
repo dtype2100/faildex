@@ -399,6 +399,13 @@ have run `faildex ingest`, and the public one until then:
 ]}]}}
 ```
 
+To keep your store current without running `faildex ingest` by hand, add
+`--refresh-every 200` to that command (`"command": "faildex hook --refresh-every 200"`).
+Every 200 hook calls, and at least once a day, the hook starts `faildex ingest` in the
+background and returns at once; no refresh starts within 30 minutes of the previous one.
+It refreshes the store named with `--store` or `FAILDEX_STORE`, else `~/.faildex/store`, never a `./store`.
+See [keeping the store current](docs/agent-hooks.md#keeping-the-store-current).
+
 Use it from any MCP client:
 
 ```json

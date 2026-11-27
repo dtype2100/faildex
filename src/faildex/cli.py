@@ -206,26 +206,73 @@ def _check(args: argparse.Namespace) -> int:
 
 
 def _hook(args: argparse.Namespace) -> int:
+    """Whatever goes wrong, the hook answers as it does when it has nothing to say."""
     import sys
 
-    from faildex.hook import respond
-    from faildex.i18n import use
+    from faildex.hook import quiet, respond
 
-    use("en")  # an agent reads this, whatever language the person chose
+    if args.write_index is not None:  # started in the background by a hook with no index
+        from faildex.index import rebuild
 
-    out = respond(
-        sys.stdin.read(),
-        args.store,
-        args.min_sessions,
-        args.log,
-        args.top,
-        agent=args.agent,
-        event=args.event,
-        rules=args.encoded_rules or args.rules,
-    )
-    if out:
-        print(out)
+        return rebuild(args.store or _hook_store(args), args.write_index or None)
+    try:
+        from faildex.i18n import use
+
+        use("en")  # an agent reads this, whatever language the person chose
+        if args.store is None:
+            args.store = _hook_store(args)
+        out = respond(
+            sys.stdin.read(),
+            args.store,
+            args.min_sessions,
+            args.log,
+            args.top,
+            agent=args.agent,
+            event=args.event,
+            rules=args.encoded_rules or args.rules,
+            rebuild=True,
+        )
+    except Exception:  # noqa: BLE001 - the hook must never break the session it watches
+        out = quiet(args.agent, args.event)
+    try:
+        if out:
+            print(out)
+    except Exception:  # noqa: BLE001, S110 - a closed pipe is not worth a traceback
+        pass
+    if args.refresh_every:
+        try:
+            sys.stdout.flush()  # the warning first; counting comes after and cannot hide it
+            target = _refresh_target(args)
+            if target is not None:
+                from faildex.refresh import note
+
+                note(target, args.refresh_every)
+        except Exception:  # noqa: BLE001, S110 - the warning is out; a refresh problem stays quiet
+            pass
     return 0
+
+
+def _hook_store(args: argparse.Namespace) -> Path:
+    from faildex.store import hook_store
+
+    return hook_store()
+
+
+def _refresh_target(args: argparse.Namespace) -> Path | None:
+    """The store a hook refresh may write: one named with --store or FAILDEX_STORE, else the
+    private store that `faildex ingest` writes (the first refresh creates it). Never the
+    `./store` of the current folder, such as a checkout's committed public store."""
+    import os
+
+    from faildex.store import PRIVATE_STORE
+
+    if args.event != "pre-shell":
+        return None
+    if args.store_given or os.environ.get("FAILDEX_STORE"):
+        return args.store
+    if not Path(args.store).is_absolute():  # default_store() picked ./store
+        return None
+    return PRIVATE_STORE.expanduser()
 
 
 def _mcp(args: argparse.Namespace) -> int:
@@ -250,12 +297,26 @@ DEFAULT_SOURCES = (
 
 def _ingest(args: argparse.Namespace) -> int:
     """Private by construction: the store stays on this machine and keeps local pointers."""
-    import relate
+    if getattr(args, "refreshing", False):
+        from faildex.refresh import run_logged
 
+        return run_logged(args.store, lambda: _ingest_logs(args))
+    return _ingest_logs(args)
+
+
+def _ingest_logs(args: argparse.Namespace) -> int:
+    from faildex import index
     from faildex.adapters import antigravity, claude_code, codex, codex_local, cursor
     from faildex.build import counts
     from faildex.schema import ingest
+    from faildex.store import NotAStore, RecoveryFailed, refuse_non_store, write_store
 
+    where = _display_store_path(args.store)
+    try:
+        refuse_non_store(args.store)  # before reading every log, not after
+    except NotAStore:
+        print(t("err.prefix", message=t("err.not_a_store", where=where)))
+        return 1
     if not (args.claude or args.codex or args.codex_sessions or args.cursor or args.antigravity):
         # No source given: use every agent's default folder that exists on this machine.
         home = Path.home()
@@ -283,16 +344,36 @@ def _ingest(args: argparse.Namespace) -> int:
     records += [r for root in args.cursor for r in cursor.read_dir(root)]
     records += [r for root in args.antigravity for r in antigravity.read_dir(root)]
     records += list(codex.read_files(args.codex)) if args.codex else []
-    args.store.parent.mkdir(parents=True, exist_ok=True)
-    db = relate.connect(str(args.store))
-    try:
-        written = ingest(db, records, local_paths=True)
+    result: dict = {}
+
+    def write(db) -> None:
+        result["written"] = ingest(db, records, local_paths=True)
         db.commit()
         db.flush()
-        found = counts(db)
-    finally:
-        db.close()
-    where = _display_store_path(args.store)
+        result["found"] = counts(db)
+        result["index"] = index.build(db)
+
+    def publish(out: Path) -> None:
+        """Still under the write lock: the index of this very store, with its fingerprint."""
+        try:
+            index.write(index.beside(out), index.fingerprint(out), result["index"])
+        except Exception as err:  # noqa: BLE001 - the store is written; the hook falls back
+            print(t("err.prefix", message=t("err.no_index", reason=err)))
+
+    # Written on a copy and swapped in, then the hook's index: store first, index second,
+    # both before the write lock is let go, so no other ingest can come in between.
+    try:
+        swapped = write_store(args.store, write, after=publish)
+    except NotAStore:
+        print(t("err.prefix", message=t("err.not_a_store", where=where)))
+        return 1
+    except RecoveryFailed as err:
+        print(t("err.prefix", message=t("err.recovery_failed", where=where, aside=err)))
+        return 1
+    if not swapped:
+        print(t("err.prefix", message=t("err.store_busy", where=where)))
+        return 1
+    written, found = result["written"], result["found"]
     print(t("ingest.done", count=f"{written:,}", where=where))
     print(
         t(
@@ -498,6 +579,20 @@ def _lang_option(argv: list[str]) -> str | None:
     return found
 
 
+def _command_word(argv: list[str]) -> str | None:
+    """The command named on the line: the first word that is neither an option nor the
+    value of `--lang`."""
+    skip = False
+    for word in argv:
+        if skip:
+            skip = False
+        elif word == "--lang":
+            skip = True
+        elif not word.startswith("-"):
+            return word
+    return None
+
+
 def _fit_console() -> None:
     """Korean on a console whose encoding cannot show it (cp1252, say): English, not a crash."""
     import sys
@@ -628,6 +723,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
         type=lambda value: _path(base64.urlsafe_b64decode(value).decode("utf-8")),
     )
     hook.add_argument("--log", type=_path, default=None, help=t("opt.hook.log"))
+    hook.add_argument("--write-index", metavar="TOKEN", default=None, help=argparse.SUPPRESS)
+    hook.add_argument(
+        "--refresh-every", type=_positive, default=None, metavar="N", help=t("opt.hook.refresh")
+    )
     hook.set_defaults(run=_hook)
 
     report = add("report")
@@ -663,6 +762,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
             help=t(f"opt.ingest.{flag[2:].replace('-', '_')}"),
         )
     ingest.add_argument("--store", type=_path, default=None, help=t("opt.store"))
+    ingest.add_argument("--refreshing", action="store_true", help=argparse.SUPPRESS)
     ingest.set_defaults(run=_ingest)
 
     web = add("export-web")
@@ -692,8 +792,14 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = sys.argv[1:] if argv is None else list(argv)
     option = _lang_option(argv)
-    use(*resolve(option))
-    _fit_console()
+    if _command_word(argv) == "hook":
+        # An agent reads the hook, in English; nothing is said to the console, and the
+        # saved language is not even read, so nothing can reach stderr before the hook
+        # is inside its own guard.
+        use("en")
+    else:
+        use(*resolve(option))
+        _fit_console()
     parser, _ = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
@@ -701,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args.lang_option = option
     args.store_given = getattr(args, "store", None) is not None
-    if getattr(args, "store", "set") is None:
+    if getattr(args, "store", "set") is None and args.command != "hook":
         import os
 
         from faildex.store import PRIVATE_STORE, default_store

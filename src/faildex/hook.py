@@ -27,22 +27,33 @@ SHELL_TOOLS = frozenset(["Bash"])
 MAX_WARNINGS = 2
 
 
+def _shell_command(payload: object) -> str | None:
+    """The command line of a shell tool call; None for anything else."""
+    if not isinstance(payload, dict) or payload.get("tool_name") not in SHELL_TOOLS:
+        return None
+    tool_input = payload.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    return command if isinstance(command, str) else None
+
+
 def _lookup(
-    db, payload: object, min_sessions: int, top: int = MAX_WARNINGS
+    source, payload: object, min_sessions: int, top: int = MAX_WARNINGS
 ) -> tuple[str | None, list]:
     """(command template, its recurring failures) for a shell call; (None, []) otherwise.
 
-    Every part of a compound line is looked up (`ls && git status` warns for git).
+    `source` is the hook's index of a store, or a connection to the store itself; both
+    answer through `insight.line_warnings`. Every part of a compound line is looked up
+    (`ls && git status` warns for git).
     """
     from faildex.insight import warnings_for_line
 
-    if not isinstance(payload, dict) or payload.get("tool_name") not in SHELL_TOOLS:
+    command = _shell_command(payload)
+    if command is None:
         return None, []
-    tool_input = payload.get("tool_input")
-    command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str):
-        return None, []
-    _, pairs = warnings_for_line(db, command, min_sessions)
+    if hasattr(source, "warnings_for_line"):
+        _, pairs = source.warnings_for_line(command, min_sessions)
+    else:
+        _, pairs = warnings_for_line(source, command, min_sessions)
     pairs = pairs[: max(0, top)]
     if not pairs:
         return None, []
@@ -80,6 +91,58 @@ def _log(path: Path, payload: dict, context: str) -> None:
         out.write(json.dumps(entry) + "\n")
 
 
+def _open_read_only(store: Path):
+    """The store, read-only. Unlike `open_store`, never a writable first open: the hook
+    must not create or change files in a store that an ingest may be replacing."""
+    import relate
+
+    if not (Path(store) / "manifest.json").is_file():
+        raise FileNotFoundError(store)
+    return relate.connect(str(store), read_only=True)
+
+
+def _warning(source, payload: object, min_sessions: int, top: int) -> tuple[str, str] | None:
+    """(context for the agent, notice for the person), or None for nothing to say.
+
+    The text is written here, inside the step that may fail, so that an index entry
+    that cannot even be put into words sends the hook on to the next source."""
+    template, found = _lookup(source, payload, min_sessions, top)
+    if not found:
+        return None
+    return _context(template, found), notice_for(found)
+
+
+def _found(store: Path, payload: object, min_sessions: int, top: int, rebuild: bool):
+    """The warning from the store's index, or from the store itself (read-only) when the
+    index is missing, stale or damaged anywhere, words included; then, with `rebuild`,
+    the index is rebuilt in the background."""
+    from faildex import index
+
+    if _shell_command(payload) is None:
+        return None
+    for found in index.candidates(store):
+        try:
+            return _warning(found, payload, min_sessions, top)
+        except Exception:  # noqa: BLE001, S112 - damaged: try the next source
+            continue
+    try:
+        db = _open_read_only(store)
+        try:
+            return _warning(db, payload, min_sessions, top)
+        finally:
+            db.close()
+    finally:
+        if rebuild and index.fingerprint(store) is not None:
+            index.start_rebuild(store)
+
+
+def quiet(agent: str = "claude", event: str = "pre-shell") -> str:
+    """What the hook prints when it has nothing to say, for each agent and event."""
+    if agent == "cursor":
+        return json.dumps({}) if event == "session-start" else json.dumps({"permission": "allow"})
+    return ""
+
+
 def respond(
     raw: str,
     store: Path,
@@ -90,9 +153,13 @@ def respond(
     agent: str = "claude",
     event: str = "pre-shell",
     rules: Path | None = None,
+    rebuild: bool = False,
 ) -> str:
-    """Hook stdout for one stdin payload; empty when there is nothing to say."""
-    quiet = json.dumps({"permission": "allow"}) if agent == "cursor" else ""
+    """Hook stdout for one stdin payload; empty when there is nothing to say.
+
+    With `rebuild`, a missing or stale index is rebuilt in the background (the CLI asks
+    for it; a test calling this directly does not)."""
+    silent = quiet(agent, "pre-shell")
     try:
         if event == "session-start":
             text = (rules or Path("~/faildex-rules.md")).expanduser().read_text(encoding="utf-8")
@@ -111,37 +178,31 @@ def respond(
                     }
                 }
             )
-        from faildex.store import open_store
-
         payload = json.loads(raw)
         if agent == "cursor" and isinstance(payload, dict):
             payload = {"tool_name": "Bash", "tool_input": {"command": payload.get("command")}}
-        db = open_store(store)
-        try:
-            template, found = _lookup(db, payload, min_sessions, top)
-        finally:
-            db.close()
-        if not found:
-            return quiet
-        context = _context(template, found)
+        warning = _found(store, payload, min_sessions, top, rebuild)
+        if warning is None:
+            return silent
+        context, notice = warning
         if log:
             try:
                 _log(log, payload, context)
             except OSError:
                 pass  # an unwritable log must not hide the warning itself
     except Exception:  # noqa: BLE001 - see module docstring
-        return json.dumps({}) if event == "session-start" and agent == "cursor" else quiet
+        return quiet(agent, event)
     if agent == "cursor":
         return json.dumps(
             {
                 "permission": "allow",
-                "user_message": notice_for(found),
+                "user_message": notice,
                 "agent_message": context,
             }
         )
     return json.dumps(
         {
-            "systemMessage": notice_for(found),
+            "systemMessage": notice,
             "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": context},
         }
     )

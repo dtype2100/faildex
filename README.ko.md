@@ -389,6 +389,13 @@ Claude Code에서 쓰기. 프로젝트의 `.claude/settings.json`(모든 세션�
 ]}]}}
 ```
 
+`faildex ingest`를 손으로 돌리지 않고 스토어를 최신으로 두려면 그 명령에
+`--refresh-every 200`을 붙이세요(`"command": "faildex hook --refresh-every 200"`).
+훅 호출 200번마다, 그리고 적어도 하루에 한 번 훅이 `faildex ingest`를 백그라운드로 띄우고
+바로 끝납니다. 지난 갱신을 시작한 뒤 30분 안에는 다시 띄우지 않습니다.
+`--store`나 `FAILDEX_STORE`로 지정한 스토어를, 둘 다 없으면 `~/.faildex/store`를 갱신하고, `./store`는 갱신하지 않습니다.
+자세한 내용은 [스토어를 최신으로 두기](docs/agent-hooks.md#keeping-the-store-current)를 보세요.
+
 MCP 클라이언트에서 쓰기:
 
 ```json

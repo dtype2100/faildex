@@ -17,6 +17,7 @@ import re
 import sys
 import textwrap
 from collections import Counter
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -318,7 +319,11 @@ def proposals(
     cut: str | None = None,
 ) -> list[Failure]:
     """Failures worth a rule: seen in several sessions, best first."""
-    found = failures(db, command, sessions, cut).values()
+    return rank(failures(db, command, sessions, cut).values(), min_sessions)
+
+
+def rank(found: Iterable[Failure], min_sessions: int = 2) -> list[Failure]:
+    """The failures seen in at least `min_sessions` sessions, best first."""
     keep = [f for f in found if len(f.sessions) >= min_sessions]
     return sorted(keep, key=lambda f: (-f.score, -f.calls, f.sig))
 
@@ -344,16 +349,28 @@ def warnings_for(
     `sessions` and `cut` limit what is known, as in `failures`.
     """
     if sessions is None:
-        runs = next(iter(db.execute(_RUNS, {"command": command})))["n"]
+        runs = runs_of(db, command)
     else:
         params = {"command": command, "sessions": list(sessions), "cut": cut}
         runs = next(iter(db.execute(_RUNS_IN, params)))["n"]
-    found = proposals(db, min_sessions, command, sessions, cut)
-    for item in found:
+    return select(failures(db, command, sessions, cut).values(), runs, min_sessions, min_rate)
+
+
+def runs_of(db, command: str) -> int:
+    """All recorded runs of one command template."""
+    return next(iter(db.execute(_RUNS, {"command": command})))["n"]
+
+
+def select(
+    found: Iterable[Failure], runs: int, min_sessions: int = 2, min_rate: float = MIN_RATE
+) -> list[Failure]:
+    """Of one command's failures, those to warn about, best first, each told the runs."""
+    ranked = rank(found, min_sessions)
+    for item in ranked:
         item.runs = runs
     return [
         item
-        for item in found
+        for item in ranked
         if warns(item.calls, len(item.sessions), runs, min_sessions, min_rate)
     ]
 
@@ -365,6 +382,26 @@ def warnings_for_line(
 
     A compound line is looked up part by part, so `ls && git status` warns for git.
     """
+    return line_warnings(
+        line,
+        min_sessions,
+        lambda command: (runs_of(db, command), failures(db, command).values()),
+        lambda: failures(db),
+    )
+
+
+def line_warnings(
+    line: str,
+    min_sessions: int,
+    command_failures: Callable[[str], tuple[int, Iterable[Failure]]],
+    pooled_failures: Callable[[], dict[str, Failure]],
+) -> tuple[list[str], list[tuple[str, Failure]]]:
+    """`warnings_for_line` over any source: the store, or the hook's index of it.
+
+    `command_failures(template)` gives (runs, failures) of one command and
+    `pooled_failures()` the failures pooled across every command; both give fresh
+    objects, which this marks up. One function for both sources, so they cannot differ.
+    """
     from faildex.normalize import (
         EQUALS_SIG,
         NOMATCH_SIG,
@@ -375,12 +412,12 @@ def warnings_for_line(
     )
 
     templates = command_templates(line)
-    found = [
-        (t, item)
-        for t in templates
-        for item in warnings_for(db, t, min_sessions)
-        if shell_sig(item.sig) is None
-    ]
+    found = []
+    for t in templates:
+        runs, items = command_failures(t)
+        found += [
+            (t, item) for item in select(items, runs, min_sessions) if shell_sig(item.sig) is None
+        ]
     # NOMATCH and `=` expansion happen in the shell before any program runs, so
     # their evidence is pooled across commands and gated on the line itself.
     shell = [
@@ -389,7 +426,7 @@ def warnings_for_line(
         if present(line)
     ]
     if shell:
-        pooled = failures(db)
+        pooled = pooled_failures()
         for sig in shell:
             item = pooled.get(sig)
             if item and len(item.sessions) >= min_sessions:

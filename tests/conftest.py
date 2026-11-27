@@ -26,3 +26,12 @@ def _isolated_home(tmp_path_factory, monkeypatch, _shared_cache):
     i18n.use("en", "default")
     yield home
     i18n.use("en", "default")
+
+
+@pytest.fixture(autouse=True)
+def _no_background_index(monkeypatch):
+    """A hook that finds no index starts a rebuild in the background; tests that call the
+    hook through the CLI should not leave such processes behind, unless they test it."""
+    from faildex import index
+
+    monkeypatch.setattr(index, "start_rebuild", lambda store: None)
