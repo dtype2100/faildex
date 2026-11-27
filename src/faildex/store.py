@@ -132,10 +132,11 @@ class NotAStore(Exception):
 
 
 def refuse_non_store(path: Path) -> None:
-    """Raise NotAStore when `path` is a file, or a folder with files but no store: a swap
+    """Raise NotAStore when `path` is a file, or a folder with files but no store
+    (`looks_like_store`; another kind of `manifest.json` does not make one): a swap
     would set those files aside and delete them. A missing or empty folder is fine."""
     path = Path(path)
-    if not path.exists() or _has_store(path):
+    if not path.exists() or looks_like_store(path):
         return
     if not path.is_dir() or any(path.iterdir()):
         raise NotAStore(path)
@@ -158,8 +159,10 @@ def _valid_store(path: Path) -> bool:
 def looks_like_store(path: Path) -> bool:
     """Whether `path` holds a Relate store: a `manifest.json` that reads as Relate's
     (an object with a whole `format_version` and lists `node_parts` and `rel_parts`)
-    and the `nodes/` and `relationships/` folders. A folder that only happens to be
-    called `store` and to hold some other `manifest.json` (a web app's) is not one.
+    and, for parts it lists, the `nodes/` and `relationships/` folders (a store with
+    nothing in it yet, as an ingest of no sessions leaves, has neither). A folder that
+    only happens to be called `store` and to hold some other `manifest.json` (a web
+    app's) is not one.
     """
     import json
 
@@ -172,8 +175,8 @@ def looks_like_store(path: Path) -> bool:
         and isinstance(manifest.get("format_version"), int)
         and isinstance(manifest.get("node_parts"), list)
         and isinstance(manifest.get("rel_parts"), list)
-        and (Path(path) / "nodes").is_dir()
-        and (Path(path) / "relationships").is_dir()
+        and (not manifest["node_parts"] or (Path(path) / "nodes").is_dir())
+        and (not manifest["rel_parts"] or (Path(path) / "relationships").is_dir())
     )
 
 

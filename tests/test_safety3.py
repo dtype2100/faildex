@@ -133,7 +133,9 @@ def test_p1_2_the_default_local_store_in_a_swap_gap_is_still_the_one_used(
     assert _run_hook(monkeypatch, capsys, ["hook"], _bash("git push")) == expected
 
 
-def test_p1_2_a_local_store_gone_without_evidence_still_falls_back(tmp_path, monkeypatch, capsys):
+def test_p1_2_a_local_store_gone_without_evidence_still_falls_back(
+    tmp_path, monkeypatch, capsys, public_copy
+):
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     local = tmp_path / "store"
@@ -142,7 +144,7 @@ def test_p1_2_a_local_store_gone_without_evidence_still_falls_back(tmp_path, mon
     _ingest(local, tmp_path / "logs")
     capsys.readouterr()
     public = _run_hook(
-        monkeypatch, capsys, ["hook", "--store", str(ROOT / "store")], _bash("git status")
+        monkeypatch, capsys, ["hook", "--store", str(public_copy)], _bash("git status")
     )
     assert "git status" in public  # the public store warns before `git status`
     assert _run_hook(monkeypatch, capsys, ["hook"], _bash("git status")) == ""  # ./store

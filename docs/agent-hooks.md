@@ -111,7 +111,8 @@ names are compared as text, so a store called `s[12]` is never read as a pattern
 Windows refuses to rename a folder while a
 reader holds it open; after three tries, ingest keeps the old store, prints why and
 exits 1, and the next refresh tries again. Ingest refuses a `--store` that is a file,
-or a folder holding other files and no store, since swapping would delete them.
+or a folder holding other files and no store (by the same test of a Relate store as
+below; some other `manifest.json` does not make one), since swapping would delete them.
 
 ## The hook's index
 
@@ -145,8 +146,8 @@ command does on a first open, and warns from the first call. faildex's own publi
 demo store (shipped in the package or the checkout) is prepared as its cache copy
 (`~/.cache/faildex/store-<hash>/`, the copy other faildex commands use), never inside
 the package. Any other folder is prepared where it is, and only if it looks like a
-Relate store: a `manifest.json` that reads as Relate's and the `nodes/` and
-`relationships/` folders; a folder that is merely called `store` and holds another
+Relate store: a `manifest.json` that reads as Relate's and, for the parts it lists,
+the `nodes/` and `relationships/` folders; a folder that is merely called `store` and holds another
 kind of `manifest.json` is left alone. Preparing takes the store's write lock without
 waiting (a busy lock means nothing is said that time) and checks the store is still
 there, so a store being swapped is never opened for writing. It also starts

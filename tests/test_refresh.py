@@ -419,5 +419,4 @@ def test_an_empty_folder_left_in_place_of_a_set_aside_store_is_replaced(tmp_path
     store.mkdir()
     codex = str(FIXTURES / "codex" / "trajectories.sample.jsonl")
     assert main(["ingest", "--codex", codex, "--store", str(store)]) == 0
-    if os.name != "nt":  # Windows will not rename a folder over an empty one
-        assert "calls 13" in capsys.readouterr().out
+    assert "calls 13" in capsys.readouterr().out

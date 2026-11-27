@@ -7,16 +7,14 @@ from faildex.cli import main
 from faildex.hook import respond
 from faildex.link import link, unlink
 
-STORE = Path(__file__).resolve().parents[1] / "store"
-
 
 @pytest.mark.parametrize(
     "agent,key", [("codex", "hookSpecificOutput"), ("cursor", "additional_context")]
 )
-def test_session_rules_exclude_evidence(agent, key, tmp_path):
+def test_session_rules_exclude_evidence(agent, key, tmp_path, public_copy):
     rules = tmp_path / "rules.md"
     rules.write_text("# Rules\n- quote globs\n  Evidence: /private/log:1\n  Fix: use quotes\n")
-    out = json.loads(respond("{}", STORE, agent=agent, event="session-start", rules=rules))
+    out = json.loads(respond("{}", public_copy, agent=agent, event="session-start", rules=rules))
     context = out[key]
     if agent == "codex":
         assert context["hookEventName"] == "SessionStart"
@@ -26,13 +24,13 @@ def test_session_rules_exclude_evidence(agent, key, tmp_path):
 
 
 @pytest.mark.parametrize("agent", ["codex", "cursor"])
-def test_shell_warning_uses_agent_protocol(agent):
+def test_shell_warning_uses_agent_protocol(agent, public_copy):
     payload = (
         {"command": "git status"}
         if agent == "cursor"
         else {"tool_name": "Bash", "tool_input": {"command": "git status"}}
     )
-    out = json.loads(respond(json.dumps(payload), STORE, agent=agent))
+    out = json.loads(respond(json.dumps(payload), public_copy, agent=agent))
     if agent == "cursor":
         assert out["permission"] == "allow"
         assert "faildex" in out["user_message"] and "git status" in out["agent_message"]

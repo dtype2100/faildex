@@ -155,10 +155,12 @@ def test_in_a_swap_gap_nothing_is_opened_for_writing(tmp_path):
     "folder",
     [
         {"manifest.json": '{"name": "my-app", "icons": []}'},  # a web app manifest
-        {"manifest.json": '{"format_version": 5, "node_parts": [], "rel_parts": []}'},
+        {
+            "manifest.json": '{"format_version": 5, "node_parts": [{"path": "nodes/x"}], "rel_parts": []}'
+        },
         {"manifest.json": "not json", "nodes/": None, "relationships/": None},
     ],
-    ids=["web manifest", "manifest without nodes/", "not json"],
+    ids=["web manifest", "parts listed, no nodes/", "not json"],
 )
 @pytest.mark.parametrize("agent", sorted(PAYLOADS))
 def test_a_folder_called_store_that_is_not_a_store_is_left_alone(

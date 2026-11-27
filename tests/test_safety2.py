@@ -100,7 +100,7 @@ def test_p1a_half_the_evidence_is_not_a_swap(tmp_path):
 
 
 def test_p1a_a_deleted_private_store_sends_the_hook_back_to_the_public_one(
-    tmp_path, monkeypatch, capsys, _isolated_home
+    tmp_path, monkeypatch, capsys, _isolated_home, public_copy
 ):
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
     monkeypatch.chdir(tmp_path)  # no ./store here
@@ -108,7 +108,7 @@ def test_p1a_a_deleted_private_store_sends_the_hook_back_to_the_public_one(
     _git_push_store(private, tmp_path / "logs")
     capsys.readouterr()
     public = _run_hook(
-        monkeypatch, capsys, ["hook", "--store", str(ROOT / "store")], _bash("git status")
+        monkeypatch, capsys, ["hook", "--store", str(public_copy)], _bash("git status")
     )
     assert "git status" in public  # the public store warns before `git status`
     assert _run_hook(monkeypatch, capsys, ["hook"], _bash("git status")) == ""  # private
@@ -351,7 +351,7 @@ def test_p2_a_store_that_cannot_be_put_back_stops_the_ingest(tmp_path, monkeypat
 # P2: the console note -------------------------------------------------------------------
 
 
-def test_p2_korean_on_an_ascii_console_puts_nothing_on_stderr(tmp_path):
+def test_p2_korean_on_an_ascii_console_puts_nothing_on_stderr(tmp_path, public_copy):
     home = tmp_path / "home"
     (home / ".faildex").mkdir(parents=True)
     (home / ".faildex" / "config.json").write_text(json.dumps({"lang": "ko"}))
@@ -364,7 +364,7 @@ def test_p2_korean_on_an_ascii_console_puts_nothing_on_stderr(tmp_path):
     }
     env.pop("FAILDEX_LANG", None)
     done = subprocess.run(
-        [sys.executable, "-c", ENTRY, "hook", "--store", str(ROOT / "store")],
+        [sys.executable, "-c", ENTRY, "hook", "--store", str(public_copy)],
         input=_bash("git status"),
         capture_output=True,
         text=True,

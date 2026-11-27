@@ -9,7 +9,6 @@ from faildex.adapters.claude_code import read_dir, read_session
 from faildex.hook import respond
 from faildex.schema import ingest
 
-STORE = Path(__file__).resolve().parents[1] / "store"
 GLOB_FIXTURES = Path(__file__).parent / "fixtures" / "zsh_glob"
 GLOB_SIG = "no matches found: <glob>"
 
@@ -36,18 +35,18 @@ def _bash(command: str) -> str:
     return json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
 
 
-def test_compound_lines_are_looked_up_part_by_part():
+def test_compound_lines_are_looked_up_part_by_part(public_copy):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls && git status"}})
-    out = respond(payload, STORE)
+    out = respond(payload, public_copy)
     assert out and "git status" in json.loads(out)["systemMessage"]
 
 
-def test_top_limits_the_warnings_and_zero_silences():
+def test_top_limits_the_warnings_and_zero_silences(public_copy):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
-    assert respond(payload, STORE, top=0) == ""
+    assert respond(payload, public_copy, top=0) == ""
 
 
-def test_hook_skips_scripts_containing_double_lt_without_error():
+def test_hook_skips_scripts_containing_double_lt_without_error(public_copy):
     for command in [
         "git status <<'EOF'\nhello\nEOF",
         "cat <<EOF | git status\n$(private_customer_command)\nEOF",
@@ -58,8 +57,10 @@ def test_hook_skips_scripts_containing_double_lt_without_error():
         "cat <<EOF | grep x",
     ]:
         payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
-        assert respond(payload, STORE) == ""
-        cursor_out = json.loads(respond(json.dumps({"command": command}), STORE, agent="cursor"))
+        assert respond(payload, public_copy) == ""
+        cursor_out = json.loads(
+            respond(json.dumps({"command": command}), public_copy, agent="cursor")
+        )
         assert cursor_out == {"permission": "allow"}
 
 
@@ -127,8 +128,8 @@ def test_hook_handles_long_adversarial_inputs_quickly(tmp_path):
         assert time.monotonic() - started < 0.5
 
 
-def test_an_unwritable_log_does_not_hide_the_warning(tmp_path):
+def test_an_unwritable_log_does_not_hide_the_warning(tmp_path, public_copy):
     blocker = tmp_path / "file"
     blocker.write_text("")
-    out = respond(_bash("git status"), STORE, log=blocker / "hook.jsonl")
+    out = respond(_bash("git status"), public_copy, log=blocker / "hook.jsonl")
     assert out and "git status" in json.loads(out)["systemMessage"]

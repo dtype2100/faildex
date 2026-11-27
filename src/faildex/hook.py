@@ -105,6 +105,13 @@ def _open_read_only(store: Path):
     return relate.connect(str(store), read_only=True)
 
 
+def _preparable(store: Path) -> bool:
+    """Whether `_to_prepare(store)` gives a store, without making the public cache copy."""
+    from faildex.store import is_public, looks_like_store
+
+    return is_public(store) or looks_like_store(store)
+
+
 def _to_prepare(store: Path) -> Path | None:
     """What to prepare for a store that refuses a read-only open (never opened on this
     machine): faildex's own public demo store (shipped in the package or the checkout,
@@ -151,7 +158,8 @@ def _warning(source, payload: object, min_sessions: int, top: int) -> tuple[str,
 def _found(store: Path, payload: object, min_sessions: int, top: int, rebuild: bool):
     """The warning from the store's index, or from the store itself (read-only) when the
     index is missing, stale or damaged anywhere, words included; then, with `rebuild`,
-    the index is rebuilt in the background."""
+    the index is rebuilt in the background, if there is a store to build it from: one
+    that could be read, or one the rebuild may prepare (`_to_prepare`)."""
     from faildex import index
 
     if _shell_command(payload) is None:
@@ -161,14 +169,16 @@ def _found(store: Path, payload: object, min_sessions: int, top: int, rebuild: b
             return _warning(found, payload, min_sessions, top)
         except Exception:  # noqa: BLE001, S112 - damaged: try the next source
             continue
+    readable = False
     try:
         db = _open_source(store)
+        readable = True
         try:
             return _warning(db, payload, min_sessions, top)
         finally:
             db.close()
     finally:
-        if rebuild and index.fingerprint(store) is not None:
+        if rebuild and (readable or _preparable(store)):
             index.start_rebuild(store)
 
 
