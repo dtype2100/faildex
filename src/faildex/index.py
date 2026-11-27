@@ -208,7 +208,8 @@ class Index:
 
 
 def candidates(store: Path) -> list[Index]:
-    """The indexes the hook may answer from, best first; never raising.
+    """The index the hook may answer from, as a list of at most one: the first that
+    qualifies, the one next to the store before the cached one; never raising.
 
     An index qualifies when its format is right and its fingerprint is the store's
     manifest. While the manifest is missing because an ingest is between the two
@@ -239,6 +240,7 @@ def candidates(store: Path) -> list[Index]:
             and data["manifest_sha256"] == want
         ):
             found.append(Index(data))
+            break  # the first that matches is the answer; the other file is not read
     return found
 
 

@@ -25,6 +25,7 @@ from faildex.build import counts
 from faildex.cli import main
 from faildex.store import STORE_PARTS, open_store
 
+REAL_START_REBUILD = index.start_rebuild  # before conftest stubs it for each test
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures"
 CLAUDE = str(FIXTURES / "claude_code")
@@ -383,15 +384,24 @@ def _files(folder: Path) -> dict:
 def test_p1_7_with_an_index_or_a_readable_store_the_hook_writes_nothing(
     tmp_path, monkeypatch, capsys, found
 ):
+    """Nothing in or next to the store. Without an index the hook starts a rebuild, which
+    leaves its guard, its lock, its `.tried` mark and its log in the cache folder, as
+    documented."""
     store = tmp_path / "s"
     _ingest(store, str(_git_push_logs(tmp_path / "logs")))
     if found != "an index":
         index.beside(store).unlink()
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    before = _files(tmp_path)
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
+    monkeypatch.setattr(index, "start_rebuild", REAL_START_REBUILD)
+    monkeypatch.setattr(refresh, "spawn", lambda argv, log: refresh.open_append(log).close() or 1)
+    before = {p: v for p, v in _files(tmp_path).items() if cache not in p.parents and p != cache}
     code, out = _bare_hook(monkeypatch, capsys, ("hook", "--store", str(store)), _bash("git push"))
     assert code == 0 and "git push" in out.out
-    assert _files(tmp_path) == before
+    after = {p: v for p, v in _files(tmp_path).items() if cache not in p.parents and p != cache}
+    assert after == before
+    left = sorted(p.suffix for p in cache.rglob("*") if p.is_file()) if cache.exists() else []
+    assert left == ([] if found == "an index" else [".guard", ".lock", ".log", ".tried"])
 
 
 @pytest.mark.parametrize(

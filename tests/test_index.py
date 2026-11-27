@@ -148,8 +148,10 @@ class _Shared:
 
     def __init__(self, db):
         self._db = db
+        self.used = 0
 
     def execute(self, *args, **kwargs):
+        self.used += 1
         return self._db.execute(*args, **kwargs)
 
     def close(self):
@@ -159,16 +161,22 @@ class _Shared:
 @pytest.fixture
 def via_store(monkeypatch):
     """Run a call with the index out of the way: the hook's own store lookup, read-only."""
-    opened = {}
+    opened, reads = {}, []
 
     def run(store, call):
         if store not in opened:
             opened[store] = hook._open_read_only(store)
+        shared = _Shared(opened[store])
         with monkeypatch.context() as m:
+            # The hook asks `candidates`, not `load`: with no index, it reads the store.
+            m.setattr(index, "candidates", lambda store: [])
             m.setattr(index, "load", lambda store: None)
-            m.setattr(hook, "_open_read_only", lambda store: _Shared(opened[store]))
-            return call()
+            m.setattr(hook, "_open_read_only", lambda store: shared)
+            answer = call()
+        reads.append(shared.used)
+        return answer
 
+    run.reads = lambda: sum(reads)  # how often the store side really read the store
     yield run
     for db in opened.values():
         db.close()
@@ -205,6 +213,7 @@ def test_hook_output_from_the_index_is_byte_identical(which, request, monkeypatc
                     assert from_index.encode() == direct.encode(), (line, min_sessions, top, agent)
                     warned += bool(direct) and direct != json.dumps({"permission": "allow"})
     assert warned > 0  # the comparison covered real warnings, not only silence
+    assert via_store.reads() > 0  # and the store side read the store, not an index
 
 
 @pytest.mark.parametrize("which", ["public_store", "private_store"])

@@ -109,8 +109,13 @@ def write_store(out: Path, write, after=None) -> bool:
         old = out.parent / f".{out.name}.old-{token}"
         try:
             if _has_store(out):
-                shutil.copytree(out, work)  # lock files included: they mark each folder's role
+                # Marked before the copy, so that a copy that fails half way leaves a
+                # folder recovery knows as ours, never an unmarked half store.
+                work.mkdir()
                 _mark(work, out, token)
+                shutil.copytree(  # lock files included: they mark each folder's role
+                    out, work, dirs_exist_ok=True, ignore=shutil.ignore_patterns(SWAP_MARK)
+                )
             db = relate.connect(str(work))  # a new store: Relate makes the folder first
             try:
                 _mark(work, out, token)

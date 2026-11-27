@@ -37,8 +37,15 @@ STALE_LOCK = 60 * 60
 UNREADABLE_LOCK = 10
 
 # The faildex that is running now, whatever its launcher is called (`faildex.exe`,
-# a uv tool shim, an editable checkout). There is no `faildex/__main__.py`.
-_ENTRY = "from faildex.cli import main; raise SystemExit(main())"
+# a uv tool shim, an editable checkout). There is no `faildex/__main__.py`. `-c` puts
+# the current folder first on sys.path, where a project's own `argparse.py` or `json.py`
+# would be imported instead of the standard library, so that entry goes before any
+# import (`sys` is built in and cannot be shadowed). Not `-P` (Python 3.11+) or `-I`
+# (it drops PYTHONPATH, which installs and tests rely on).
+_ENTRY = (
+    "import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]; "
+    "from faildex.cli import main; raise SystemExit(main())"
+)
 
 
 def paths(store: Path) -> tuple[Path, Path]:
@@ -319,12 +326,24 @@ def _spawn(store: Path, log: Path) -> int:
 
 
 def spawn(argv: list[str], log: Path) -> int:
-    """Start `argv` detached from this hook, output to `log`, so the hook can return now."""
+    """Start `argv` detached from this hook, output to `log`, so the hook can return now.
+
+    The child runs in the log's folder, which faildex made, not in the agent's project
+    folder: nothing there is imported, and on Windows the project folder is not held
+    open. Every path faildex hands a child is absolute; a relative XDG_CACHE_HOME is made
+    absolute here, so that the child keeps its index cache where the hook keeps it."""
     options: dict = {}
     if os.name == "nt":
-        options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        # No console: a venv launcher started without one would make its python.exe
+        # open a new console window.
+        options["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         options["start_new_session"] = True
+    env = dict(os.environ)
+    cache = env.get("XDG_CACHE_HOME")
+    if cache and not Path(cache).expanduser().is_absolute():
+        env["XDG_CACHE_HOME"] = str(Path(cache).expanduser().resolve())
+    log = Path(log).resolve()
     with open_append(log) as out:
         child = subprocess.Popen(
             argv,
@@ -332,6 +351,8 @@ def spawn(argv: list[str], log: Path) -> int:
             stdout=out,
             stderr=subprocess.STDOUT,
             close_fds=True,
+            cwd=str(log.parent),
+            env=env,
             **options,
         )
     return child.pid
@@ -359,6 +380,7 @@ def run_logged(store: Path, ingest) -> int:
         except Exception:  # noqa: BLE001, S110 - the end line is written either way
             pass
         try:
+            sys.stdout.flush()  # the ingest's own lines first, then the end line
             _log(log, f"end exit={code} {totals} seconds={time.monotonic() - started:.0f}")
         finally:
             # The hook recorded the pid it started; on Windows a venv's python.exe is a

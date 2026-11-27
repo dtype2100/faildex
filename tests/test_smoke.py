@@ -25,11 +25,13 @@ def test_top_and_min_sessions_must_be_positive(capsys):
         ["check", "--top", "0", "git status"],
         ["check", "--top", "-1", "git status"],
         ["rules", "--min-sessions", "0"],
-        ["hook", "--top", "x"],
     ):
         with pytest.raises(SystemExit):
             main(argv)
         assert "1 or more" in capsys.readouterr().err
+    # The hook says why on stderr but answers quietly, exit 0: exit 2 may block a command.
+    assert main(["hook", "--top", "x"]) == 0
+    assert "1 or more" in capsys.readouterr().err
 
 
 def test_a_missing_store_points_at_ingest_not_make(tmp_path, capsys):

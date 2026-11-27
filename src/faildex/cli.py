@@ -785,6 +785,52 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
     return parser, found
 
 
+class _HookArgumentError(Exception):
+    pass
+
+
+def _hook_arguments(argv: list[str], parser, hook) -> int:
+    """`faildex hook` with arguments it cannot read answers as it does when it has nothing
+    to say, exit 0 and one line on stderr: an agent may take exit 2, argparse's, as an
+    order to block the command. `--help` still prints and exits as usual."""
+    import sys
+
+    from faildex.hook import quiet
+
+    def error(message: str):
+        raise _HookArgumentError(message)
+
+    parser.error = hook.error = error
+    try:
+        args = parser.parse_args(argv)
+    except _HookArgumentError as problem:
+
+        def value(flag: str, default: str, allowed: tuple[str, ...]) -> str:
+            for i, word in enumerate(argv):
+                if word == flag and i + 1 < len(argv):
+                    found = argv[i + 1]
+                elif word.startswith(flag + "="):
+                    found = word.split("=", 1)[1]
+                else:
+                    continue
+                return found if found in allowed else default
+            return default
+
+        agent = value("--agent", "claude", ("claude", "codex", "cursor"))
+        event = value("--event", "pre-shell", ("session-start", "pre-shell"))
+        try:
+            print(f"faildex hook: {problem}", file=sys.stderr)
+            out = quiet(agent, event)
+            if out:
+                print(out)
+        except Exception:  # noqa: BLE001, S110 - a closed pipe is not worth a traceback
+            pass
+        return 0
+    args.lang_option = None
+    args.store_given = args.store is not None
+    return args.run(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     import sys
 
@@ -800,7 +846,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         use(*resolve(option))
         _fit_console()
-    parser, _ = build_parser()
+    parser, commands = build_parser()
+    if _command_word(argv) == "hook":
+        return _hook_arguments(argv, parser, commands["hook"])
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()

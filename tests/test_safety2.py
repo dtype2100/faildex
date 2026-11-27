@@ -134,7 +134,9 @@ def _fresh_clone(root: Path) -> Path:
     return root
 
 
-def _clone_hook(clone: Path, cwd: Path, home: Path, extra=()) -> str:
+def _clone_hook(clone: Path, cwd: Path, home: Path, extra=(), probe: bool = False) -> str:
+    """The hook's stdout, run as a fresh process; with `probe`, then a last line that says
+    whether it loaded Relate (it does not on the index path)."""
     env = {
         **os.environ,
         "PYTHONPATH": str(clone / "src"),
@@ -143,8 +145,14 @@ def _clone_hook(clone: Path, cwd: Path, home: Path, extra=()) -> str:
         "XDG_CACHE_HOME": str(home / "cache"),
     }
     env.pop("FAILDEX_STORE", None)
+    code = ENTRY
+    if probe:
+        code = (
+            "import sys; from faildex.cli import main; main(sys.argv[1:]); "
+            "print('RELATE' if 'relate' in sys.modules else 'NO-RELATE')"
+        )
     done = subprocess.run(
-        [sys.executable, "-c", ENTRY, "hook", *extra],
+        [sys.executable, "-c", code, "hook", *extra],
         input=_bash("git status"),
         capture_output=True,
         text=True,
@@ -179,6 +187,9 @@ def test_p1b_after_one_fallback_the_next_hook_answers_from_the_rebuilt_index(tmp
             if out:
                 break
     assert out == first
+    # And that answer came from the index: the hook did not load Relate for it.
+    probed = _clone_hook(clone, cwd, home, extra, probe=True)
+    assert probed.rstrip().endswith("NO-RELATE") and probed.startswith(first.rstrip())
 
 
 # P2: the rebuild lock -----------------------------------------------------------------
