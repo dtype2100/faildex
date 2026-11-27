@@ -11,6 +11,8 @@ import shutil
 import time
 from pathlib import Path
 
+from payloads import NOT_A_REPO
+
 from faildex import hook, index, locks
 from faildex.cli import main
 
@@ -19,8 +21,15 @@ REAL_START_REBUILD = index.start_rebuild
 TOKEN = "5ca1ab1e5ca1ab1e"
 
 
+# The failure each test store holds for a command (git status: the public demo store's).
+FAILURES = {"git push": "fatal: the current branch has no upstream branch"}
+
+
 def _bash(line: str) -> str:
-    return json.dumps({"tool_name": "Bash", "tool_input": {"command": line}})
+    """The hook's payload after `line` failed the way the test stores hold for its command."""
+    from payloads import failed
+
+    return failed(line, FAILURES.get(line.split(" &&")[0], NOT_A_REPO), 1)
 
 
 def _session(logs: Path, name: str) -> None:

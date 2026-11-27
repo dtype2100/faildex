@@ -1,4 +1,4 @@
-"""The hook's index: what the pre-run hook needs from a store, in one JSON file.
+"""The hook's index: what the hook needs from a store after a failure, in one JSON file.
 
 Opening a Relate store costs most of a hook call (about half a second on a large
 private store), and a hook that opens the store can trip over an ingest writing
@@ -6,11 +6,11 @@ it. So `faildex ingest` writes, next to the store, `<store>-index.json` with the
 same lookups the hook would run, and the hook reads that file instead.
 
 The index holds data, never sentences: for each command template that has failed,
-its run count and its failures (the fields `insight.Failure` is made of, Counter
-order kept so ties break the same way), and the failures pooled across commands
-for the shell rules. Every failure is kept, whatever its session count, so any
+its run count and its failures (the fields `insight.Failure` is made of, with the
+failed calls of each session, Counter order kept so ties break the same way). Every
+failure is kept, whatever its session count, so any
 `--min-sessions` gives the answer the store would. The hook builds its text from
-it with the same functions as before, in whichever language is asked.
+it with the same functions as from the store.
 
 The header names the store manifest's SHA-256. A store changes its manifest on
 every write, so an index whose fingerprint differs is stale, and the hook falls
@@ -28,7 +28,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-# 2: each failure's sessions carry their failed-call counts (`Failure.session_calls`).
+# 2: each failure's sessions carry their failed-call counts (`Failure.session_calls`), and
+# the failures pooled for the warning before a command (gone) are no longer kept.
 INDEX_VERSION = 2
 # A failed background rebuild is not retried sooner than this.
 REBUILD_PAUSE = 10 * 60
@@ -124,7 +125,6 @@ RETURN DISTINCT k.template AS template
 def build(db) -> dict:
     """The index body for the store `db` is connected to, from the hook's own queries."""
     from faildex.insight import failures, runs_of
-    from faildex.normalize import EQUALS_SIG, NOMATCH_SIG
 
     commands = {}
     for row in db.execute(_FAILED_COMMANDS):
@@ -133,11 +133,7 @@ def build(db) -> dict:
             "runs": runs_of(db, template),
             "failures": [_encode(item) for item in failures(db, template).values()],
         }
-    pooled = failures(db)
-    return {
-        "commands": dict(sorted(commands.items())),
-        "pooled": {sig: _encode(pooled[sig]) for sig in (NOMATCH_SIG, EQUALS_SIG) if sig in pooled},
-    }
+    return {"commands": dict(sorted(commands.items()))}
 
 
 def write(path: Path, store_fingerprint: str, body: dict) -> None:
@@ -185,11 +181,10 @@ def _replace(tmp: str, path: Path, tries: int = 20) -> None:
 
 
 class Index:
-    """A loaded index: the lookups `insight.warnings_for_line` makes, answered from the file."""
+    """A loaded index: one command's failures, as `insight.failures` gives them."""
 
     def __init__(self, data: dict):
         self._commands = data["commands"]
-        self._pooled = data["pooled"]
 
     def command_failures(self, template: str) -> tuple[int, list]:
         if template not in self._commands:
@@ -202,14 +197,6 @@ class Index:
         ):
             raise ValueError("damaged index entry")
         return entry["runs"], [_decode(row) for row in entry["failures"]]
-
-    def pooled_failures(self) -> dict:
-        return {sig: _decode(row) for sig, row in self._pooled.items()}
-
-    def warnings_for_line(self, line: str, min_sessions: int = 2):
-        from faildex.insight import line_warnings
-
-        return line_warnings(line, min_sessions, self.command_failures, self.pooled_failures)
 
 
 def candidates(store: Path) -> list[Index]:
@@ -241,7 +228,6 @@ def candidates(store: Path) -> list[Index]:
             and data.get("version") == INDEX_VERSION
             and isinstance(data.get("manifest_sha256"), str)
             and isinstance(data.get("commands"), dict)
-            and isinstance(data.get("pooled"), dict)
             and data["manifest_sha256"] == want
         ):
             found.append(Index(data))

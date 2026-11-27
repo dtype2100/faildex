@@ -1,9 +1,10 @@
-"""Hook behaviour on the public store that ships in the repository."""
+"""Hook behaviour after a failed shell call, on the public store and on zsh glob fixtures."""
 
 import json
 from pathlib import Path
 
 import relate
+from payloads import failed, git_status
 
 from faildex.adapters.claude_code import read_dir, read_session
 from faildex.hook import respond
@@ -11,13 +12,7 @@ from faildex.schema import ingest
 
 GLOB_FIXTURES = Path(__file__).parent / "fixtures" / "zsh_glob"
 GLOB_SIG = "no matches found: <glob>"
-
-# One command line per construct from issue #10. The hook must warn on each.
-GLOB_CASES = [
-    "for f in *.x; do ls README*; done",
-    "( ls README* readme* )",
-    "f=$(ls README* readme* | head -1)",
-]
+POST = "PostToolUseFailure"
 
 
 def _glob_store(tmp_path):
@@ -31,22 +26,12 @@ def _glob_store(tmp_path):
     return store
 
 
-def _bash(command: str) -> str:
-    return json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+def _answer(out: str) -> None:
+    """Silence, or a PostToolUseFailure notice: never anything else."""
+    assert out == "" or json.loads(out)["hookSpecificOutput"]["hookEventName"] == POST
 
 
-def test_compound_lines_are_looked_up_part_by_part(public_copy):
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls && git status"}})
-    out = respond(payload, public_copy)
-    assert out and "git status" in json.loads(out)["systemMessage"]
-
-
-def test_top_limits_the_warnings_and_zero_silences(public_copy):
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
-    assert respond(payload, public_copy, top=0) == ""
-
-
-def test_hook_skips_scripts_containing_double_lt_without_error(public_copy):
+def test_hook_takes_scripts_containing_double_lt_without_error(public_copy):
     for command in [
         "git status <<'EOF'\nhello\nEOF",
         "cat <<EOF | git status\n$(private_customer_command)\nEOF",
@@ -56,12 +41,9 @@ def test_hook_skips_scripts_containing_double_lt_without_error(public_copy):
         "cat <<-EOF\n\t$(private_customer_command)\n\tEOF\ngit status",
         "cat <<EOF | grep x",
     ]:
-        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
-        assert respond(payload, public_copy) == ""
-        cursor_out = json.loads(
-            respond(json.dumps({"command": command}), public_copy, agent="cursor")
-        )
-        assert cursor_out == {"permission": "allow"}
+        out = respond(git_status(command), public_copy)
+        _answer(out)
+        assert "private_customer_command" not in out
 
 
 def test_zsh_glob_fixtures_record_one_shared_failure():
@@ -75,34 +57,6 @@ def test_zsh_glob_fixtures_record_one_shared_failure():
         "ls",
         None,
     ]
-
-
-def test_hook_warns_for_glob_in_for_subshell_and_substitution(tmp_path):
-    """A zsh glob inside `for … do … done`, `( … )`, or `$(…)` triggers the pooled warning."""
-    store = _glob_store(tmp_path)
-    for command in GLOB_CASES:
-        out = respond(_bash(command), store)
-        assert out, command
-        message = json.loads(out)["systemMessage"]
-        assert GLOB_SIG in message, command
-        assert "`zsh`" in message, command
-    # The issue #10 session line: loop + subshell + substitution together.
-    combined = 'cd ~ && for d in a b; do ( cd "$d" && { git log -1; f=$(ls README* readme* | head -1); } ); done'
-    out = respond(_bash(combined), store)
-    assert out and GLOB_SIG in json.loads(out)["systemMessage"]
-
-
-def test_hook_is_silent_for_quoted_globs_and_false_positives(tmp_path):
-    store = _glob_store(tmp_path)
-    for command in [
-        "ls '*.py'",
-        'ls "*.py"',
-        r"ls \*.py",
-        'echo "a \\"*.private"',
-        "[ -f a ] && git status",
-        "cat <<'EOF'\n$(ls README*)\nEOF",
-    ]:
-        assert respond(_bash(command), store) == "", command
 
 
 def test_hook_handles_long_adversarial_inputs_quickly(tmp_path):
@@ -122,7 +76,7 @@ def test_hook_handles_long_adversarial_inputs_quickly(tmp_path):
     ]
     for command in cases:
         started = time.monotonic()
-        assert respond(_bash(command), store) == ""
+        _answer(respond(failed(command, "zsh:1: no matches found: *.x"), store))
         cursor_out = json.loads(respond(json.dumps({"command": command}), store, agent="cursor"))
         assert cursor_out == {"permission": "allow"}
         assert time.monotonic() - started < 0.5
@@ -131,5 +85,5 @@ def test_hook_handles_long_adversarial_inputs_quickly(tmp_path):
 def test_an_unwritable_log_does_not_hide_the_warning(tmp_path, public_copy):
     blocker = tmp_path / "file"
     blocker.write_text("")
-    out = respond(_bash("git status"), public_copy, log=blocker / "hook.jsonl")
+    out = respond(git_status(), public_copy, log=blocker / "hook.jsonl")
     assert out and "git status" in json.loads(out)["systemMessage"]

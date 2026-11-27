@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import git_status
 
 from faildex import refresh
 from faildex import store as store_module
@@ -20,7 +21,7 @@ from faildex.store import open_store
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures"
-GIT_STATUS = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
+GIT_STATUS = git_status()  # a failure the public demo store has seen
 
 
 def _fake_store(tmp_path, age=0.0):

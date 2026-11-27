@@ -37,6 +37,8 @@ from dataclasses import dataclass
 
 EARLIER_SHARE = 0.7
 RECOVERY_HOPS = 5
+# The earlier hook's cap: at most this many warnings before one command. The replay keeps it.
+MAX_WARNINGS = 2
 
 _SESSIONS = """
 MATCH (d:Source {name: $source})<-[:FROM]-(s:Session)
@@ -239,7 +241,6 @@ def replay_source(
     max_warnings: int | None = None,
 ) -> HookReplay | None:
     """Replay the hook on one dataset's (or agent's) later period."""
-    from faildex.hook import MAX_WARNINGS
     from faildex.insight import MIN_RATE
 
     max_warnings = MAX_WARNINGS if max_warnings is None else max_warnings
@@ -506,7 +507,7 @@ def _short(text: str, size: int) -> str:
 
 def _hook_lines(r: HookReplay, by: str = "dataset", min_sessions: int = 2) -> list[str]:
     """The replay as text: the funnel, what the warned calls did, and the rules that spoke."""
-    from faildex.hook import MAX_WARNINGS as max_warnings
+    max_warnings = MAX_WARNINGS
     from faildex.i18n import pad, t, width, wrap
     from faildex.insight import MIN_RATE
 

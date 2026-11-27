@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import failed, git_status
 
 from faildex import index, store
 from faildex.cli import main
@@ -23,11 +24,9 @@ from faildex.hook import quiet, respond
 
 ROOT = Path(__file__).resolve().parents[1]
 
-PAYLOADS = {
-    "claude": {"tool_name": "Bash", "tool_input": {"command": "git status"}},
-    "codex": {"tool_name": "Bash", "tool_input": {"command": "git status"}},
-    "cursor": {"command": "git status"},
-}
+# The hook speaks only to Claude Code, right after a failure (git status outside a
+# repository: a failure the public demo store has seen in many sessions).
+PAYLOADS = {"claude": json.loads(git_status())}
 
 
 def _parts(source: Path, folder: Path) -> Path:
@@ -77,11 +76,7 @@ def test_an_installed_faildex_in_a_fresh_clone_warns_on_the_first_call(
     assert store.hook_store() == Path("store")
     assert not store.is_public(store.hook_store())  # the case that went silent
     out = _hook(monkeypatch, capsys, ["hook", "--agent", agent], PAYLOADS[agent])
-    if agent == "cursor":
-        answer = json.loads(out)
-        assert "git status" in answer["agent_message"] and "faildex" in answer["user_message"]
-    else:
-        assert "git status" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "git status" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
     assert _files(package_store) == before  # nothing written inside the package
 
 
@@ -115,7 +110,7 @@ def _own_store(tmp_path: Path) -> Path:
     return _parts(made, tmp_path / "copied" / "store")
 
 
-PUSH = {"tool_name": "Bash", "tool_input": {"command": "git push"}}
+PUSH = json.loads(failed("git push", "fatal: the current branch has no upstream branch"))
 
 
 def test_a_never_opened_store_that_is_not_public_warns_on_the_first_call(tmp_path):

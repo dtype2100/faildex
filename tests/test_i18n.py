@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import relate
-from test_hook import _bash
+from payloads import failed
 from test_insight import REJECTED, _records
 
 from faildex import i18n
@@ -208,7 +208,9 @@ def test_hook_and_mcp_stay_english(tmp_path, monkeypatch, capsys):
 
     store = _store(tmp_path)
     monkeypatch.setenv("FAILDEX_LANG", "ko")
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(_bash("git push origin main")))
+    monkeypatch.setattr(
+        "sys.stdin", __import__("io").StringIO(failed("git push origin main", REJECTED))
+    )
     assert main(["hook", "--store", str(store)]) == 0
     out = capsys.readouterr().out
     assert "earlier sessions" in out and not re.search("[가-힣]", out)

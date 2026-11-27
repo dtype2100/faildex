@@ -134,10 +134,13 @@ def _store(tmp_path):
     return store
 
 
-def _payload(command, tool="Bash"):
+def _payload(command, tool="Bash", error=REJECTED):
+    """The hook's payload after `command` failed with `error` (PostToolUseFailure)."""
     import json
 
-    return json.dumps({"tool_name": tool, "tool_input": {"command": command}})
+    from payloads import failed
+
+    return json.dumps({**json.loads(failed(command, error)), "tool_name": tool})
 
 
 def test_hook_warns_about_a_known_failure_without_deciding_permission(tmp_path):
@@ -147,7 +150,7 @@ def test_hook_warns_about_a_known_failure_without_deciding_permission(tmp_path):
 
     out = json.loads(respond(_payload("git push origin main"), _store(tmp_path)))
     specific = out["hookSpecificOutput"]
-    assert specific["hookEventName"] == "PreToolUse"
+    assert specific["hookEventName"] == "PostToolUseFailure"
     assert "git pull" in specific["additionalContext"]
     assert "permissionDecision" not in specific
     assert out["systemMessage"] == (
@@ -638,14 +641,10 @@ def test_approve_knows_a_legacy_raw_shell_key_is_the_pooled_one(tmp_path):
     assert approve(items, [1], path) == []
 
 
-def test_a_command_past_a_pipe_is_checked_too(tmp_path):
-    import json
-
-    from faildex.hook import respond
+def test_a_command_past_a_pipe_is_checked_too():
+    """`faildex check` and the MCP preflight look up every part of a line."""
     from faildex.insight import warnings_for_line
 
     templates, pairs = warnings_for_line(_db(), "git log | git push origin main")
     assert templates == ["git log", "git push"]
     assert [(t, w.sig) for t, w in pairs] == [("git push", REJECTED)]
-    out = json.loads(respond(_payload("ls | git push origin main"), _store(tmp_path)))
-    assert "git pull" in out["hookSpecificOutput"]["additionalContext"]

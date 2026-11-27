@@ -356,18 +356,16 @@ CUT = "2026-01-08T00:00:00Z"  # the start of the first later session in these gr
 
 
 def _hook_said(earlier_records, command):
-    """What the real hook says before `command`, run on a store of the earlier period only:
+    """What the earlier hook said before `command`, run on a store of the earlier period only:
     the calls of earlier sessions made before the cut, linked the way ingest links them."""
-    import json
-
-    from faildex.hook import _lookup
+    from faildex.evaluate import MAX_WARNINGS
+    from faildex.insight import warnings_for_line
     from faildex.schema import utc
 
     only_earlier = relate.connect(":memory:")
     ingest(only_earlier, [r for r in earlier_records if utc(r.ts) < CUT])
-    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
-    _, items = _lookup(only_earlier, json.loads(json.dumps(payload)), 2)
-    return [item.sig for item in items]
+    _, pairs = warnings_for_line(only_earlier, command, 2)  # the earlier hook's lookup
+    return [item.sig for _, item in pairs[:MAX_WARNINGS]]
 
 
 def test_the_replay_warns_what_the_hook_would_have_said_in_the_same_order():

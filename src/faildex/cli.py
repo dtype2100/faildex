@@ -208,7 +208,7 @@ def _hook(args: argparse.Namespace) -> int:
     """Whatever goes wrong, the hook answers as it does when it has nothing to say."""
     import sys
 
-    from faildex.hook import quiet, respond
+    from faildex.hook import after_failure, quiet, respond
 
     if args.write_index is not None:  # started in the background by a hook with no index
         from faildex.index import rebuild
@@ -220,12 +220,12 @@ def _hook(args: argparse.Namespace) -> int:
         use("en")  # an agent reads this, whatever language the person chose
         if args.store is None:
             args.store = _hook_store(args)
+        raw = sys.stdin.read()
         out = respond(
-            sys.stdin.read(),
+            raw,
             args.store,
             args.min_sessions,
             args.log,
-            args.top,
             agent=args.agent,
             event=args.event,
             rules=args.encoded_rules or args.rules,
@@ -238,9 +238,9 @@ def _hook(args: argparse.Namespace) -> int:
             print(out)
     except Exception:  # noqa: BLE001, S110 - a closed pipe is not worth a traceback
         pass
-    if args.refresh_every:
+    if args.refresh_every and after_failure(raw, args.agent):
         try:
-            sys.stdout.flush()  # the warning first; counting comes after and cannot hide it
+            sys.stdout.flush()  # the notice first; counting comes after and cannot hide it
             target = _refresh_target(args)
             if target is not None:
                 from faildex.refresh import note
@@ -265,7 +265,7 @@ def _refresh_target(args: argparse.Namespace) -> Path | None:
 
     from faildex.store import PRIVATE_STORE
 
-    if args.event != "pre-shell":
+    if args.event == "session-start":
         return None
     if args.store_given or os.environ.get("FAILDEX_STORE"):
         return args.store
@@ -439,13 +439,26 @@ def _report(args: argparse.Namespace) -> int:
     return 0
 
 
+# Two failed commands for the demo: one the public store has seen in other sessions, one
+# it has not.
+DEMO_FAILURES = (
+    (
+        "git status",
+        "Exit code 128\nfatal: not a git repository (or any of the parent directories): .git",
+    ),
+    ("npm test", 'Exit code 1\nnpm error Missing script: "test"'),
+)
+
+
 def _demo(args: argparse.Namespace) -> int:
-    """Rules, a pre-run check and the evaluation, on the public store that ships with faildex."""
+    """Rules, the notice after a failed command and the evaluation, on the public store
+    that ships with faildex."""
     import sys
 
+    from faildex.adapters.claude_code import failed_call
     from faildex.evaluate import report
-    from faildex.hook import notice_for
-    from faildex.insight import proposals, render, safe_console_text, use_color, warnings_for
+    from faildex.hook import _post_warning
+    from faildex.insight import proposals, render, safe_console_text, use_color
     from faildex.store import open_store, public_store
 
     color = use_color(sys.stdout)
@@ -457,10 +470,11 @@ def _demo(args: argparse.Namespace) -> int:
             safe_console_text(render(proposals(db)[:3], color=color, encoding=encoding), sys.stdout)
         )
         print(t("demo.check"))
-        for command in ("git status", "ls"):
-            found = warnings_for(db, command)
+        for command, error in DEMO_FAILURES:
+            said = _post_warning(db, failed_call(command, error, "demo"), 2)
             print(f"$ {command}")
-            print(f"  {notice_for(found)}" if found else t("demo.no_notice"))
+            print(f"  {error.splitlines()[-1]}")
+            print(f"  {said[1]}" if said else t("demo.no_notice"))
         print(t("demo.eval"))
         print(report(db))
     finally:
@@ -708,8 +722,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
     )
     hook.add_argument(
         "--event",
-        choices=("session-start", "pre-shell"),
-        default="pre-shell",
+        # pre-shell: what an earlier `faildex link` wrote for Codex and Cursor; still
+        # accepted (and silent), since an argparse error would exit 2 and may block.
+        choices=("session-start", "tool", "pre-shell"),
+        default="tool",
+        metavar="{session-start,tool}",
         help=t("opt.hook.event"),
     )
     hook.add_argument(
@@ -742,7 +759,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
     for sub, top in ((rules, 10), (check, 3), (hook, 2)):
         sub.add_argument("--store", type=_path, default=None, help=t("opt.store"))
         sub.add_argument("--min-sessions", type=_positive, default=2, help=t("opt.min_sessions"))
-        sub.add_argument("--top", type=_positive, default=top, help=t("opt.top"))
+        # The hook gives one notice; --top is still accepted from older command lines.
+        sub.add_argument(
+            "--top",
+            type=_positive,
+            default=top,
+            help=argparse.SUPPRESS if sub is hook else t("opt.top"),
+        )
 
     ingest = add("ingest")
     for flag, metavar in (

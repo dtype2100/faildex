@@ -29,12 +29,11 @@ command encodes the path as one shell-safe token, so Windows shell differences
 and spaces or special characters in home directories do not change its meaning.
 This encoding is not encryption.
 
-`faildex hook` still answers an event before a shell command (Codex `PreToolUse`,
-Cursor `beforeShellExecution`) for a setup that has one, with the thresholds of
-`faildex check`: a failure seen in at least `min_sessions` (default `2`) sessions
-and in at least `MIN_RATE` (3%) of that command's runs, plus the pooled `zsh`
-failures `no matches found: <glob>` and `=<word> not found` before a line with that
-construct. This is not recommended, and `faildex link` takes such entries out.
+An event before a shell command (Codex `PreToolUse`, Cursor `beforeShellExecution`,
+or a Claude Code `PreToolUse` from an earlier setup) gets no answer: nothing for Claude
+Code and Codex, only `allow` for Cursor, so nothing is blocked and old command lines
+such as `faildex hook --agent codex --event pre-shell` still run. faildex warns no
+agent before a command; `faildex link` takes such entries out.
 
 Codex requires new or changed hooks to be reviewed and trusted in `/hooks`.
 Trust the faildex command, then start a new session. A session started before

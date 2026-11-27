@@ -1,6 +1,7 @@
 import json
 
 import relate
+from payloads import failed
 
 from faildex.cli import main
 from faildex.hook import respond
@@ -71,12 +72,8 @@ def test_hook_log_records_the_template_only_and_report_counts_it(tmp_path, capsy
     db.flush()
     db.close()
     log = tmp_path / "logs" / "hook.jsonl"
-    payload = {"tool_name": "Bash", "tool_input": {"command": "rm -rf /Users/alice/private"}}
-    assert respond(json.dumps(payload), store, log=log)
-    assert (
-        respond(json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}), store, log=log)
-        == ""
-    )
+    assert respond(failed("rm -rf /Users/alice/private", "permission denied"), store, log=log)
+    assert respond(failed("ls", "permission denied"), store, log=log) == ""
     (entry,) = [json.loads(line) for line in log.read_text().splitlines()]
     assert entry["command"] == "rm" and entry["warnings"] == 1
     assert "alice" not in log.read_text()

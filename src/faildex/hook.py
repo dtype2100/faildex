@@ -1,33 +1,29 @@
-"""Agent hook: for Claude Code right after a shell command fails (PostToolUseFailure),
-for Codex and Cursor before one runs.
+"""Claude Code hook right after a shell command fails (PostToolUseFailure), and the
+rules at session start for Claude Code, Codex and Cursor.
 
-Reads the hook's JSON from stdin; the same command line answers both events, and the
-payload's `hook_event_name` says which one this is.
+Reads the hook's JSON from stdin. When the failed Bash call's failure key (`error` read
+as the store reads a tool result, `adapters.claude_code.failed_call`) is on record for
+the same command template in at least `min_sessions` other sessions (the session the
+hook runs in and its subagents left out), it tells the agent so as `additionalContext`,
+with the recovery on record, and shows the person one line (`systemMessage`). A
+precedent alone is enough. On a line that runs several programs it names no next step.
+Interrupted calls (exit 130 and 143), empty errors and payloads over MAX_STDIN
+characters get nothing.
 
-- PostToolUseFailure (Claude Code): when the failed Bash call's failure key (`error`
-  read as the store reads a tool result, `adapters.claude_code.failed_call`) is on
-  record for the same command template in at least `min_sessions` other sessions (the
-  session the hook runs in and its subagents left out), it tells the agent so, with the
-  recovery on record. It speaks on a precedent alone; the 3% share of the pre-run
-  warning does not apply, since the call has already failed. On a line that runs
-  several programs it names no next step. Interrupted calls (exit 130 and 143), empty
-  errors and payloads over MAX_STDIN characters get nothing.
-- Anything else (Codex's PreToolUse, Cursor's beforeShellExecution, and a Claude Code
-  PreToolUse setting from before, until `faildex link` runs again): when the command
-  about to run has a failure that recurred across sessions, it gives the agent the
-  known facts.
+Anything else is silence: a PreToolUse payload, a Codex or Cursor shell event (from a
+setup an earlier faildex made, or one made by hand), any other event. faildex gives no
+warning before a command runs; Cursor still gets its `allow`, so nothing is blocked.
 
-Either way the agent gets `additionalContext` and the person one line
-(`systemMessage`), which Claude Code prints under the command.
 It never decides permission, never blocks, and stays silent (exit 0, no output)
-for unknown commands and on any error: a warning tool must not be able to break
-the session it is watching. It answers from the store's index without writing
-anything. The only store files it ever writes are those of a store never opened on
-this machine, prepared once as every faildex command does (`_open_source`): faildex's
-own public demo store as its cache copy, never inside the package, and any other
-store where it is, only if it looks like a Relate store.
+on any error: a hook must not be able to break the session it is watching. It answers
+from the store's index without writing anything. The only store files it ever writes
+are those of a store never opened on this machine, prepared once as every faildex
+command does (`_open_source`): faildex's own public demo store as its cache copy,
+never inside the package, and any other store where it is, only if it looks like a
+Relate store.
 
-Register it in `.claude/settings.json`:
+`faildex link` registers it in `~/.claude/settings.json`; by hand, in a project's
+`.claude/settings.json`:
 
     {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
         {"type": "command", "command": "faildex hook --store /path/to/store", "timeout": 5}
@@ -44,7 +40,6 @@ from pathlib import Path
 from faildex.normalize import command_template
 
 SHELL_TOOLS = frozenset(["Bash"])
-MAX_WARNINGS = 2
 POST_FAILURE = "PostToolUseFailure"
 # A failure payload larger than this is not read further.
 MAX_STDIN = 1_000_000
@@ -67,59 +62,16 @@ def _shell_command(payload: object) -> str | None:
     return command if isinstance(command, str) else None
 
 
-def _lookup(
-    source, payload: object, min_sessions: int, top: int = MAX_WARNINGS
-) -> tuple[str | None, list]:
-    """(command template, its recurring failures) for a shell call; (None, []) otherwise.
-
-    `source` is the hook's index of a store, or a connection to the store itself; both
-    answer through `insight.line_warnings`. Every part of a compound line is looked up
-    (`ls && git status` warns for git).
-    """
-    from faildex.insight import warnings_for_line
-
-    command = _shell_command(payload)
-    if command is None:
-        return None, []
-    if hasattr(source, "warnings_for_line"):
-        _, pairs = source.warnings_for_line(command, min_sessions)
-    else:
-        _, pairs = warnings_for_line(source, command, min_sessions)
-    pairs = pairs[: max(0, top)]
-    if not pairs:
-        return None, []
-    return pairs[0][0], [item for _, item in pairs]
-
-
-def _context(template: str, found: list) -> str:
-    lines = [f"faildex: `{template}` has failed the same way in earlier sessions."]
-    lines += [f"- {item.rule()}" for item in found]
-    return "\n".join(lines)
-
-
-def context_for(db, payload: object, min_sessions: int = 2, top: int = MAX_WARNINGS) -> str | None:
-    """The text to hand the agent before this tool call, or None for nothing."""
-    template, found = _lookup(db, payload, min_sessions, top)
-    return _context(template, found) if found else None
-
-
-def notice_for(found: list) -> str:
-    """The one line the person sees in the session, above the command's result."""
-    more = f" (+{len(found) - 1} more for the agent)" if len(found) > 1 else ""
-    return found[0].notice() + more
-
-
-def _log(path: Path, payload: dict, context: str, after_failure: bool = False) -> None:
-    """Note that a warning was given: when and for which command template, nothing more
-    (after a failure, also that it was one; never the error text)."""
+def _log(path: Path, payload: dict, context: str) -> None:
+    """Note that a notice was given after a failure: when and for which command template,
+    nothing more (never the error text)."""
     command = payload.get("tool_input", {}).get("command")
     entry = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "command": command_template(command) if isinstance(command, str) else None,
         "warnings": context.count("\n- "),
+        "event": "post-failure",
     }
-    if after_failure:
-        entry["event"] = "post-failure"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as out:
         out.write(json.dumps(entry) + "\n")
@@ -174,33 +126,15 @@ def _open_source(store: Path, wait: bool = False):
         return open_store(source, wait=wait)
 
 
-def _warning(source, payload: object, min_sessions: int, top: int) -> tuple[str, str] | None:
-    """(context for the agent, notice for the person), or None for nothing to say.
-
-    The text is written here, inside the step that may fail, so that an index entry
-    that cannot even be put into words sends the hook on to the next source."""
-    template, found = _lookup(source, payload, min_sessions, top)
-    if not found:
-        return None
-    return _context(template, found), notice_for(found)
-
-
-def _found(store: Path, payload: object, min_sessions: int, top: int, rebuild: bool, speak=None):
-    """The warning from the store's index, or from the store itself (read-only) when the
-    index is missing, stale or damaged anywhere, words included; then, with `rebuild`,
-    the index is rebuilt in the background, if there is a store to build it from: one
-    that could be read, or one the rebuild may prepare (`_to_prepare`).
-
-    `speak(source)` writes the warning from one source; by default the pre-run one."""
+def _found(store: Path, payload: object, rebuild: bool, speak):
+    """What `speak(source)` says from the store's index, or from the store itself
+    (read-only) when the index is missing, stale or damaged anywhere, words included;
+    then, with `rebuild`, the index is rebuilt in the background, if there is a store to
+    build it from: one that could be read, or one the rebuild may prepare (`_to_prepare`)."""
     from faildex import index
 
     if _shell_command(payload) is None:
         return None
-    if speak is None:
-
-        def speak(source):
-            return _warning(source, payload, min_sessions, top)
-
     for found in index.candidates(store):
         try:
             return speak(found)
@@ -217,6 +151,20 @@ def _found(store: Path, payload: object, min_sessions: int, top: int, rebuild: b
     finally:
         if rebuild and (readable or _preparable(store)):
             index.start_rebuild(store)
+
+
+def after_failure(raw: str, agent: str = "claude") -> bool:
+    """Whether a payload is a Claude Code PostToolUseFailure event: the only one the hook
+    answers besides session start, and the only one `--refresh-every` counts."""
+    try:
+        payload = json.loads(raw)
+    except (ValueError, RecursionError):
+        return False
+    return (
+        agent == "claude"
+        and isinstance(payload, dict)
+        and payload.get("hook_event_name") == POST_FAILURE
+    )
 
 
 def _failed_call(raw: str, payload: object):
@@ -295,7 +243,7 @@ def _post_warning(source, record, min_sessions: int) -> tuple[str, str] | None:
     return context, _clean(item.notice(step=step))
 
 
-def quiet(agent: str = "claude", event: str = "pre-shell") -> str:
+def quiet(agent: str = "claude", event: str = "tool") -> str:
     """What the hook prints when it has nothing to say, for each agent and event."""
     if agent == "cursor":
         return json.dumps({}) if event == "session-start" else json.dumps({"permission": "allow"})
@@ -307,10 +255,9 @@ def respond(
     store: Path,
     min_sessions: int = 2,
     log: Path | None = None,
-    top: int = MAX_WARNINGS,
     *,
     agent: str = "claude",
-    event: str = "pre-shell",
+    event: str = "tool",
     rules: Path | None = None,
     rebuild: bool = False,
 ) -> str:
@@ -318,7 +265,7 @@ def respond(
 
     With `rebuild`, a missing or stale index is rebuilt in the background (the CLI asks
     for it; a test calling this directly does not)."""
-    silent = quiet(agent, "pre-shell")
+    silent = quiet(agent, "tool")
     try:
         if event == "session-start":
             text = (rules or Path("~/faildex-rules.md")).expanduser().read_text(encoding="utf-8")
@@ -337,52 +284,28 @@ def respond(
                     }
                 }
             )
+        if not after_failure(raw, agent):
+            return silent  # no warning before a command: PreToolUse, Codex, Cursor
         payload = json.loads(raw)
-        if agent == "cursor" and isinstance(payload, dict):
-            payload = {"tool_name": "Bash", "tool_input": {"command": payload.get("command")}}
-        after_failure = (
-            agent == "claude"
-            and isinstance(payload, dict)
-            and payload.get("hook_event_name") == POST_FAILURE
+        record = _failed_call(raw, payload)
+        if record is None:
+            return silent
+        warning = _found(
+            store, payload, rebuild, lambda source: _post_warning(source, record, min_sessions)
         )
-        if after_failure:
-            record = _failed_call(raw, payload)
-            if record is None:
-                return silent
-            warning = _found(
-                store,
-                payload,
-                min_sessions,
-                top,
-                rebuild,
-                lambda source: _post_warning(source, record, min_sessions),
-            )
-        else:
-            warning = _found(store, payload, min_sessions, top, rebuild)
         if warning is None:
             return silent
         context, notice = warning
         if log:
             try:
-                _log(log, payload, context, after_failure)
+                _log(log, payload, context)
             except OSError:
-                pass  # an unwritable log must not hide the warning itself
+                pass  # an unwritable log must not hide the notice itself
     except Exception:  # noqa: BLE001 - see module docstring
         return quiet(agent, event)
-    if agent == "cursor":
-        return json.dumps(
-            {
-                "permission": "allow",
-                "user_message": notice,
-                "agent_message": context,
-            }
-        )
     return json.dumps(
         {
             "systemMessage": notice,
-            "hookSpecificOutput": {
-                "hookEventName": POST_FAILURE if after_failure else "PreToolUse",
-                "additionalContext": context,
-            },
+            "hookSpecificOutput": {"hookEventName": POST_FAILURE, "additionalContext": context},
         }
     )

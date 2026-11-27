@@ -2,8 +2,8 @@
 
 The failure is keyed as the store keys it, looked up for the same command template,
 and told when other sessions (not the hook's own session or its subagents) had it in
-at least `min_sessions` sessions. Anything else is silence, and the pre-run path
-(PreToolUse, Codex, Cursor) gives the very bytes it gave before.
+at least `min_sessions` sessions. Anything else is silence, including every payload
+before a command (PreToolUse, Codex, Cursor): faildex warns no agent before a run.
 """
 
 import io
@@ -315,28 +315,54 @@ def test_the_index_keeps_failed_calls_per_session(seeded):
 # The pre-run path -----------------------------------------------------------------------
 
 
-def _golden():
+def _old_cases():
+    """The payloads whose output e2c4ae6 pinned (PreToolUse, Codex, Cursor), now all silent."""
     return json.loads((FIXTURES / "pre_outputs.json").read_text(encoding="utf-8"))["cases"]
 
 
-@pytest.mark.parametrize("n", range(len(_golden())))
-def test_pre_run_codex_and_cursor_payloads_give_the_same_bytes_as_before(public_copy, n):
-    case = _golden()[n]
-    assert respond(json.dumps(case["payload"]), public_copy, agent=case["agent"]) == case["out"]
+@pytest.mark.parametrize("n", range(len(_old_cases())))
+def test_no_warning_before_a_command_for_any_agent(public_copy, n):
+    case = _old_cases()[n]
+    out = respond(json.dumps(case["payload"]), public_copy, agent=case["agent"])
+    assert out == ('{"permission": "allow"}' if case["agent"] == "cursor" else "")
 
 
 # The CLI --------------------------------------------------------------------------------
 
 
-def test_the_same_command_line_answers_both_events(seeded, monkeypatch, capsys):
-    for raw, event in (
-        (SPEAKS, "PostToolUseFailure"),
-        (json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push"}}), "PreToolUse"),
+def test_the_cli_answers_a_failure_and_nothing_before_a_command(seeded, monkeypatch, capsys):
+    for raw, expected in (
+        (SPEAKS, True),
+        (json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push"}}), False),
+        (
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "git push"},
+                }
+            ),
+            False,
+        ),
     ):
         monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
         assert main(["hook", "--store", str(seeded)]) == 0
-        out = json.loads(capsys.readouterr().out)
-        assert out["hookSpecificOutput"]["hookEventName"] == event
+        out = capsys.readouterr().out
+        assert bool(out) is expected
+        if expected:
+            assert _said(out)
+
+
+def test_refresh_every_counts_only_failures(seeded, monkeypatch, capsys):
+    noted = []
+    monkeypatch.setattr(refresh, "note", lambda store, every: noted.append(store))
+    before = json.dumps(
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}}
+    )
+    for raw in (before, SPEAKS, before):
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        assert main(["hook", "--store", str(seeded), "--refresh-every", "200"]) == 0
+    assert noted == [seeded]
 
 
 def test_refresh_every_counts_failed_calls(seeded, monkeypatch, capsys):

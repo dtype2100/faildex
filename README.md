@@ -5,7 +5,8 @@
 A failure index for coding agents. faildex reads the session logs of Claude Code,
 Codex, Cursor and Antigravity into one embedded [Relate](https://github.com/relatedb/relate) graph,
 finds the failures that keep coming back across sessions, reads the way out off
-the graph, and tells the agent before it runs the same command again.
+the graph, and, right after an agent's shell command fails a way other sessions
+already saw, tells it what they learned.
 
 Built for the Relate by Neo4j Hackathon.
 
@@ -53,7 +54,7 @@ What changes: adds the `faildex` command, and uv if it is missing; nothing else.
 faildex demo
 ```
 
-What changes: nothing is written. It shows rules, a warning and the numbers on the public logs that ship with faildex.
+What changes: nothing is written. It shows rules, the notice after a failed command and the numbers on the public logs that ship with faildex.
 
 **3. Index your own logs**
 
@@ -177,7 +178,7 @@ faildex turns it into three things:
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. On your own store (`--store ~/.faildex/store`), which has no public datasets, the same split runs per agent. |
 | `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
-| `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and warnings the hook gave. |
+| `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and notices the hook gave. |
 
 ### One failure, followed through the graph
 
@@ -253,7 +254,7 @@ to your PATH, run `uv tool update-shell` first). Then, from any folder
 (the whole order is in [How to use, in order](#how-to-use-in-order)):
 
 ```bash
-faildex demo                  # rules, a pre-run warning and the numbers, on public logs
+faildex demo                  # rules, a notice after a failure and the numbers, on public logs
 faildex check "git status"    # what is known to go wrong with a command
 ```
 
@@ -459,20 +460,21 @@ the warning would have acted on it. The Codex dataset is one developer on a
 Windows project, and one failure (`command timed out`) is 31 of the 80; without
 it the recurrence is 57%.
 
-A different question is whether the pre-run hook would have spoken. Replaying the
-hook's own rule on the later period, it would have spoken before 206 of the 5,070
+A different question is whether faildex's earlier hook, which warned before a command
+(it is gone; see below), would have spoken. Replaying that hook's own rule on the later period, it would have spoken before 206 of the 5,070
 later shell calls (4.1%), and 10 of those calls then failed with the failure it
 named, 10 of the 117. Nine of the ten are in one session, and moving the cut
 between 50% and 90% moves the count between 0 and 22 (recomputed by a test from the
 committed store), so this describes these logs and is not a rate. None of the 48 failures with a recovery on record would
 have been warned. Details in [docs/evaluation.md](docs/evaluation.md#would-the-hook-have-spoken).
 
-A small controlled bench runs seven tasks in Claude Code with the hook off and
-on, 10 times each: a warning did not reduce failures on the first try (20 of 70
+A small controlled bench runs seven tasks in Claude Code with that earlier hook off
+and on, 10 times each: a warning did not reduce failures on the first try (20 of 70
 runs either way), because the failure comes on the first call and a warning
 never blocks it. Inside a git repository the hook still warned before 20 calls
 about git failures that cannot happen there
-([bench](docs/evaluation.md#controlled-bench)).
+([bench](docs/evaluation.md#controlled-bench)). These results are why faildex now
+warns before no command and speaks only right after a failure.
 
 ## Across agents, on real logs
 
@@ -493,7 +495,7 @@ your own logs to get yours.
   another had already run into.
 - 57 failure keys recurred across two or more sessions; 13 of them have a
   recovery on record.
-- The hook is selective: of 197 command templates, 7 would get a warning.
+- The earlier warning before a command was selective: of 197 command templates, 7 would have got one.
 
 ## Judging criteria
 
@@ -503,7 +505,7 @@ your own logs to get yours.
 | Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS, Linux and Windows |
 | Usefulness | 68% of later failures were already in the graph; in a real Claude Code run (`claude -p`, Haiku) Claude received the hook's notice right after a failed command and quoted it word for word; it speaks only when other sessions had the same failure and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md` (each rule of the method mapped to the test that guards it); every number comes from `make eval` on the committed store, a test fails if a document disagrees, and the WebAssembly build reaches the same numbers |
-| Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |
+| Creativity | Failures learned by one agent become rules and notices for the next session, with the log lines as evidence |
 
 ## AI use
 

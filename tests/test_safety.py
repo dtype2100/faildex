@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import NOT_A_REPO
 
 from faildex import hook, index, refresh
 from faildex.build import counts
@@ -33,8 +34,15 @@ CODEX = str(FIXTURES / "codex" / "trajectories.sample.jsonl")
 ENTRY = "from faildex.cli import main; raise SystemExit(main())"
 
 
+# The failure each test store holds for a command (git status: the public demo store's).
+FAILURES = {"git push": "fatal: the current branch has no upstream branch"}
+
+
 def _bash(line: str) -> str:
-    return json.dumps({"tool_name": "Bash", "tool_input": {"command": line}})
+    """The hook's payload after `line` failed the way the test stores hold for its command."""
+    from payloads import failed
+
+    return failed(line, FAILURES.get(line.split(" &&")[0], NOT_A_REPO), 1)
 
 
 def _fresh_copy(dest: Path) -> Path:
@@ -192,7 +200,6 @@ def _index_is_of_the_store(store: Path) -> None:
     finally:
         db.close()
     assert data["commands"] == json.loads(json.dumps(body["commands"]))
-    assert data["pooled"] == json.loads(json.dumps(body["pooled"]))
 
 
 def test_p1_3_an_ingest_in_between_cannot_pair_its_fingerprint_with_our_data(tmp_path, monkeypatch):

@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import NOT_A_REPO
 
 import faildex
 from faildex import hook, index
@@ -29,8 +30,15 @@ ENTRY = "from faildex.cli import main; raise SystemExit(main())"
 REAL_START_REBUILD = index.start_rebuild
 
 
+# The failure each test store holds for a command (git status: the public demo store's).
+FAILURES = {"git push": "fatal: the current branch has no upstream branch"}
+
+
 def _bash(line: str) -> str:
-    return json.dumps({"tool_name": "Bash", "tool_input": {"command": line}})
+    """The hook's payload after `line` failed the way the test stores hold for its command."""
+    from payloads import failed
+
+    return failed(line, FAILURES.get(line.split(" &&")[0], NOT_A_REPO), 1)
 
 
 def _mark_as(folder: Path, store: Path, token: str) -> None:
@@ -84,6 +92,7 @@ def test_p1a_a_real_swap_gap_still_warns_from_the_index(tmp_path):
     store = tmp_path / "s"
     _git_push_store(store, tmp_path / "logs")
     expected = hook.respond(_bash("git push"), store)
+    assert "git push" in expected  # a notice to compare, not two silences
     _mid_swap(store)
     assert hook.respond(_bash("git push"), store) == expected
 
@@ -92,6 +101,7 @@ def test_p1a_half_the_evidence_is_not_a_swap(tmp_path):
     """A set-aside store alone (no marked copy beside it) is not a swap under way."""
     store = tmp_path / "s"
     _git_push_store(store, tmp_path / "logs")
+    assert hook.respond(_bash("git push"), store)  # it speaks while the store is there
     token = "0123456789abcdef"  # gitleaks:allow (test swap token)
     aside = tmp_path / f".s.old-{token}"
     store.rename(aside)
@@ -286,17 +296,19 @@ def test_p2_a_failure_while_writing_the_warning_falls_back_to_the_store(tmp_path
     _git_push_store(store, tmp_path / "logs")
     payload = _bash("git push")
     expected = hook.respond(payload, store)
-    real = hook.notice_for
+    assert json.loads(expected)["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+    real = hook._clean
     calls = []
 
-    def fails_once(found):
+    def fails_once(text, *args):
         calls.append(1)
         if len(calls) == 1:
             raise IndexError("an entry that cannot be put into words")
-        return real(found)
+        return real(text, *args)
 
-    monkeypatch.setattr(hook, "notice_for", fails_once)
+    monkeypatch.setattr(hook, "_clean", fails_once)
     assert hook.respond(payload, store) == expected
+    assert len(calls) > 2  # the index's words failed, the store's were written
 
 
 # P2: Windows recovery ------------------------------------------------------------------

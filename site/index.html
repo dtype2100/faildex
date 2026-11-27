@@ -81,7 +81,7 @@
   .lede { color: var(--body); font-size: 15px; line-height: 1.48; max-width: 78ch; margin: 8px 0 0; }
   .mini { margin-top: 12px; background: var(--term); color: var(--term-ink); border-radius: 12px; padding: 11px 16px; font: 13px/1.5 var(--mono); overflow-wrap: anywhere; }
   .mini-when { font: 600 12px/1.35 var(--sans); color: #e5e5e5; margin-bottom: 5px; letter-spacing: 0.01em; }
-  .mini-hook { color: #fca5a5; }
+  .mini-hook { color: #fca5a5; white-space: pre-wrap; }
   .mini-cap { margin-top: 5px; color: #a3a3a3; font: 12.5px/1.4 var(--sans); }
   .hero-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 18px; margin-top: 10px; }
   .start { display: inline-block; font-weight: 600; color: var(--ink); text-decoration: none; border-bottom: 1.5px solid var(--ink); padding-bottom: 2px; font-size: 14px; }
@@ -276,13 +276,13 @@
 <main class="wrap" id="top">
   <section class="hero">
     <p class="eyebrow" data-i18n="hero.eyebrow">faildex · coding agent failure index · 422 public sessions</p>
-    <h1 data-i18n-html="hero.title">Coding agents repeat the same failures. <span>faildex warns them before the second try.</span></h1>
+    <h1 data-i18n-html="hero.title">Coding agents repeat the same failures. <span>faildex tells them what worked, right after the failure.</span></h1>
     <p class="lede" data-i18n="hero.lede"></p>
     <div class="mini" aria-label="What the agent sees">
-      <div class="mini-when" data-i18n="hero.when">WHEN SHOWN · Right before the agent runs a command that failed in earlier sessions</div>
+      <div class="mini-when" data-i18n="hero.when">WHEN SHOWN · Right after a shell command fails the way it failed in other sessions</div>
       <div class="mini-cmd">● Bash(git status)</div>
       <div class="mini-hook" id="mini-hook">…</div>
-      <div class="mini-cap" data-i18n="hero.mini">The agent receives this warning and past fixes in context — the command runs without blocking.</div>
+      <div class="mini-cap" data-i18n="hero.mini">The agent receives this notice and past fixes in context; nothing is blocked, and nothing is said before a command runs.</div>
     </div>
     <div class="hero-foot">
       <a class="start" href="#failures" data-i18n="hero.start">Below: top recurring failures — click any row to see how sessions recovered ↓</a>
@@ -326,13 +326,13 @@
     <div class="rail"><span>3</span></div>
     <div class="body">
       <div class="head">
-        <div><h2 data-i18n="check.title">The agent is warned before it repeats it</h2><p data-i18n-html="check.intro"></p></div>
+        <div><h2 data-i18n="check.title">The agent hears what worked, right after it fails</h2><p data-i18n-html="check.intro"></p></div>
         <button class="ghost" type="button" data-show="q-check" data-i18n="cypher.show">Show Cypher</button>
       </div>
       <pre class="cypher" id="q-check" hidden></pre>
       <div class="check">
         <div class="card">
-          <label class="field" for="cmd" data-i18n="check.label">Command the agent is about to run</label>
+          <label class="field" for="cmd" data-i18n="check.label">Command that just failed</label>
           <div class="input"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" list="templates" value="git status"></div>
           <datalist id="templates"></datalist>
           <p class="field" style="margin:14px 0 0" data-i18n="check.try">Or try one of these:</p>
@@ -793,10 +793,10 @@ async function main() {
 
   {
     const g = run(db, Q.preflight, { command: "git status" })[0];
-    $("mini-hook").textContent = g ? `  ⎿ PreToolUse:Bash says: faildex: \`git status\` failed with \`${g.known_failure}\` in ${g.sessions} earlier sessions; no recovery on record.` : "";
+    $("mini-hook").textContent = g ? `  ⎿ Error: ${g.known_failure}\n  ⎿ PostToolUseFailure:Bash says: faildex: \`git status\` failed with \`${g.known_failure}\` in ${g.sessions} earlier sessions; no recovery on record.` : "";
   }
 
-  // ---- pre-run check
+  // ---- the notice right after a failure
   const templates = run(db, Q.templates).map((r) => r.template).filter((t) => t && !t.startsWith("<"));
   const warned = run(db, Q.commandsWithFailures).map((r) => r.command).sort((a, b) => (b === "git status") - (a === "git status"));
   $("templates").innerHTML = templates.map((t) => `<option value="${esc(t)}">`).join("");
@@ -827,7 +827,7 @@ async function main() {
       const top = fixes[0];
       after = top.calls_until_it_worked === 1 || top.first_step_after_failure === template ? "it worked again on a later try" : `sessions got past it by running \`${top.first_step_after_failure}\` first`;
     }
-    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="hook">  ⎿ PreToolUse:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
+    $("term").innerHTML = `<div>● Bash(${shown})</div><div class="dim">  ⎿ Error: ${esc(k.known_failure)}</div><div class="hook">  ⎿ PostToolUseFailure:Bash says: faildex: \`${esc(template)}\` failed with \`${esc(k.known_failure)}\` in ${k.sessions} earlier sessions; ${esc(after)}.</div><div class="dim" style="margin-top:14px">${t("check.warnAfter")}</div>`;
     const allStats = totalsByFailure[k.known_failure];
     const picked = recurring[current];
     const sameFailure = picked && picked.failure === k.known_failure;

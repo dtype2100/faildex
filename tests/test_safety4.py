@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import git_status
 
 from faildex import refresh, store
 from faildex.hook import quiet, respond
@@ -74,11 +75,9 @@ def _files(folder: Path) -> dict:
     return {p.relative_to(folder): p.stat().st_size for p in folder.rglob("*")}
 
 
-PAYLOADS = {
-    "claude": {"tool_name": "Bash", "tool_input": {"command": "git status"}},
-    "codex": {"tool_name": "Bash", "tool_input": {"command": "git status"}},
-    "cursor": {"command": "git status"},
-}
+# The hook speaks only to Claude Code, right after a failure (git status outside a
+# repository: a failure the public demo store has seen in many sessions).
+PAYLOADS = {"claude": json.loads(git_status())}
 
 
 @pytest.fixture
@@ -94,12 +93,8 @@ def shipped(tmp_path, monkeypatch):
 def test_b_a_fresh_clone_warns_on_the_first_call(shipped, agent):
     before = _files(shipped)
     out = json.loads(respond(json.dumps(PAYLOADS[agent]), shipped, agent=agent))
-    if agent == "cursor":
-        assert out["permission"] == "allow"
-        assert "git status" in out["agent_message"] and "faildex" in out["user_message"]
-    else:
-        assert "git status" in out["hookSpecificOutput"]["additionalContext"]
-        assert "faildex" in out["systemMessage"]
+    assert "git status" in out["hookSpecificOutput"]["additionalContext"]
+    assert "faildex" in out["systemMessage"]
     assert _files(shipped) == before  # the shipped store itself is never written
 
 

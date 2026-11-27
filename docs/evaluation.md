@@ -43,9 +43,11 @@ With failure text only (no exit-code keys): 72 of 102 recurring (70.6%), 45 warn
 
 ## Would the hook have spoken?
 
-The table above asks what the graph knew. This asks what the pre-run hook would
-have done with it. Knowledge is the earlier period only; the rule is the hook's
-own (a failure seen in 2 or more sessions and in at least 3% of that command's
+The table above asks what the graph knew. This asks what faildex's earlier hook,
+which warned before a command, would have done with it. faildex no longer has that
+hook: this section and the [controlled bench](#controlled-bench) are why (see
+[notices right after a failure](#notices-right-after-a-failure-claude-code-posttoolusefailure)).
+Knowledge is the earlier period only; the rule is that hook's own (a failure seen in 2 or more sessions and in at least 3% of that command's
 runs, at most 2 warnings per call); it is replayed on every later-period shell
 call. Nobody was warned in these logs, so this shows when the hook would have
 spoken, not what an agent would have done next. `make eval` prints it below the
@@ -97,9 +99,10 @@ failed in the same session.
 
 ## Controlled bench
 
-The replay says when the hook would have spoken; it cannot say what an agent
-does after a warning. This bench runs the same tasks in Claude Code with the
-hook off and on (the hook of `origin/main` 03313cc). It is a small controlled
+The replay says when the earlier hook would have spoken; it cannot say what an
+agent does after a warning. This bench runs the same tasks in Claude Code with
+that hook, which warned before a command, off and on (the hook of `origin/main`
+03313cc; faildex no longer has it). It is a small controlled
 experiment on one model and seven made-up tasks, not a measure of faildex in
 general. The code, the tasks and every run's record are in
 [`bench/`](../bench/).
@@ -198,8 +201,9 @@ are test functions under `tests/`.
 
 ## Notices right after a failure (Claude Code `PostToolUseFailure`)
 
-The recommended Claude Code setting runs `faildex hook` right after a shell call
-fails (`PostToolUseFailure`), instead of before every call. When other sessions
+The Claude Code hook that `faildex link` installs runs `faildex hook` right after a
+shell call fails (`PostToolUseFailure`); faildex warns no agent before a command any
+more (the two sections above are why). When other sessions
 had the same failure of the same command, the hook tells the agent so, with the
 recovery on record. This section says how it decides, what was measured before it
 was built, and what was not measured.
@@ -214,7 +218,7 @@ was built, and what was not measured.
   (`<session>/agent-*`) are left out of both the session count and the call
   count, so a failure a refresh has just stored is no precedent for itself. The
   hook speaks when at least `--min-sessions` (2) other sessions remain.
-- **A precedent is enough.** The 3% share of the pre-run warning does not apply,
+- **A precedent is enough.** The 3% share of the earlier warning before a command does not apply,
   since the call has already failed, and no recovery is required. A stricter rule
   that also wanted a usable next step (a strict recovery, a shell fix, or a retry
   for a transient failure) on a line that is not compound would almost never
@@ -272,9 +276,10 @@ often the hook speaks depends on how many sessions a store holds.
   `2>/dev/null` exits 0 and fires no `PostToolUseFailure`. In 5 of those 8 tasks
   the hook ran in at most 2 of 4 runs: the model checked first, quoted, or hid
   the exit code.
-- **Out of scope.** Tools other than Bash, Codex and Cursor keep the warning
-  before a shell command. With `--refresh-every`, the hook counts failed calls
-  only.
+- **Out of scope.** Tools other than Bash; Codex and Cursor, which get the rules
+  at session start only (Cursor has `postToolUseFailure`, which faildex does not
+  use; Codex has no failure event). With `--refresh-every`, the hook counts failed
+  calls only.
 - **One-off counts.** The table and the trial were counted by scripts that are
   not in the repository; the key contract and the hook's rules are tests.
 

@@ -1,5 +1,5 @@
 {
- "note": "Output of faildex e2c4ae6 (before the PostToolUseFailure path) on the public demo store; the hook must still give these bytes.",
+ "note": "Payloads before a command (PreToolUse, Codex, Cursor) and what faildex e2c4ae6 answered on the public demo store. The hook now gives no warning before a command: Claude Code and Codex get nothing, Cursor only its allow.",
  "cases": [
   {
    "agent": "claude",

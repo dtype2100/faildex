@@ -6,9 +6,10 @@ P3-a The hook started a background rebuild for a `./store` that is not a store a
 """
 
 import io
-import json
 import sys
 from pathlib import Path
+
+from payloads import git_status
 
 from faildex import index, refresh
 from faildex.cli import main
@@ -74,7 +75,7 @@ def test_p3a_no_background_rebuild_for_a_store_folder_that_is_not_a_store(
     monkeypatch.chdir(tmp_path / "project")
     started = []
     monkeypatch.setattr(index, "start_rebuild", lambda store: started.append(store))
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
+    payload = git_status()  # a failure: the path that would read the store
     monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
     assert main(["hook"]) == 0
     assert capsys.readouterr().out == ""
@@ -89,7 +90,7 @@ def test_p3a_nor_any_rebuild_files_in_the_cache(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(index, "start_rebuild", REAL_START_REBUILD)
     spawned = []
     monkeypatch.setattr(refresh, "spawn", lambda argv, log: spawned.append(argv) or 1)
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
+    payload = git_status()  # a failure: the path that would read the store
     monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
     assert main(["hook"]) == 0
     assert spawned == []

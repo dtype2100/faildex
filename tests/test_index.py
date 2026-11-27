@@ -1,8 +1,9 @@
 """The hook's index gives, byte for byte, what the hook gives reading the store itself.
 
-This is the gate for the index: for every command template in the store, the zsh
-pooled rules, several `--min-sessions`/`--top`, both agents' formats and both
-languages of the rule text, the answer from the index equals the answer from the store.
+This is the gate for the index: for every failure in the store, from inside a session
+that had it and from a new one, on simple and compound lines, at several
+`--min-sessions`, and in both languages of the rule text, the notice from the index
+equals the notice from the store.
 """
 
 import json
@@ -13,25 +14,14 @@ import time
 from pathlib import Path
 
 import pytest
+from payloads import NOT_A_REPO
 
 from faildex import hook, index
 from faildex.cli import main
-from faildex.insight import warnings_for_line
 from faildex.store import STORE_PARTS, open_store
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures"
-# Lines that reach the pooled zsh rules, compound lines and lines faildex never saw.
-EXTRA_LINES = [
-    "ls *.py",
-    "for f in *.x; do ls README*; done",
-    "echo ====",
-    "echo ==== && ls *.md",
-    "git status && ls",
-    "cd /tmp && git status; git log --oneline | head",
-    "a-command-no-store-has-seen --flag",
-    "",
-]
 REAL_START_REBUILD = index.start_rebuild
 
 
@@ -130,17 +120,15 @@ def public_store(tmp_path_factory):
     return store
 
 
-def _lines(store: Path) -> list[str]:
-    db = open_store(store)
-    try:
-        templates = sorted(r["t"] for r in db.execute("MATCH (k:Command) RETURN k.template AS t"))
-    finally:
-        db.close()
-    return templates + EXTRA_LINES
+# The failure each test store holds for a command (git status: the public demo store's).
+FAILURES = {"git push": "fatal: the current branch has no upstream branch"}
 
 
 def _bash(line: str) -> str:
-    return json.dumps({"tool_name": "Bash", "tool_input": {"command": line}})
+    """The hook's payload after `line` failed the way the test stores hold for its command."""
+    from payloads import failed
+
+    return failed(line, FAILURES.get(line.split(" &&")[0], NOT_A_REPO), 1)
 
 
 class _Shared:
@@ -193,56 +181,93 @@ def _via_index(store, monkeypatch, call):
         return call()
 
 
+def _keys(store: Path) -> list[tuple[str, str, str, str]]:
+    """Every (command template, stored failure key, its kind, a session that had it)."""
+    db = open_store(store)
+    try:
+        rows = db.execute(
+            "MATCH (s:Session)-[:HAS_CALL]->(c:Call)-[:RAN]->(k:Command), "
+            "(c)-[:FAILED_WITH]->(e:ErrorSig) "
+            "RETURN DISTINCT k.template AS t, e.sig AS sig, e.kind AS kind, s.session_id AS sid"
+        )
+        return sorted((r["t"], r["sig"], r["kind"] or "text", r["sid"] or "") for r in rows)
+    finally:
+        db.close()
+
+
+def _record(template: str, sig: str, kind: str, session: str, compound: bool):
+    """What `hook._failed_call` gives the hook for a failure of `template` with key `sig`."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        command=template,
+        failure=(sig, kind),
+        compound=compound,
+        session_id=session,
+        session_key=f"claude-code:{session}",
+    )
+
+
 @pytest.mark.parametrize("which", ["public_store", "private_store"])
-def test_hook_output_from_the_index_is_byte_identical(which, request, monkeypatch, via_store):
+def test_the_notice_from_the_index_is_byte_identical(which, request, monkeypatch, via_store):
+    """For every stored failure, from inside a session that had it and from a new one, on
+    a simple line and a compound one, at several --min-sessions: the same words."""
     store = request.getfixturevalue(which)
     assert index.load(store) is not None
-    lines = _lines(store)
-    warned = 0
-    for line in lines:
-        for min_sessions in (1, 2, 3):
-            for top in (1, 2, 5):
-                for agent in ("claude", "cursor"):
-                    raw = _bash(line) if agent == "claude" else json.dumps({"command": line})
+    said = 0
+    for template, sig, kind, session in _keys(store):
+        for sid in (session, "new-session"):
+            for compound in (False, True):
+                for min_sessions in (1, 2, 3):
+                    record = _record(template, sig, kind, sid, compound)
 
-                    def answer(raw=raw, min_sessions=min_sessions, top=top, agent=agent):
-                        return hook.respond(raw, store, min_sessions, None, top, agent=agent)
+                    def answer(record=record, min_sessions=min_sessions):
+                        return hook._found(
+                            store,
+                            {"tool_name": "Bash", "tool_input": {"command": record.command}},
+                            False,
+                            lambda source: hook._post_warning(source, record, min_sessions),
+                        )
 
                     direct = via_store(store, answer)
                     from_index = _via_index(store, monkeypatch, answer)
-                    assert from_index.encode() == direct.encode(), (line, min_sessions, top, agent)
-                    warned += bool(direct) and direct != json.dumps({"permission": "allow"})
-    assert warned > 0  # the comparison covered real warnings, not only silence
+                    assert from_index == direct, (template, sig, sid, compound, min_sessions)
+                    said += direct is not None
+    assert said > 0  # the comparison covered real notices, not only silence
     assert via_store.reads() > 0  # and the store side read the store, not an index
 
 
 @pytest.mark.parametrize("which", ["public_store", "private_store"])
 def test_rule_text_in_both_languages_is_identical(which, request):
+    from faildex.insight import failures
+
     store = request.getfixturevalue(which)
     found = index.load(store)
     db = open_store(store)
     try:
-        for line in _lines(store):
-            for min_sessions in (1, 2):
-                _, from_db = warnings_for_line(db, line, min_sessions)
-                _, from_index = found.warnings_for_line(line, min_sessions)
+        for template in sorted({t for t, _, _, _ in _keys(store)}):
+            from_db = failures(db, template).values()
+            _, from_index = found.command_failures(template)
 
-                def text(pairs):
-                    return [
-                        (t, i.rule("en"), i.rule("ko"), i.notice(), i.score, i.evidence)
-                        for t, i in pairs
-                    ]
+            def text(items):
+                return sorted(
+                    (
+                        i.sig,
+                        i.rule("en"),
+                        i.rule("ko"),
+                        i.rule("en", step=False),
+                        i.notice(),
+                        i.notice(step=False),
+                        i.score,
+                        i.evidence,
+                        dict(i.session_calls),
+                    )
+                    for i in items
+                )
 
-                assert text(from_index) == text(from_db), (line, min_sessions)
+            assert text(from_index) == text(from_db), template
     finally:
         db.close()
-
-
-def test_the_private_store_reaches_both_pooled_zsh_rules(private_store):
-    found = index.load(private_store)
-    for line, sig in (("echo ====", "=<word> not found"), ("ls *.py", "no matches found: <glob>")):
-        _, pairs = found.warnings_for_line(line, 2)
-        assert ("zsh", sig) in [(t, i.sig) for t, i in pairs]
 
 
 def test_ingest_writes_the_index_after_the_store(private_store):

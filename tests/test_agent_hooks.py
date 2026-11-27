@@ -23,20 +23,39 @@ def test_session_rules_exclude_evidence(agent, key, tmp_path, public_copy):
     assert "Evidence" not in context and "/private/log" not in context
 
 
-@pytest.mark.parametrize("agent", ["codex", "cursor"])
-def test_shell_warning_uses_agent_protocol(agent, public_copy):
-    payload = (
-        {"command": "git status"}
-        if agent == "cursor"
-        else {"tool_name": "Bash", "tool_input": {"command": "git status"}}
-    )
-    out = json.loads(respond(json.dumps(payload), public_copy, agent=agent))
-    if agent == "cursor":
-        assert out["permission"] == "allow"
-        assert "faildex" in out["user_message"] and "git status" in out["agent_message"]
-    else:
-        assert out["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-        assert "git status" in out["hookSpecificOutput"]["additionalContext"]
+GIT_STATUS = {"tool_name": "Bash", "tool_input": {"command": "git status"}}
+
+
+@pytest.mark.parametrize(
+    ("argv", "payload", "expected"),
+    [
+        (["hook"], {**GIT_STATUS, "hook_event_name": "PreToolUse"}, ""),
+        (["hook", "--agent", "codex", "--event", "pre-shell"], GIT_STATUS, ""),
+        (
+            ["hook", "--agent", "codex", "--event", "pre-shell"],
+            {**GIT_STATUS, "hook_event_name": "PreToolUse"},
+            "",
+        ),
+        (
+            ["hook", "--agent", "cursor", "--event", "pre-shell"],
+            {"command": "git status"},
+            '{"permission": "allow"}\n',
+        ),
+    ],
+    ids=["claude PreToolUse", "codex pre-shell", "codex pre-shell PreToolUse", "cursor pre-shell"],
+)
+def test_no_warning_before_a_command_and_old_command_lines_still_run(
+    argv, payload, expected, public_copy, monkeypatch, capsys
+):
+    """faildex gives no warning before a command. A setup an earlier faildex wrote still
+    runs: no argparse error (exit 2 may block the command), no output but Cursor's allow."""
+    import io
+    import sys
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert main([*argv, "--store", str(public_copy)]) == 0
+    out = capsys.readouterr()
+    assert out.out == expected and out.err == ""
 
 
 def test_cursor_errors_still_allow_execution(tmp_path):
