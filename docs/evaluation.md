@@ -95,6 +95,74 @@ recomputed from the committed store by `tests/test_docs.py`.
 A next step to measure, not built: warning only when the same command has just
 failed in the same session.
 
+## Controlled bench
+
+The replay says when the hook would have spoken; it cannot say what an agent
+does after a warning. This bench runs the same tasks in Claude Code with the
+hook off and on (the hook of `origin/main` 03313cc). It is a small controlled
+experiment on one model and seven made-up tasks, not a measure of faildex in
+general. The code, the tasks and every run's record are in
+[`bench/`](../bench/).
+
+- **Tasks.** Seven, each in a fresh folder under a temporary directory: summarize
+  uncommitted changes, and show what changed in `config.ini` since the last
+  commit, once in a folder that is not a git repository and once in one that is;
+  print file names between `==========` lines; delete `.log` and `.tmp` files
+  when there are no `.log` files; count `.py` files in subfolders. The prompts
+  give no hint about the failure.
+- **Runs.** `claude -p` with `--output-format stream-json`, model
+  `claude-haiku-5-5` (Claude Code 2.1.332), 10 runs per task and condition, 140 in
+  all, the two conditions interleaved. Each run loads no user settings
+  (`--setting-sources project,local`) and gets its own `--settings` file with the
+  hook or none; the hook events in each stream confirm that no `PreToolUse` hook
+  ran in the 70 runs without one. Tools print English messages
+  (`LC_ALL=en_US.UTF-8`).
+- **Store.** The hook reads a copy of the committed store plus two synthetic
+  sessions in `bench/seed/` that hold the `git diff --no-index`, `=<word> not
+  found` and glob failures, so that the hook knows all four failures the tasks
+  are about.
+- **Measures.** A run counts as having the failure when the failure's text
+  appears in any shell output, whatever the exit code: the agents often ran
+  `git status 2>&1 | head`, which hides it. Also counted: shell calls that ended
+  with an error, calls the hook warned before (its own log), and whether the
+  task got done (a check per task in `bench/tasks.py`).
+
+Each cell: runs with the failure, failed shell calls, calls the hook warned
+before, tasks done. "Failed shell calls" stays at 0 because the agents hid exit
+codes behind pipes and `; echo`; the failure text is what counts.
+
+| Task | off: runs with the failure | failed calls | hook spoke | succeeded | on: runs with the failure | failed calls | hook spoke | succeeded |
+|---|---|---|---|---|---|---|---|---|
+| changes-outside | 10/10 | 0 | 0 | 10/10 | 10/10 | 0 | 10 | 10/10 |
+| diff-outside | 10/10 | 0 | 0 | 10/10 | 10/10 | 0 | 1 | 10/10 |
+| changes-inside | 0/10 | 0 | 0 | 10/10 | 0/10 | 0 | 10 | 10/10 |
+| diff-inside | 0/10 | 0 | 0 | 10/10 | 0/10 | 0 | 10 | 10/10 |
+| banner | 0/10 | 0 | 0 | 10/10 | 0/10 | 0 | 0 | 10/10 |
+| cleanup | 0/10 | 0 | 0 | 10/10 | 0/10 | 0 | 0 | 10/10 |
+| count-py | 0/10 | 0 | 0 | 10/10 | 0/10 | 0 | 0 | 10/10 |
+| all | 20/70 | 0 | 0 | 70/70 | 20/70 | 0 | 31 | 70/70 |
+
+What the runs show:
+
+- **A warning did not reduce failures on the first try.** 20 of 70 runs hit the
+  failure with the hook off, and 20 of 70 with it on. Every run of the two tasks
+  outside a repository, in both conditions, hit it with its first git call
+  (`git status`, or `git rev-parse` used as a check). A warning comes right
+  before a call and never blocks it, so a failure on the first try cannot be
+  avoided this way; it could only change what the agent does next. In no run, in
+  either condition, did the failure come back in a later call, so there was
+  nothing left for the warning to prevent.
+- **Inside a repository the hook warned anyway.** In the two tasks inside a
+  repository it spoke 20 times, every one about a failure that cannot happen
+  there. Every task was done in all 140 runs, so these warnings did not cost the
+  task here.
+- **The zsh tasks never failed.** The model quoted `==========` and the globs on
+  its own in all 60 runs, so these runs say nothing about those two rules.
+- **Cost.** 140 runs, 24 minutes of agent time, $0.17 reported by Claude Code.
+  The same bench also ran a third condition, a hook that skipped the two git
+  warnings inside a repository; that change was not kept, and its runs are not
+  part of this record.
+
 ## What guards each rule
 
 Each rule of the method has a test that fails if the rule is broken. The names
@@ -123,13 +191,15 @@ are test functions under `tests/`.
 | The hook replay runs per agent on a private store | `test_evaluate.py::test_the_hook_replay_runs_per_agent_on_a_private_store` |
 | The replay numbers in the documents are what `make eval` prints; the other cuts and the overlap with recoveries are recomputed from the committed store | `test_docs.py::test_the_hook_replay_in_the_documents_matches_the_committed_store`, `test_docs.py::test_the_replay_claims_about_cuts_and_recoveries_hold` |
 | A second engine build reaches the same numbers | `test_docs.py::test_relate_webassembly_reaches_the_same_numbers` |
+| The bench table and its claims are the committed runs | `test_docs.py::test_the_bench_table_in_the_documents_is_the_committed_runs` |
 
 ## Limits
 
 - **Availability, not effect.** The numbers show that the graph already held the
   failure and often a recovery. They do not show that an agent given the warning
-  would have avoided the failure. That needs a controlled run, which this
-  evaluation does not include.
+  would have avoided the failure. The [controlled bench](#controlled-bench) is
+  one small check of that, on one model and seven tasks: a warning did not reduce
+  failures on the first try.
 - **One project dominates.** The Codex dataset is one developer working on one
   Windows project, so failures recur within a project more than they would
   across unrelated work. `command timed out` alone is 31 of the 80 recurring

@@ -205,3 +205,76 @@ def test_the_replay_claims_about_cuts_and_recoveries_hold(replayed, monkeypatch)
         assert not any(shell_sig(sig) for sig in sigs)
     finally:
         db.close()
+
+
+# The controlled bench ("Controlled bench")
+
+
+def test_the_bench_table_in_the_documents_is_the_committed_runs():
+    import importlib.util
+    import json
+
+    spec = importlib.util.spec_from_file_location("bench_run", ROOT / "bench" / "run.py")
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    runs = ROOT / "bench" / "results" / "runs.jsonl"
+    rows = [json.loads(line) for line in runs.read_text(encoding="utf-8").splitlines()]
+    table = bench.summarize_rows(rows)
+    assert (ROOT / "bench" / "results" / "summary.md").read_text(encoding="utf-8").strip() == (
+        table.strip()
+    )
+    doc = (ROOT / "docs" / "evaluation.md").read_text(encoding="utf-8")
+    assert table.split("\n\n")[0] in doc
+
+    def runs_with(condition, tasks=None):
+        return [
+            r for r in rows if r["condition"] == condition and (not tasks or r["task"] in tasks)
+        ]
+
+    # Each task and condition at least 5 times; one model; the hook absent where it should be.
+    cells = {(r["task"], r["condition"]) for r in rows}
+    assert all(sum(1 for r in rows if (r["task"], r["condition"]) == c) >= 5 for c in cells)
+    assert len({r["model"] for r in rows}) == 1
+    assert sum(r["pre_tool_hooks"] for r in runs_with("off")) == 0
+    flat = _flat(doc)
+    off, on = (runs_with(c) for c in ("off", "on"))
+    assert {r["condition"] for r in rows} == {"off", "on"}
+    hit = [sum(r["target_hit"] for r in group) for group in (off, on)]
+    assert f"{hit[0]} of {len(off)} runs hit the failure with the hook off" in flat
+    assert f"and {hit[1]} of {len(on)} with it on" in flat
+    readme = _flat((ROOT / "README.md").read_text(encoding="utf-8"))
+    ko = _flat((ROOT / "README.ko.md").read_text(encoding="utf-8"))
+    assert hit[0] == hit[1] and f"{hit[0]} of {len(off)} runs either way" in readme
+    assert f"어느 쪽이든 {len(off)}회 중 {hit[0]}회" in ko
+    inside = {"changes-inside", "diff-inside"}
+    spoke = sum(r["spoke"] for r in runs_with("on", inside))
+    assert f"In the two tasks inside a repository it spoke {spoke} times" in flat
+    assert f"warned before {spoke} calls" in readme and f"호출 {spoke}번 앞에서" in ko
+    assert all(r["success"] for r in rows) and f"Every task was done in all {len(rows)}" in flat
+    # The failure never came back in a later call; outside a repository it came every time.
+    assert not any(r["target_calls"] > 1 for r in rows)
+    assert "did the failure come back in a later call" in flat
+    outside = [r for r in rows if r["task"] in ("changes-outside", "diff-outside")]
+    assert all(r["target_hit"] for r in outside)
+    zsh = [r for r in rows if r["task"] in ("banner", "cleanup", "count-py")]
+    assert not any(r["target_hit"] for r in zsh)
+    assert f"globs on its own in all {len(zsh)} runs" in flat
+    assert f"{len(rows)} runs, {sum(r['seconds'] for r in rows) / 60:.0f} minutes" in flat
+    # The published records name no home directory, temporary folder or e-mail address.
+    text = runs.read_text(encoding="utf-8")
+    assert not any(mark in text for mark in ("/Users/", "/home/", "/tmp/", "/var/folders", "@"))
+
+
+def test_the_bench_quotes_the_hook_command(tmp_path):
+    import importlib.util
+    import shlex
+
+    spec = importlib.util.spec_from_file_location("bench_run", ROOT / "bench" / "run.py")
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    exe = str(tmp_path / "faildex copy" / ".venv" / "bin" / "faildex")
+    store, log = tmp_path / "bench run" / "store", tmp_path / "bench run" / "hook.jsonl"
+    config = bench.settings("on", {"on": exe}, store, log)
+    [entry] = config["hooks"]["PreToolUse"][0]["hooks"]
+    assert shlex.split(entry["command"]) == [exe, "hook", "--store", str(store), "--log", str(log)]
+    assert bench.settings("off", {"on": exe}, store, log) == {}

@@ -463,6 +463,13 @@ between 50% and 90% moves the count between 0 and 22 (recomputed by a test from 
 committed store), so this describes these logs and is not a rate. None of the 48 failures with a recovery on record would
 have been warned. Details in [docs/evaluation.md](docs/evaluation.md#would-the-hook-have-spoken).
 
+A small controlled bench runs seven tasks in Claude Code with the hook off and
+on, 10 times each: a warning did not reduce failures on the first try (20 of 70
+runs either way), because the failure comes on the first call and a warning
+never blocks it. Inside a git repository the hook still warned before 20 calls
+about git failures that cannot happen there
+([bench](docs/evaluation.md#controlled-bench)).
+
 ## Across agents, on real logs
 
 The public datasets cannot show the cross-agent case: one is PowerShell on
