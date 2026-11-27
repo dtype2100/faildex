@@ -78,11 +78,11 @@ faildex rules --approve 1 3 --to ~/faildex-rules.md
 faildex link
 ```
 
-바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄, `~/.claude/skills/faildex/`의 스킬, `~/.claude/settings.json`의 6단계 훅, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`의 훅 두 개(세션 시작 때 규칙, 셸 명령 전에 경고)를 넣습니다. `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
+바뀌는 것: 이 컴퓨터에 있는 에이전트마다 설치합니다. Claude Code에는 `~/.claude/CLAUDE.md`에 규칙 파일을 가져오는 `@` 한 줄, `~/.claude/skills/faildex/`의 스킬, `~/.claude/settings.json`의 6단계 훅, Antigravity에는 규칙과 스킬을 담은 `faildex-rules` 플러그인, Codex와 Cursor에는 스킬과 `hooks.json`에 세션 시작 때 규칙을 불러오는 훅을 넣습니다(이전 버전이 넣은 셸 명령 전 faildex 훅은 지웁니다). `~/faildex-rules.md`가 없으면 만들기 때문에 승인 전에 실행해도 되고, 추가한 것을 `~/.faildex-link.json`에 적어 둡니다. Codex에서는 새 세션을 열기 전에 `/hooks`에서 새 훅을 검토하고 신뢰합니다.
 
 **6. Claude Code 실패 직후 알림**
 
-`faildex link`(5단계)가 `~/.claude/settings.json`에 아래 훅을 넣었습니다(`faildex hook --agent claude`로). `PreToolUse`에 있던 `faildex hook`은 명령 그대로 이곳으로 옮겼습니다. 한 프로젝트에서만 쓰려면 대신 그 프로젝트의 `.claude/settings.json`에 넣습니다(이미 `hooks`가 있으면 그 `PostToolUseFailure` 목록에 더합니다).
+`faildex link`(5단계)가 `~/.claude/settings.json`에 아래 훅을 넣었습니다(`faildex hook --agent claude`로). `PreToolUse`에 있던 `faildex hook`은 지웠고, 이곳에 아직 없었으면 그 명령을 그대로 옮겼습니다. 한 프로젝트에서만 쓰려면 대신 그 프로젝트의 `.claude/settings.json`에 넣습니다(이미 `hooks`가 있으면 그 `PostToolUseFailure` 목록에 더합니다).
 
 ```json
 {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
@@ -92,7 +92,7 @@ faildex link
 
 바뀌는 것: 그 뒤에 시작한 Claude Code 세션부터(이미 실행 중인 세션에서는 `/hooks`에서 새 훅을 검토합니다) 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 Claude에게 그 사실과 기록된 복구 방법을 알리고 화면에 한 줄 안내를 띄웁니다. 다른 세션 2개 이상(`--min-sessions`)에서 겪었을 때 말하고, 지금 세션과 그 서브에이전트는 세지 않습니다.
 
-범위: 0이 아닌 종료 코드로 끝난 셸 호출에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령도 포함합니다. 파이프나 `; echo`로 가린 실패는 종료 코드가 0이라 훅에 닿지 않고, MCP 도구나 파일 도구에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다. 같은 명령을 `PreToolUse` 훅으로 등록하면 경고할 만큼 잦은 반복 실패가 있는 명령 전에 경고합니다(7단계가 보여 주는 것). `PostToolUseFailure` 대신, 또는 둘 다에 등록할 수 있습니다. Codex와 Cursor는 `faildex link`가 설치하는 셸 명령 전 경고를 그대로 씁니다.
+범위: 0이 아닌 종료 코드로 끝난 셸 호출에만 뜹니다. 스킬, 플러그인, 서브에이전트가 실행한 셸 명령도 포함합니다. 파이프나 `; echo`로 가린 실패는 종료 코드가 0이라 훅에 닿지 않고, MCP 도구나 파일 도구에는 뜨지 않습니다. 그런 반복 실패는 `faildex rules`에서 승인하면 세션이 시작될 때 규칙으로 전달됩니다. Codex와 Cursor는 세션 시작 때 규칙만 받습니다. `faildex link`는 어떤 에이전트에도 셸 명령 전 훅을 넣지 않고, 이전 버전이 넣은 것은 지웁니다. 실패 직후 알림은 이 둘에게는 범위 밖입니다(Cursor에는 faildex가 쓰지 않는 `postToolUseFailure`가 있고, Codex에는 실패 이벤트가 없습니다).
 
 **7. 잘 됐는지 확인**
 
@@ -100,7 +100,7 @@ faildex link
 faildex check "git status"
 ```
 
-바뀌는 것: 아무것도 쓰지 않습니다. 그 명령의 반복된 실패 중 경고할 만큼 잦은 것을 명령 전 경고와 같은 조회로 최대 3개, 복구 기록과 함께 보여 주고, 없으면 아무것도 출력하지 않습니다.
+바뀌는 것: 아무것도 쓰지 않습니다. 그 명령의 반복된 실패 중 경고할 만큼 잦은 것을 최대 3개, 복구 기록과 함께 보여 주고, 없으면 아무것도 출력하지 않습니다.
 
 ### 평소에 (새 세션이 쌓일 때마다 되풀이)
 
@@ -172,20 +172,11 @@ faildex는 이것을 다음 도구로 바꿉니다.
 | 실행 | 얻는 것 |
 |---|---|
 | `faildex rules` | 세션을 넘어 되풀이된 실패에 대한 규칙 제안. 각 제안에는 기록된 복구 방법과 로그 위치가 붙습니다. 승인한 것만 규칙 파일에 기록됩니다. |
-| `faildex hook` | Claude Code `PostToolUseFailure` 훅. 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 세션에 한 줄 알림을 띄우고 Claude에게 그 세션들이 배운 내용을 전달합니다. 그 밖에는 아무것도 출력하지 않습니다. `PreToolUse` 훅으로 등록하면(Codex와 Cursor처럼) 명령을 실행하기 전에 경고하고, 그 실패가 해당 명령 실행의 3% 이상일 때만(명령을 합쳐 묶은 `zsh` 셸 실패, 즉 따옴표 없는 글롭의 `no matches found`와 `==`로 시작하는 따옴표 없는 단어의 `=<word> not found`는 `min_sessions` 세션 이상에서 반복되고 명령줄에 그 구문이 있을 때) 말합니다. |
+| `faildex hook` | Claude Code `PostToolUseFailure` 훅. 셸 명령이 실패한 직후, 다른 세션에서 같은 명령이 같은 실패를 겪었으면 세션에 한 줄 알림을 띄우고 Claude에게 그 세션들이 배운 내용을 전달합니다. 그 밖에는 아무것도 출력하지 않습니다. Codex와 Cursor에는 세션이 시작될 때 승인한 규칙을 불러옵니다. |
 | `faildex mcp` | MCP 도구 `preflight`, `evidence`, `recurring`. 어떤 MCP 에이전트든 실행 전에 물어볼 수 있습니다. |
 | `faildex eval` | 위 수치를 저장소의 스토어로 다시 계산합니다. 공개 데이터셋이 없는 내 스토어(`--store ~/.faildex/store`)에서는 같은 분할을 에이전트별로 합니다. |
 | `faildex ingest` | 내 Claude Code, Codex CLI, Cursor, Antigravity 기록을 내 컴퓨터의 개인 스토어(`~/.faildex/store`)에 적재합니다. 위의 모든 명령이 이 스토어를 씁니다. |
 | `faildex report` | 내 스토어에서 날짜 전후의 건수를 셉니다: 호출, 실패, 고른 실패 하나, 훅이 보낸 경고. |
-
-### 실제 Claude Code 세션에서
-
-에이전트가 저장소가 아닌 폴더에서 `git status`를 실행합니다. 결과가 나오기 전에
-faildex 훅이 앞선 세션들이 배운 것을 보여 주고, Claude가 그에 따라 행동합니다.
-(`PreToolUse`로 등록한 훅의 화면입니다. 권장 설정인 `PostToolUseFailure`로 등록하면
-같은 종류의 줄이 명령이 실패한 직후에 뜹니다.)
-
-![Claude Code 세션: Bash(git status) 아래에 "PreToolUse:Bash says: faildex: `git status` failed with `fatal: not a git repository` in 24 earlier sessions; no recovery on record" 줄이 뜨고, Claude가 "A faildex hook in this project flagged that this same failure has come up in 24 earlier sessions, so I didn't retry."라고 답하는 화면](docs/images/claude-code-hook.jpg)
 
 ### 실패 하나를 그래프로 따라가기
 
@@ -391,8 +382,8 @@ Claude Code에서 쓰기. `faildex link`가 모든 세션용으로 `~/.claude/se
 ]}]}}
 ```
 
-같은 명령을 `PreToolUse`에 등록하면 명령 전에 경고합니다. Codex와 Cursor는 그대로입니다
-(`faildex link`가 설치).
+Codex와 Cursor는 세션 시작 때 규칙만 받습니다(`faildex link`가 설치). 실패 직후 알림은
+이 둘에게는 범위 밖입니다.
 
 `faildex ingest`를 손으로 돌리지 않고 스토어를 최신으로 두려면 그 명령에
 `--refresh-every 200`을 붙이세요(`"command": "faildex hook --refresh-every 200"`).
@@ -417,7 +408,8 @@ Codex(`~/.codex/skills/faildex/`), Cursor(`~/.cursor/skills/faildex/`)에 설치
 `faildex link --remove`가 faildex가 만든 항목만 지웁니다.
 
 Codex와 Cursor의 사용자 `hooks.json`에는 세션 시작 시 근거 줄을 뺀 규칙을
-불러오는 훅과 셸 실행 전 알려진 실패를 경고하는 훅을 등록합니다. 기존 훅은
+불러오는 훅 하나를 등록합니다. 셸 명령 전에 도는 훅은 넣지 않고, 이전 버전이 넣은
+faildex 훅은 지웁니다. 기존 훅은
 보존하고 변경 전에 백업하며, 제거 시 faildex 항목만 뺍니다. Codex는 `/hooks`에서
 새 명령을 검토·신뢰한 뒤 새 세션을 시작해야 합니다. [훅 설정](docs/agent-hooks.md)을 참고하세요.
 
@@ -494,7 +486,7 @@ PowerShell, 다른 하나는 Linux의 bash라서 둘 다에 나오는 실패가 
 |---|---|
 | Relate와 연결된 맥락의 활용 | 공유 `Command`/`ErrorSig` 노드가 있는 스키마, `NEXT` 경로로 읽는 복구, 제약, 커밋된 디렉터리 스토어, 쓰는 쪽 옆의 읽기 전용 읽는 쪽, 브라우저 데모의 Relate WebAssembly에서 도는 같은 그래프와 질의, 실패마다 그려지는 이웃 |
 | 기능 | 한 줄 설치와 `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; Relate WebAssembly 브라우저 데모; macOS·Linux·Windows CI |
-| 유용성 | 뒤 기간 실패의 68%가 이미 그래프에 있었음; 실제 Claude Code 세션에서 Claude가 훅의 알림을 근거로 재시도하지 않음; 되풀이된 실패에만 경고하고 나머지에는 침묵; 작성자 기록에서 세 에이전트가 공유한 실패 키 12개 |
+| 유용성 | 뒤 기간 실패의 68%가 이미 그래프에 있었음; 실제 Claude Code 실행(`claude -p`, Haiku)에서 Claude가 명령이 실패한 직후 훅의 알림을 받아 그대로 인용함; 다른 세션도 같은 실패를 겪었을 때만 말하고 나머지에는 침묵; 작성자 기록에서 세 에이전트가 공유한 실패 키 12개 |
 | 문서와 재현성 | 이 파일, `docs/schema.md`, `docs/evaluation.md`(방법의 각 규칙을 지키는 테스트와 짝지음); 모든 수치는 커밋된 스토어에서 `make eval`로 나오고, 문서가 다르면 테스트가 실패하며, WebAssembly 빌드도 같은 수치에 도달 |
 | 창의성 | 한 에이전트가 배운 실패가 다음 세션의 규칙과 경고가 되고, 로그 위치가 근거로 붙음 |
 

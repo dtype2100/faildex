@@ -1,16 +1,24 @@
-# Codex and Cursor hooks
+# Agent hooks
 
-Run `faildex link` after installing faildex. It installs two user hooks for each
-detected agent, preserving other integrations and making a timestamped
-`hooks.json.faildex-backup-*` before changing an existing file. Invalid JSON and
-symlinked hook configurations are skipped with a message. Repeating the command
-does not add duplicate entries. `faildex link --remove` removes faildex entries
-while preserving other hooks and the backups.
+Run `faildex link` after installing faildex. For Claude Code it adds the hook that
+speaks right after a failed shell call (`PostToolUseFailure`; see the README). For
+Codex and Cursor it adds one user hook that loads the approved rules when a session
+starts. It installs no hook that runs before a shell command, for any agent, and
+takes out the faildex ones that earlier versions installed or that were added by
+hand (Claude Code and Codex `PreToolUse`, Cursor `beforeShellExecution`). It keeps
+other integrations and makes a timestamped `*.faildex-backup-*` copy before changing
+an existing file. Invalid JSON and symlinked hook configurations are skipped with a
+message. Repeating the command does not add duplicate entries. `faildex link
+--remove` removes faildex entries while preserving other hooks and the backups.
 
-| Agent | File | Session rules | Shell warning |
-| --- | --- | --- | --- |
-| Codex | `~/.codex/hooks.json` | `SessionStart` → `hookSpecificOutput.additionalContext` | `PreToolUse` with `Bash` → `additionalContext` and `systemMessage` |
-| Cursor | `~/.cursor/hooks.json` | `sessionStart` → `additional_context` | `beforeShellExecution` → `agent_message` and `user_message`, with permission `allow` |
+| Agent | File | Hook |
+| --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `PostToolUseFailure` with `Bash` → `additionalContext` and `systemMessage` |
+| Codex | `~/.codex/hooks.json` | `SessionStart` → `hookSpecificOutput.additionalContext` |
+| Cursor | `~/.cursor/hooks.json` | `sessionStart` → `additional_context` |
+
+A notice right after a failure is out of scope for Codex and Cursor: Cursor has
+`postToolUseFailure`, which faildex does not use, and Codex has no failure event.
 
 The rules default to `~/faildex-rules.md`; `faildex link --rules PATH` selects
 another file. Re-running `faildex link --rules PATH` retargets an existing
@@ -19,28 +27,22 @@ symlinks and regular files alone); `faildex link --remove` deletes only
 faildex-owned links and files. Evidence lines are omitted from session context. The generated
 command encodes the path as one shell-safe token, so Windows shell differences
 and spaces or special characters in home directories do not change its meaning.
-This encoding is not encryption. Warnings use the same store selection and
-thresholds as `faildex check`: per-command warnings fire when a failure spans
-at least `min_sessions` (default `2`) and accounts for at least `MIN_RATE`
-(`0.03`, 3%) of that command's recorded runs. Shell-level `zsh` glob failures
-(`(eval):<n>: no matches found: <glob>` and `zsh:<n>: no matches found: <glob>`)
-are pooled across commands under `no matches found: <glob>` and warn before any
-command line containing an unquoted glob once seen in at least `min_sessions`
-sessions; `MIN_RATE` is not applied to that shell-level count because there is no
-`zsh` command node in the graph and unquoted-glob detection gates when it fires.
-zsh `=` expansion failures (`(eval):<n>: ==== not found`, from an unquoted word
-starting with `==` such as `echo =====` or `[ a == b ]`) are pooled the same way
-under `=<word> not found` and warn before a command line with such a word.
-Lookup errors do not block shell execution.
+This encoding is not encryption.
+
+`faildex hook` still answers an event before a shell command (Codex `PreToolUse`,
+Cursor `beforeShellExecution`) for a setup that has one, with the thresholds of
+`faildex check`: a failure seen in at least `min_sessions` (default `2`) sessions
+and in at least `MIN_RATE` (3%) of that command's runs, plus the pooled `zsh`
+failures `no matches found: <glob>` and `=<word> not found` before a line with that
+construct. This is not recommended, and `faildex link` takes such entries out.
 
 Codex requires new or changed hooks to be reviewed and trusted in `/hooks`.
-Trust the two faildex commands, then start a new session. A session started before
-installation does not acquire session-start context retroactively.
+Trust the faildex command, then start a new session. A session started before
+installation does not acquire session-start context retroactively. In Claude Code,
+new sessions use the hook; in a running session, review it with `/hooks`.
 
-Verify in fresh interactive Codex and Cursor sessions: ask for the loaded
-faildex rule about quoting globs, then request `git -C /private/tmp status` on a
-machine whose failure index knows that command. Confirm that the warning appears
-before the shell result. Cursor should read the faildex skill after a failed
+Verify in fresh interactive Codex and Cursor sessions: ask for the loaded faildex
+rule about quoting globs. Cursor should read the faildex skill after a failed
 command and before retrying. Hooks need the installed `faildex` on the agent's PATH.
 
 Cursor CLI hook execution can depend on the other entries in the configuration.
@@ -179,5 +181,8 @@ several refreshes in a working day. Why 24 hours: sessions where the hook is not
 called (another agent, the hook turned off, a quiet week) still reach the store
 by the next day.
 
-`faildex link` does not add the option to the Codex and Cursor hooks it installs;
-add `--refresh-every 200` to their `faildex hook` command yourself if you want it.
+`faildex link` does not add the option to the Claude Code hook it installs; add
+`--refresh-every 200` to its `faildex hook` command yourself if you want it (a later
+`faildex link` keeps the command as it is). Under `PostToolUseFailure` the hook runs
+only after a failed shell call, so only failed calls count. The Codex and Cursor hooks
+run only at session start, where the option does nothing.

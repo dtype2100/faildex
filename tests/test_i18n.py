@@ -360,7 +360,7 @@ def test_every_claude_code_hook_in_the_readme_is_the_one_help_shows(readme):
     hooks = [
         b
         for b in re.findall(r"^```json\n(.*?)\n```$", text, re.MULTILINE | re.DOTALL)
-        if "PostToolUseFailure" in b or "PreToolUse" in b
+        if "PostToolUseFailure" in b or "PreToolUse" in b  # no PreToolUse one left
     ]
     assert len(hooks) == 2 and set(hooks) == {CLAUDE_HOOK}
 

@@ -121,14 +121,30 @@ def test_a_lone_pre_tool_use_faildex_hook_leaves_no_empty_event(home, tmp_path):
     assert json.loads(_settings(home).read_text()) == INSTALLED
 
 
-def test_faildex_under_both_events_is_left_as_it_is(home, tmp_path):
+def test_faildex_under_both_events_loses_only_the_pre_tool_use_one(home, tmp_path):
+    post = [{"matcher": "Bash", "hooks": [{"command": "faildex hook --log /l"}]}]
     both = {
         "hooks": {
-            "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "faildex hook"}]}],
-            "PostToolUseFailure": [{"matcher": "Bash", "hooks": [{"command": "faildex hook"}]}],
+            "PreToolUse": [{"matcher": "Bash", "hooks": [OTHER, {"command": "faildex hook"}]}],
+            "PostToolUseFailure": post,
         }
     }
-    path = _write(home, both)
+    _write(home, both)
+    assert _link(home, tmp_path).status == "updated"
+    assert json.loads(_settings(home).read_text()) == {
+        "hooks": {
+            "PreToolUse": [{"matcher": "Bash", "hooks": [OTHER]}],
+            "PostToolUseFailure": post,
+        }
+    }
+    assert len(_backups(home)) == 1
+    assert _link(home, tmp_path).status == "already"
+
+
+def test_only_post_tool_use_failure_is_already(home, tmp_path):
+    path = _write(
+        home, {"hooks": {"PostToolUseFailure": [{"hooks": [{"command": "faildex hook"}]}]}}
+    )
     before = path.read_bytes()
     assert _link(home, tmp_path).status == "already"
     assert path.read_bytes() == before and _backups(home) == []

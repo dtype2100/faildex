@@ -1,10 +1,10 @@
-"""Claude Code hook: right after a shell command fails (PostToolUseFailure), or before
-one runs (PreToolUse).
+"""Agent hook: for Claude Code right after a shell command fails (PostToolUseFailure),
+for Codex and Cursor before one runs.
 
 Reads the hook's JSON from stdin; the same command line answers both events, and the
 payload's `hook_event_name` says which one this is.
 
-- PostToolUseFailure (recommended): when the failed Bash call's failure key (`error`
+- PostToolUseFailure (Claude Code): when the failed Bash call's failure key (`error`
   read as the store reads a tool result, `adapters.claude_code.failed_call`) is on
   record for the same command template in at least `min_sessions` other sessions (the
   session the hook runs in and its subagents left out), it tells the agent so, with the
@@ -12,8 +12,10 @@ payload's `hook_event_name` says which one this is.
   warning does not apply, since the call has already failed. On a line that runs
   several programs it names no next step. Interrupted calls (exit 130 and 143), empty
   errors and payloads over MAX_STDIN characters get nothing.
-- Anything else (PreToolUse, Codex): when the command about to run has a failure that
-  recurred across sessions, it gives the agent the known facts.
+- Anything else (Codex's PreToolUse, Cursor's beforeShellExecution, and a Claude Code
+  PreToolUse setting from before, until `faildex link` runs again): when the command
+  about to run has a failure that recurred across sessions, it gives the agent the
+  known facts.
 
 Either way the agent gets `additionalContext` and the person one line
 (`systemMessage`), which Claude Code prints under the command.

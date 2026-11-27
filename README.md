@@ -78,11 +78,11 @@ What changes: `faildex rules` writes nothing and numbers the failures that recur
 faildex link
 ```
 
-What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md`, the skill in `~/.claude/skills/faildex/` and the hook of step 6 in `~/.claude/settings.json`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and two hooks in their `hooks.json` (rules at session start, warnings before shell commands). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
+What changes: for each agent on this machine, Claude Code gets an `@` import line for the rules file in `~/.claude/CLAUDE.md`, the skill in `~/.claude/skills/faildex/` and the hook of step 6 in `~/.claude/settings.json`; Antigravity gets a `faildex-rules` plugin with the rules and the skill; Codex and Cursor get the skill and a session-start hook in their `hooks.json` that loads the rules (a faildex hook before shell commands from an earlier version is taken out). It creates `~/faildex-rules.md` if it is missing, so it can run before you approve anything, and records what it added in `~/.faildex-link.json`. In Codex, review and trust the new hooks with `/hooks` before opening a new session.
 
 **6. Failure notices in Claude Code**
 
-`faildex link` (step 5) has added this hook to `~/.claude/settings.json` (as `faildex hook --agent claude`); a `faildex hook` it found under `PreToolUse` was moved here with its command unchanged. To use it in one project only instead, add it to that project's `.claude/settings.json` (into its `PostToolUseFailure` list if it has `hooks`):
+`faildex link` (step 5) has added this hook to `~/.claude/settings.json` (as `faildex hook --agent claude`), and took any `faildex hook` out of `PreToolUse`, keeping its command here if there was none yet. To use it in one project only instead, add it to that project's `.claude/settings.json` (into its `PostToolUseFailure` list if it has `hooks`):
 
 ```json
 {"hooks": {"PostToolUseFailure": [{"matcher": "Bash", "hooks": [
@@ -92,7 +92,7 @@ What changes: for each agent on this machine, Claude Code gets an `@` import lin
 
 What changes: in Claude Code sessions started afterwards (in a session already running, review the new hook with `/hooks`), right after a shell command fails, Claude is told when other sessions had the same failure of the same command, with the recovery on record, and you see a one-line notice. It speaks when at least two other sessions had it (`--min-sessions`); the session itself and its subagents do not count.
 
-Scope: only failed shell calls that end with a non-zero exit code, including those run by skills, plugins and subagents. A failure hidden behind a pipe or `; echo` exits 0 and never reaches the hook; MCP tools and file tools get nothing. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts. The same command also works as a `PreToolUse` hook, for a warning before a command with a recurring failure frequent enough to warn about (what step 7 prints); register it under `PreToolUse` instead, or under both. Codex and Cursor keep their warnings before shell commands, which `faildex link` sets up.
+Scope: only failed shell calls that end with a non-zero exit code, including those run by skills, plugins and subagents. A failure hidden behind a pipe or `; echo` exits 0 and never reaches the hook; MCP tools and file tools get nothing. Approve those failures in `faildex rules` and they reach the agent as rules when a session starts. Codex and Cursor get the rules at session start only: `faildex link` installs no hook before a shell command for any agent, and takes out the ones earlier versions installed. A notice right after a failure is out of scope for them (Cursor has `postToolUseFailure`, which faildex does not use; Codex has no failure event).
 
 **7. Check that it works**
 
@@ -100,7 +100,7 @@ Scope: only failed shell calls that end with a non-zero exit code, including tho
 faildex check "git status"
 ```
 
-What changes: nothing is written. It prints up to three recurring failures of that command that are frequent enough to warn about, from the same lookup the warning before a command uses, each with the recovery on record; nothing when there are none.
+What changes: nothing is written. It prints up to three recurring failures of that command that are frequent enough to warn about, each with the recovery on record; nothing when there are none.
 
 ### Day to day (repeat as new sessions pile up)
 
@@ -173,21 +173,11 @@ faildex turns it into three things:
 | You run | You get |
 |---|---|
 | `faildex rules` | Rule proposals for failures that recurred across sessions, each with the recovery on record and pointers to the log lines. Only the ones you approve are written to a rules file. |
-| `faildex hook` | A Claude Code `PostToolUseFailure` hook. Right after a shell command fails, when other sessions had the same failure of the same command, it shows a one-line notice in the session and gives Claude what they learned; otherwise it prints nothing. Registered as a `PreToolUse` hook (as Codex and Cursor use it), it warns before a command instead, only when the failure is at least 3% of the command's runs (or, for the pooled `zsh` shell failures, `no matches found` for an unquoted glob and `=<word> not found` for an unquoted word starting with `==`, when the command line has that construct and the failure recurred across `min_sessions` sessions). |
+| `faildex hook` | A Claude Code `PostToolUseFailure` hook. Right after a shell command fails, when other sessions had the same failure of the same command, it shows a one-line notice in the session and gives Claude what they learned; otherwise it prints nothing. For Codex and Cursor it loads the approved rules when a session starts. |
 | `faildex mcp` | MCP tools `preflight`, `evidence` and `recurring`, so any MCP agent can ask before it acts. |
 | `faildex eval` | The numbers above, recomputed from the committed store. On your own store (`--store ~/.faildex/store`), which has no public datasets, the same split runs per agent. |
 | `faildex ingest` | Your own Claude Code, Codex CLI, Cursor and Antigravity logs in a private store on your machine (`~/.faildex/store`), which every command above then uses. |
 | `faildex report` | Counts before and after a date on your own store: calls, failures, one failure of your choice, and warnings the hook gave. |
-
-### In a real Claude Code session
-
-The agent runs `git status` in a folder that is not a repository. Before the
-result comes back, the faildex hook prints what earlier sessions learned, and
-Claude acts on it. (This is the hook registered as `PreToolUse`; registered as
-`PostToolUseFailure`, as recommended, the same kind of line comes right after the
-command fails.)
-
-![A Claude Code session: under Bash(git status) the line "PreToolUse:Bash says: faildex: `git status` failed with `fatal: not a git repository` in 24 earlier sessions; no recovery on record", then Claude's answer "A faildex hook in this project flagged that this same failure has come up in 24 earlier sessions, so I didn't retry."](docs/images/claude-code-hook.jpg)
 
 ### One failure, followed through the graph
 
@@ -401,8 +391,8 @@ own store once you have run `faildex ingest`, and the public one until then:
 ]}]}}
 ```
 
-The same command under `PreToolUse` warns before a command instead; Codex and Cursor
-are unchanged (`faildex link` sets them up).
+Codex and Cursor get the rules at session start only (`faildex link` sets that up); a
+notice right after a failure is out of scope for them.
 
 To keep your store current without running `faildex ingest` by hand, add
 `--refresh-every 200` to that command (`"command": "faildex hook --refresh-every 200"`).
@@ -427,9 +417,9 @@ files alone), Codex (`~/.codex/skills/faildex/`) and Cursor
 (`~/.cursor/skills/faildex/`); `faildex link --remove` takes only faildex-owned
 entries out again.
 
-Codex and Cursor also receive two hooks in their user `hooks.json`: session start
-loads approved rules without evidence lines, and shell execution receives known
-failure warnings. Existing hooks are preserved and backed up before changes;
+Codex and Cursor also receive one hook in their user `hooks.json`: session start
+loads approved rules without evidence lines. No hook runs before a shell command, and
+a faildex one an earlier version installed there is taken out. Existing hooks are preserved and backed up before changes;
 removal deletes only faildex hook entries. In Codex, review and trust the new
 commands with `/hooks` before opening a new session. See [hook setup](docs/agent-hooks.md).
 
@@ -511,7 +501,7 @@ your own logs to get yours.
 |---|---|
 | Use of Relate and connected context | Schema with shared `Command` / `ErrorSig` nodes; recovery read as a `NEXT` path; constraints; committed directory store; read-only readers beside a writer; the same graph and queries running in Relate WebAssembly in the browser demo, with each failure's neighbourhood drawn |
 | Functionality | one-line install and `faildex demo`; `faildex rules`, `check`, `hook`, `mcp`, `eval`, `ingest`, `report`, `build-store`; a browser demo on Relate WebAssembly; CI on macOS, Linux and Windows |
-| Usefulness | 68% of later failures were already in the graph; in a real Claude Code session Claude cited the hook's notice and did not retry; it warns only for recurring failures and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
+| Usefulness | 68% of later failures were already in the graph; in a real Claude Code run (`claude -p`, Haiku) Claude received the hook's notice right after a failed command and quoted it word for word; it speaks only when other sessions had the same failure and is silent otherwise; 12 failure keys shared across three agents in the author's own logs |
 | Documentation and reproducibility | This file, `docs/schema.md`, `docs/evaluation.md` (each rule of the method mapped to the test that guards it); every number comes from `make eval` on the committed store, a test fails if a document disagrees, and the WebAssembly build reaches the same numbers |
 | Creativity | Failures learned by one agent become rules and warnings for the next session, with the log lines as evidence |
 

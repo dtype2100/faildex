@@ -11,7 +11,10 @@ going wrong). This module wires both in, and takes them out again:
 - Antigravity: a plugin at `~/.gemini/config/plugins/faildex-rules/` whose
   `rules/AGENTS.md` is a link to the file and whose `skills/faildex/SKILL.md` is
   the skill (Antigravity loads plugin rules and skills in every workspace).
-- Codex and Cursor: the skill and two user hooks for session rules and shell warnings.
+- Codex and Cursor: the skill and a user hook that loads the rules at session start.
+
+No agent gets a hook that runs before a shell command; faildex ones from earlier
+versions are taken out.
 
 Every change is idempotent: running it twice changes nothing the second time.
 Files that are not faildex's own are never replaced.

@@ -17,7 +17,12 @@ def _ours(entry: dict) -> bool:
 
 
 def configure(agent: str, path: Path, rules: Path, remove: bool, dry_run: bool) -> tuple[str, str]:
-    """Return (status, note); invalid or linked configs stay untouched."""
+    """Install faildex's session-start hook (the rules file) for Codex or Cursor, or take
+    every faildex hook out. Return (status, note); invalid or linked configs stay untouched.
+
+    No hook that runs before a shell command is installed for any agent, and a faildex
+    one from an earlier `faildex link` (Codex `PreToolUse`, Cursor `beforeShellExecution`)
+    is taken out, other tools' hooks kept."""
     if path.is_symlink():
         return "skipped", "hooks.json is a symlink; left alone"
     if remove and not path.exists():
@@ -40,9 +45,16 @@ def configure(agent: str, path: Path, rules: Path, remove: bool, dry_run: bool) 
             entries = hooks.get(event, [])
             if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
                 raise ValueError("hook event must contain objects")
+
+            def ours(entry: dict, kind: str = kind) -> bool:
+                # Before a shell command, any faildex hook goes, by whatever path it runs.
+                return _ours(entry) or (
+                    kind == "pre-shell" and _faildex_hook_command(entry.get("command"))
+                )
+
             kept = []
             for entry in entries:
-                if _ours(entry):
+                if ours(entry):
                     continue
                 if "hooks" in entry:
                     children = entry["hooks"]
@@ -50,23 +62,18 @@ def configure(agent: str, path: Path, rules: Path, remove: bool, dry_run: bool) 
                         not isinstance(e, dict) for e in children
                     ):
                         raise ValueError("nested hooks must contain objects")
-                    remaining = [child for child in children if not _ours(child)]
+                    remaining = [child for child in children if not ours(child)]
                     if not remaining and len(remaining) != len(children):
                         continue
                     entry = {**entry, "hooks": remaining}
                 kept.append(entry)
-            if not remove:
-                argv = ["faildex", "hook", "--agent", agent, "--event", kind]
-                if kind == "session-start":
-                    # Only shell-safe tokens: Windows hook runners use different shells.
-                    encoded = base64.urlsafe_b64encode(str(rules).encode("utf-8")).decode("ascii")
-                    argv += ["--rules-encoded", encoded]
-                command = " ".join(argv)
+            if not remove and kind == "session-start":
+                # Only shell-safe tokens: Windows hook runners use different shells.
+                encoded = base64.urlsafe_b64encode(str(rules).encode("utf-8")).decode("ascii")
+                command = f"faildex hook --agent {agent} --event {kind} --rules-encoded {encoded}"
                 entry = {"command": command}
                 if agent == "codex":
                     entry = {"hooks": [{"type": "command", "command": command, "timeout": 5}]}
-                    if kind == "pre-shell":
-                        entry["matcher"] = "Bash"
                 kept.append(entry)
             if kept:
                 hooks[event] = kept
@@ -103,7 +110,7 @@ def configure(agent: str, path: Path, rules: Path, remove: bool, dry_run: bool) 
 # Claude Code: faildex's hook in ~/.claude/settings.json, after a failed shell call.
 CLAUDE_EVENT = "PostToolUseFailure"
 CLAUDE_COMMAND = "faildex hook --agent claude"  # shell-safe tokens only, as above
-WOULD = {"installed": "would install", "moved": "would move"}
+WOULD = {"installed": "would install", "moved": "would move", "updated": "would update"}
 
 
 def _faildex_hook_command(command: object) -> bool:
@@ -163,9 +170,10 @@ def configure_claude(
     """Put faildex's hook under PostToolUseFailure in Claude Code's settings.json, or take
     it out of PostToolUseFailure and PreToolUse. Return (status, note).
 
-    A faildex hook already under PostToolUseFailure is left as it is; one only under
-    PreToolUse (the earlier recommendation) moves there with its command unchanged,
-    the other hooks of its group staying behind. Other keys, hooks and their order are
+    A faildex hook under PreToolUse (the earlier setting) never stays: it moves to
+    PostToolUseFailure with its command unchanged, or, when one is there already, is
+    just taken out; the other hooks of its group stay behind. A faildex hook already
+    under PostToolUseFailure alone is left as it is. Other keys, hooks and their order are
     kept; the file is written only when it changes, after a backup, through a temporary
     file. A symlink, invalid JSON or an unexpected shape is left alone, with the reason.
     With `created` (faildex link made the file), a removal that leaves nothing else in
@@ -201,16 +209,17 @@ def configure_claude(
                     hooks[event] = kept
                 else:
                     hooks.pop(event, None)
-        elif post_ours:
-            pass  # already there; a PreToolUse one someone also keeps stays too
-        elif pre_ours:
-            status = "moved"
+        elif pre_ours:  # faildex no longer runs before a Claude Code call
             if pre_kept:
                 hooks["PreToolUse"] = pre_kept
             else:
                 hooks.pop("PreToolUse", None)
-            hooks[CLAUDE_EVENT] = post + pre_ours
-        else:
+            if post_ours:
+                status = "updated"
+            else:
+                status = "moved"
+                hooks[CLAUDE_EVENT] = post + pre_ours
+        elif not post_ours:
             entry = {"type": "command", "command": CLAUDE_COMMAND, "timeout": 5}
             hooks[CLAUDE_EVENT] = post + [{"matcher": "Bash", "hooks": [entry]}]
         if not hooks and "hooks" not in original:

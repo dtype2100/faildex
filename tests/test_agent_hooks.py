@@ -133,3 +133,57 @@ def test_cli_cursor_session_hook(tmp_path, monkeypatch, capsys):
         main(["hook", "--agent", "cursor", "--event", "session-start", "--rules", str(rules)]) == 0
     )
     assert json.loads(capsys.readouterr().out) == {"additional_context": "- quote globs\n"}
+
+
+PRE_SHELL = {"codex": "PreToolUse", "cursor": "beforeShellExecution"}
+SESSION = {"codex": "SessionStart", "cursor": "sessionStart"}
+
+
+@pytest.mark.parametrize("agent", ["codex", "cursor"])
+def test_link_installs_no_hook_before_a_shell_command(tmp_path, agent):
+    (tmp_path / f".{agent}").mkdir()
+    link(tmp_path / "rules.md", tmp_path)
+    hooks = json.loads((tmp_path / f".{agent}" / "hooks.json").read_text())["hooks"]
+    assert list(hooks) == [SESSION[agent]]
+    assert "--event session-start" in json.dumps(hooks)
+
+
+@pytest.mark.parametrize("agent", ["codex", "cursor"])
+def test_link_takes_out_an_earlier_faildex_shell_hook_and_keeps_others(tmp_path, agent):
+    path = tmp_path / f".{agent}" / "hooks.json"
+    path.parent.mkdir()
+    old = f"faildex hook --agent {agent} --event pre-shell"
+    manual = "/opt/faildex/.venv/bin/faildex hook --agent " + agent + " --log /l"
+    if agent == "codex":
+        pre = [
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": old, "timeout": 5}]},
+            {"matcher": "Bash", "hooks": [{"command": "herdr hook"}, {"command": manual}]},
+        ]
+        kept = [{"matcher": "Bash", "hooks": [{"command": "herdr hook"}]}]
+    else:
+        pre = [{"command": old}, {"command": "herdr hook"}, {"command": manual}]
+        kept = [{"command": "herdr hook"}]
+    path.write_text(json.dumps({"version": 1, "hooks": {PRE_SHELL[agent]: pre}}))
+    link(tmp_path / "rules.md", tmp_path)
+    hooks = json.loads(path.read_text())["hooks"]
+    assert hooks[PRE_SHELL[agent]] == kept
+    assert "pre-shell" not in path.read_text() and manual not in path.read_text()
+    assert list(path.parent.glob("hooks.json.faildex-backup-*"))
+
+
+@pytest.mark.parametrize("agent", ["codex", "cursor"])
+def test_an_event_left_empty_by_that_goes(tmp_path, agent):
+    path = tmp_path / f".{agent}" / "hooks.json"
+    path.parent.mkdir()
+    old = f"faildex hook --agent {agent} --event pre-shell"
+    entry = {"hooks": [{"command": old}]} if agent == "codex" else {"command": old}
+    path.write_text(json.dumps({"hooks": {PRE_SHELL[agent]: [entry]}}))
+    link(tmp_path / "rules.md", tmp_path)
+    assert PRE_SHELL[agent] not in json.loads(path.read_text())["hooks"]
+
+
+@pytest.mark.parametrize("script", ["install.sh", "install.ps1"])
+def test_the_install_scripts_register_no_hook(script):
+    text = (Path(__file__).resolve().parents[1] / script).read_text(encoding="utf-8")
+    for word in ("hook", "settings.json", "PreToolUse", "beforeShellExecution", "faildex link"):
+        assert word.lower() not in text.lower(), word
