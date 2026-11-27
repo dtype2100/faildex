@@ -276,15 +276,14 @@ def test_the_replay_knows_nothing_from_after_the_cut():
     assert [o.rule.command for o in demo.rules] == ["git push"]
 
 
-def test_the_replay_uses_the_hooks_own_rule_on_every_command_of_the_store():
+def test_the_replay_uses_the_hooks_own_rule_on_every_command_of_the_store(public_copy):
     """With every session known, the replay's rules are what the hook would say today."""
-    from pathlib import Path
 
     from faildex.insight import warnings_for
     from faildex.normalize import shell_sig
     from faildex.store import open_store
 
-    db = open_store(Path(__file__).parent.parent / "store")
+    db = open_store(public_copy)
     try:
         everyone = [row["id"] for row in db.execute("MATCH (s:Session) RETURN s.id AS id")]
         replayed = hook_rules(db, everyone, None)
@@ -454,10 +453,9 @@ def test_a_call_from_after_the_cut_inside_an_earlier_session_is_not_known():
     assert {o.rule.sig: o.came_true for o in mine.rules}["z-fail"] == 1
 
 
-def test_a_lookup_limited_to_every_session_is_the_hooks_own_lookup():
+def test_a_lookup_limited_to_every_session_is_the_hooks_own_lookup(public_copy):
     """With every session and no cut, the replay's lookup (recoveries counted on rebuilt
     chains) gives the very failures, counts and recoveries the hook reads from Cypher."""
-    from pathlib import Path
 
     from faildex.insight import failures
     from faildex.store import open_store
@@ -468,7 +466,7 @@ def test_a_lookup_limited_to_every_session_is_the_hooks_own_lookup():
             for sig, f in found.items()
         }
 
-    db = open_store(Path(__file__).parent.parent / "store")
+    db = open_store(public_copy)
     try:
         everyone = [row["id"] for row in db.execute("MATCH (s:Session) RETURN s.id AS id")]
         commands = [row["t"] for row in db.execute("MATCH (k:Command) RETURN k.template AS t")]

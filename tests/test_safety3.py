@@ -13,7 +13,6 @@ from pathlib import Path
 
 from faildex import hook, index, locks
 from faildex.cli import main
-from faildex.store import open_store
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_START_REBUILD = index.start_rebuild
@@ -141,7 +140,6 @@ def test_p1_2_a_local_store_gone_without_evidence_still_falls_back(tmp_path, mon
     _session(tmp_path / "logs", "sess-a")
     _session(tmp_path / "logs", "sess-b")
     _ingest(local, tmp_path / "logs")
-    open_store(ROOT / "store").close()  # a fresh checkout's store refuses a read-only open
     capsys.readouterr()
     public = _run_hook(
         monkeypatch, capsys, ["hook", "--store", str(ROOT / "store")], _bash("git status")

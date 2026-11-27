@@ -11,7 +11,6 @@ None of these depend on the state of the repository's `store/`.
 
 import json
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -59,15 +58,15 @@ def test_a_lines_of_the_hook_and_of_its_child_never_overwrite_each_other(tmp_pat
 
 
 def _fresh_clone_store(folder: Path) -> Path:
-    """The store as `git clone` gives it: only the files git tracks, never opened."""
-    tracked = subprocess.run(
-        ["git", "ls-files", "store"], cwd=ROOT, capture_output=True, text=True, check=True
-    ).stdout.split()
-    assert "store/manifest.json" in tracked
-    for name in tracked:
-        target = folder / Path(name).relative_to("store")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / name, target)
+    """The store as `git clone` gives it: only its committed parts, never opened. (The
+    parts, not `git ls-files`, so that a copy without `.git` runs this too.)"""
+    folder.mkdir(parents=True)
+    for part in store.STORE_PARTS:
+        src = ROOT / "store" / part
+        if src.is_dir():
+            shutil.copytree(src, folder / part)
+        elif src.is_file():
+            shutil.copy2(src, folder / part)
     return folder
 
 
@@ -117,8 +116,11 @@ def test_b_the_first_call_does_not_wait_for_a_busy_cache_copy(shipped):
 
 
 @pytest.mark.parametrize("agent", sorted(PAYLOADS))
-def test_b_a_never_opened_store_that_is_not_public_stays_silent(shipped, tmp_path, agent):
+def test_b_a_never_opened_store_that_is_not_public_is_prepared_and_warns(shipped, tmp_path, agent):
+    """Since the 5th fix (as `main` does): prepared where it is, then read."""
     copied = _fresh_clone_store(tmp_path / "copied" / "store")  # e.g. from another machine
-    before = _files(copied)
-    assert respond(json.dumps(PAYLOADS[agent]), copied, agent=agent) == quiet(agent)
-    assert _files(copied) == before
+    shipped_before = _files(shipped)
+    out = respond(json.dumps(PAYLOADS[agent]), copied, agent=agent)
+    assert out != quiet(agent) and "git status" in out
+    assert (copied / "wal").is_dir()  # its per-machine files, made in place
+    assert _files(shipped) == shipped_before

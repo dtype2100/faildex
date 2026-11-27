@@ -11,8 +11,8 @@ ROOT = Path(__file__).parent.parent
 
 
 @pytest.fixture(scope="module")
-def results():
-    db = open_store(ROOT / "store")
+def results(public_copy):
+    db = open_store(public_copy)
     try:
         return evaluate(db)[-1], evaluate(db, kinds=("text",))[-1]
     finally:
@@ -86,10 +86,10 @@ def _flat(text: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def replayed():
+def replayed(public_copy):
     from faildex.evaluate import replay
 
-    db = open_store(ROOT / "store")
+    db = open_store(public_copy)
     try:
         return replay(db)[-1]
     finally:
@@ -146,7 +146,7 @@ def test_the_hook_replay_in_the_documents_matches_the_committed_store(replayed):
     assert f"실패 {funnel['failure']}개 중 {r.came_true}개" in ko
 
 
-def test_the_replay_claims_about_cuts_and_recoveries_hold(replayed, monkeypatch):
+def test_the_replay_claims_about_cuts_and_recoveries_hold(replayed, monkeypatch, public_copy):
     from faildex import evaluate as ev
     from faildex.normalize import shell_sig
 
@@ -159,7 +159,7 @@ def test_the_replay_claims_about_cuts_and_recoveries_hold(replayed, monkeypatch)
     assert "Nine of the ten are in one session. Without that session the count is 1." in doc
     assert "Nine of the ten are in one session" in readme and "10개 중 9개가 한 세션" in ko
 
-    db = open_store(ROOT / "store")
+    db = open_store(public_copy)
     try:
         counts, recurrence = {}, []
         for share in (0.5, 0.6, 0.7, 0.8, 0.9):

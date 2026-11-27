@@ -223,6 +223,7 @@ def test_p2_a_stale_rebuild_lock_is_broken_and_taken_under_the_guard(tmp_path, m
     monkeypatch.setattr(index, "start_rebuild", REAL_START_REBUILD)
     store = (tmp_path / "store").resolve()
     shutil.copytree(ROOT / "store", store)
+    open_store(store).close()  # a store faildex has opened, so the rebuild below can read it
     started = []
     monkeypatch.setattr(refresh, "spawn", lambda argv, log: started.append(argv) or 1)
     target = index.cached(store)

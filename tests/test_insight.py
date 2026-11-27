@@ -439,10 +439,11 @@ def test_rules_cli_marks_public_vs_private_store_and_evidence_flag(tmp_path, mon
     assert rel_out.startswith("Store (store):") and "Public demo" not in rel_out
 
 
-def test_rules_lines_fit_80_columns_on_the_public_store(monkeypatch, capsys):
-    from pathlib import Path
+def test_rules_lines_fit_80_columns_on_the_public_store(monkeypatch, capsys, tmp_path, public_copy):
+    import shutil
 
-    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    shutil.copytree(public_copy, tmp_path / "store")  # ./store, not the repository's own
+    monkeypatch.chdir(tmp_path)
     assert main(["rules", "--store", "store", "--top", "25"]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("Public demo logs (./store): 422 sessions")

@@ -364,14 +364,34 @@ def test_p1_7_an_unwritable_cache_never_makes_the_hook_raise(tmp_path, monkeypat
     assert blocked.is_file() and blocked.read_text() == ""  # nothing written there
 
 
-def test_p1_7_the_hook_does_not_copy_the_public_store(tmp_path, monkeypatch, capsys):
+def test_p1_7_choosing_the_store_does_not_copy_the_public_store(tmp_path, monkeypatch):
+    from faildex.store import _shipped_store, hook_store
+
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # no ./store and, in this home, no private store
     cache = tmp_path / "empty-cache"
     monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
-    code, _ = _bare_hook(monkeypatch, capsys)
-    assert code == 0
-    assert not cache.exists() or not any(cache.rglob("manifest.json"))
+    assert hook_store() == _shipped_store()
+    assert not cache.exists()
+
+
+def _files(folder: Path) -> dict:
+    return {p: (p.stat().st_size, p.stat().st_mtime_ns) for p in folder.rglob("*")}
+
+
+@pytest.mark.parametrize("found", ["an index", "a readable store, no index"])
+def test_p1_7_with_an_index_or_a_readable_store_the_hook_writes_nothing(
+    tmp_path, monkeypatch, capsys, found
+):
+    store = tmp_path / "s"
+    _ingest(store, str(_git_push_logs(tmp_path / "logs")))
+    if found != "an index":
+        index.beside(store).unlink()
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    before = _files(tmp_path)
+    code, out = _bare_hook(monkeypatch, capsys, ("hook", "--store", str(store)), _bash("git push"))
+    assert code == 0 and "git push" in out.out
+    assert _files(tmp_path) == before
 
 
 @pytest.mark.parametrize(

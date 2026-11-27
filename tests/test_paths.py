@@ -27,9 +27,9 @@ def _copy_store(to: Path) -> None:
             shutil.copy2(source, to / part)
 
 
-def test_rules_approve_writes_a_tilde_path_into_the_home_folder(tmp_path, monkeypatch):
+def test_rules_approve_writes_a_tilde_path_into_the_home_folder(tmp_path, monkeypatch, public_copy):
     monkeypatch.chdir(tmp_path)
-    assert main(["rules", "--store", str(STORE), "--approve", "1", "--to", "~/x.md"]) == 0
+    assert main(["rules", "--store", str(public_copy), "--approve", "1", "--to", "~/x.md"]) == 0
     written = Path.home() / "x.md"
     assert written.is_file() and "When `" in written.read_text(encoding="utf-8")
     assert not (tmp_path / "~").exists()

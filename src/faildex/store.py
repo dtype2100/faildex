@@ -155,6 +155,28 @@ def _valid_store(path: Path) -> bool:
         return False
 
 
+def looks_like_store(path: Path) -> bool:
+    """Whether `path` holds a Relate store: a `manifest.json` that reads as Relate's
+    (an object with a whole `format_version` and lists `node_parts` and `rel_parts`)
+    and the `nodes/` and `relationships/` folders. A folder that only happens to be
+    called `store` and to hold some other `manifest.json` (a web app's) is not one.
+    """
+    import json
+
+    try:
+        manifest = json.loads((Path(path) / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(manifest, dict)
+        and isinstance(manifest.get("format_version"), int)
+        and isinstance(manifest.get("node_parts"), list)
+        and isinstance(manifest.get("rel_parts"), list)
+        and (Path(path) / "nodes").is_dir()
+        and (Path(path) / "relationships").is_dir()
+    )
+
+
 def _mark(folder: Path, out: Path, token: str) -> None:
     import json
     import time

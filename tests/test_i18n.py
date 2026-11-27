@@ -18,7 +18,6 @@ from faildex.guide import CLAUDE_HOOK, EXAMPLES, PARTS, commands
 from faildex.schema import ingest
 
 ROOT = Path(__file__).parent.parent
-STORE = ROOT / "store"
 
 
 def _fields(text: str) -> set[str]:
@@ -147,10 +146,10 @@ def test_faildex_lang_says_when_the_environment_still_wins(monkeypatch, capsys):
     assert "FAILDEX_LANG" in capsys.readouterr().out
 
 
-def test_lang_works_before_and_after_the_command(capsys):
-    assert main(["--lang", "ko", "eval", "--store", str(STORE)]) == 0
+def test_lang_works_before_and_after_the_command(capsys, public_copy):
+    assert main(["--lang", "ko", "eval", "--store", str(public_copy)]) == 0
     before = capsys.readouterr().out
-    assert main(["eval", "--lang", "ko", "--store", str(STORE)]) == 0
+    assert main(["eval", "--lang", "ko", "--store", str(public_copy)]) == 0
     assert capsys.readouterr().out == before
     assert "반복률" in before
 
@@ -158,10 +157,10 @@ def test_lang_works_before_and_after_the_command(capsys):
 # Korean output keeps every number
 
 
-def test_korean_eval_matches_english_numbers(capsys):
-    main(["eval", "--store", str(STORE)])
+def test_korean_eval_matches_english_numbers(capsys, public_copy):
+    main(["eval", "--store", str(public_copy)])
     english = capsys.readouterr().out
-    main(["--lang", "ko", "eval", "--store", str(STORE)])
+    main(["--lang", "ko", "eval", "--store", str(public_copy)])
     korean = capsys.readouterr().out
     assert re.findall(r"\d+(?:\.\d+)?%?", english) == re.findall(r"\d+(?:\.\d+)?%?", korean)
     assert "117" in korean and "68.4%" in korean and "전체" in korean
@@ -170,8 +169,8 @@ def test_korean_eval_matches_english_numbers(capsys):
     assert len({i18n.width(row) for row in rows}) == 1
 
 
-def test_korean_rules_demo_and_report(capsys):
-    assert main(["--lang", "ko", "rules", "--top", "3", "--store", str(STORE)]) == 0
+def test_korean_rules_demo_and_report(capsys, public_copy):
+    assert main(["--lang", "ko", "rules", "--top", "3", "--store", str(public_copy)]) == 0
     out = capsys.readouterr().out
     assert "세션 422개, 실패 호출 627개, 반복 실패 25개" in out
     assert "할 일:" in out and "근거 (3):" in out
@@ -184,7 +183,7 @@ def test_korean_rules_demo_and_report(capsys):
     # What the hook prints is shown as the hook prints it: English.
     assert "faildex: `git status` failed with" in out
 
-    assert main(["--lang", "ko", "report", "--store", str(STORE)]) == 0
+    assert main(["--lang", "ko", "report", "--store", str(public_copy)]) == 0
     assert "에이전트" in capsys.readouterr().out
 
 
@@ -413,13 +412,13 @@ def _cp1252(monkeypatch):
     return read
 
 
-def test_korean_on_a_console_that_cannot_show_it_prints_english(monkeypatch):
+def test_korean_on_a_console_that_cannot_show_it_prints_english(monkeypatch, public_copy):
     read = _cp1252(monkeypatch)
     for argv in (
         ["--lang", "ko", "help"],
         ["--lang", "ko", "lang"],
-        ["--lang", "ko", "rules", "--top", "1", "--store", str(STORE)],
-        ["--lang", "ko", "eval", "--store", str(STORE)],
+        ["--lang", "ko", "rules", "--top", "1", "--store", str(public_copy)],
+        ["--lang", "ko", "eval", "--store", str(public_copy)],
     ):
         assert main(argv) == 0
         out, err = read()
@@ -437,8 +436,8 @@ def test_korean_on_a_console_that_cannot_show_it_prints_english(monkeypatch):
     assert "cannot show it" in out
 
 
-def test_english_report_pads_a_korean_key_as_before(capsys):
-    assert main(["report", "--store", str(STORE), "--key", "오류"]) == 0
+def test_english_report_pads_a_korean_key_as_before(capsys, public_copy):
+    assert main(["report", "--store", str(public_copy), "--key", "오류"]) == 0
     head = next(line for line in capsys.readouterr().out.splitlines() if "오류" in line)
     label = 'failed with "오류"'
     assert f"  {label:>30}{'per 1000':>10}" in head

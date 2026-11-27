@@ -7,9 +7,10 @@ Claude Code prints under the command.
 It never decides permission, never blocks, and stays silent (exit 0, no output)
 for unknown commands and on any error: a warning tool must not be able to break
 the session it is watching. It answers from the store's index without writing
-anything; the only store files it ever writes are the cache copy of faildex's own
-public demo store, made once when a fresh clone or install has never opened it
-(`_open_source`).
+anything. The only store files it ever writes are those of a store never opened on
+this machine, prepared once as every faildex command does (`_open_source`): faildex's
+own public demo store as its cache copy, never inside the package, and any other
+store where it is, only if it looks like a Relate store.
 
 Register it in `.claude/settings.json`:
 
@@ -104,23 +105,36 @@ def _open_read_only(store: Path):
     return relate.connect(str(store), read_only=True)
 
 
-def _open_source(store: Path):
-    """The store read-only (`_open_read_only`), or, for faildex's own public demo store
-    that cannot be read as it is (a fresh clone or wheel: never opened), its cache copy,
-    made and opened as `public_store` and `open_store` do, which `main` did on the first
-    call. That copy, in the cache folder, is the only store file the hook ever writes;
-    it never writes in the shipped store, and it does not wait for a copy that someone
-    else is preparing. Any other store that refuses a read-only open stays unread."""
+def _to_prepare(store: Path) -> Path | None:
+    """What to prepare for a store that refuses a read-only open (never opened on this
+    machine): faildex's own public demo store (shipped in the package or the checkout,
+    or its cache copy) through its cache copy, never inside the package; any other
+    folder that looks like a Relate store (`looks_like_store`) where it is; else None."""
+    from faildex.store import is_public, looks_like_store, public_store
+
+    if is_public(store):
+        return public_store()
+    return Path(store) if looks_like_store(store) else None
+
+
+def _open_source(store: Path, wait: bool = False):
+    """The store read-only (`_open_read_only`); a store that refuses that because it was
+    never opened on this machine is first prepared, as `main` did on the first call:
+    `open_store` makes its per-machine files under the write lock, after checking the
+    store is still there (`_to_prepare` says where). The hook does not wait for a lock
+    someone else holds, and a store being swapped has no manifest, so it is never
+    opened for writing. Preparing is the only time the hook writes store files."""
     import relate
 
     try:
         return _open_read_only(store)
     except relate.OperationalError:
-        from faildex.store import is_public, open_store, public_store
+        from faildex.store import open_store
 
-        if not is_public(store):
+        source = _to_prepare(store)
+        if source is None:
             raise
-        return open_store(public_store(), wait=False)
+        return open_store(source, wait=wait)
 
 
 def _warning(source, payload: object, min_sessions: int, top: int) -> tuple[str, str] | None:

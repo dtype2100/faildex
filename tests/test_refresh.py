@@ -138,30 +138,38 @@ def _hook(argv, monkeypatch, capsys, payload=GIT_STATUS):
     return capsys.readouterr().out
 
 
-def _public_copy(tmp_path):
+def _public_copy(tmp_path, prepared):
+    """A copy of the public store as faildex has used it: copied from the run's prepared
+    cache copy (`public_copy`), so it reads without preparing anything."""
     store = tmp_path / "store"
-    shutil.copytree(ROOT / "store", store)
+    shutil.copytree(prepared, store)
     return store
 
 
-def test_without_the_option_the_hook_is_unchanged(tmp_path, monkeypatch, capsys):
-    store = _public_copy(tmp_path)
+def test_without_the_option_the_hook_is_unchanged(tmp_path, monkeypatch, capsys, public_copy):
+    store = _public_copy(tmp_path, public_copy)
     out = _hook(["--store", str(store)], monkeypatch, capsys)
     assert "git status" in json.loads(out)["systemMessage"]
     assert sorted(p.name for p in tmp_path.iterdir()) == ["store"]
 
 
-def test_an_unwritable_refresh_folder_still_gives_the_warning(tmp_path, monkeypatch, capsys):
-    store = _public_copy(tmp_path)
+def test_an_unwritable_refresh_folder_still_gives_the_warning(
+    tmp_path, monkeypatch, capsys, public_copy
+):
+    store = _public_copy(tmp_path, public_copy)
     plain = _hook(["--store", str(store)], monkeypatch, capsys)
+    assert "git status" in plain  # a warning to compare, not two silences
     state, _ = refresh.paths(store)
     state.write_text("a file where the folder should be")
     assert _hook(["--store", str(store), "--refresh-every", "1"], monkeypatch, capsys) == plain
 
 
-def test_a_refresh_that_cannot_start_still_gives_the_warning(tmp_path, monkeypatch, capsys):
-    store = _public_copy(tmp_path)
+def test_a_refresh_that_cannot_start_still_gives_the_warning(
+    tmp_path, monkeypatch, capsys, public_copy
+):
+    store = _public_copy(tmp_path, public_copy)
     plain = _hook(["--store", str(store)], monkeypatch, capsys)
+    assert "git status" in plain  # a warning to compare, not two silences
     monkeypatch.setattr(refresh, "command", lambda store: [str(tmp_path / "no-such-program")])
     assert _hook(["--store", str(store), "--refresh-every", "1"], monkeypatch, capsys) == plain
     state, _ = refresh.paths(store)
@@ -213,10 +221,10 @@ def test_a_store_behind_a_symlink_uses_one_set_of_paths(tmp_path, spawned, capsy
     assert alias.is_symlink() and "calls 13" in capsys.readouterr().out
 
 
-def test_a_checkouts_store_is_never_refreshed(tmp_path, monkeypatch, capsys, spawned):
+def test_a_checkouts_store_is_never_refreshed(tmp_path, monkeypatch, capsys, spawned, public_copy):
     monkeypatch.delenv("FAILDEX_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
-    _public_copy(tmp_path)  # ./store, as inside a checkout of faildex
+    _public_copy(tmp_path, public_copy)  # ./store, as inside a checkout of faildex
     _hook(["--refresh-every", "1"], monkeypatch, capsys)
     assert spawned == []
     _hook(["--store", "store", "--refresh-every", "1"], monkeypatch, capsys)

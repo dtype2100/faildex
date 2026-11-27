@@ -138,30 +138,34 @@ on from `./store` or the private store to the next one, down to the public demo
 store. On the index path the hook does not load Relate at all. When the fingerprint differs, or anything in the
 index cannot be read (no index yet, a store from an older faildex, a damaged file or
 entry, another format version), the hook reads the store itself, read-only, and says
-nothing if a read-only open fails; it never opens a store for writing. The one
-exception is faildex's own public demo store in a fresh clone or a fresh install: it
-has never been opened, so a read-only open fails, and the hook then makes and opens
-its cache copy (`~/.cache/faildex/store-<hash>/`, the copy other faildex commands
-use) and warns from the first call. It never writes in the shipped store,
-and if another process is preparing that copy it does not wait; it says nothing that
-time. Any other store that has never been opened on this machine (one copied from
-another machine, say) stays silent until a faildex command opens it once, such as
-`faildex report --store <path>` or an ingest. It also starts
+nothing if that fails, with one exception. A store never opened on this machine (a
+fresh clone, a fresh install, a store copied from another machine) refuses a
+read-only open, so the hook prepares it, as every faildex
+command does on a first open, and warns from the first call. faildex's own public
+demo store (shipped in the package or the checkout) is prepared as its cache copy
+(`~/.cache/faildex/store-<hash>/`, the copy other faildex commands use), never inside
+the package. Any other folder is prepared where it is, and only if it looks like a
+Relate store: a `manifest.json` that reads as Relate's and the `nodes/` and
+`relationships/` folders; a folder that is merely called `store` and holds another
+kind of `manifest.json` is left alone. Preparing takes the store's write lock without
+waiting (a busy lock means nothing is said that time) and checks the store is still
+there, so a store being swapped is never opened for writing. It also starts
 a background rebuild of the index, at most once per 10 minutes, into the cache folder
 (`~/.cache/faildex/index/`), never next to a store it did not write. The rebuilt index
 is keyed to the store as the hook named it, so the next call finds it, even for the
 public demo store, whose data the rebuild reads from its cache copy when the shipped
-files cannot be opened as they are. The rebuild lock follows the refresh lock's rules
+files cannot be opened as they are; a never-opened store is prepared by the same
+rules, the rebuild waiting for the write lock. The rebuild lock follows the refresh lock's rules
 (checked, broken and taken under a guard) and holds a random token that the hook hands
 to the rebuild; only that rebuild removes it.
 
-The hook never fails, and apart from that first copy of the public demo store it
-never writes a store. Whatever goes wrong, it prints what
+The hook never fails, and apart from preparing a never-opened store it never writes
+a store. Whatever goes wrong, it prints what
 it prints when it has nothing to say and exits 0. It does not read the saved language
 or adjust the console either, so nothing reaches stderr. Without `--store`, it looks for a
-store as other commands do, except that `~/.faildex/store` counts as present when
-only its index is (mid-swap), and the public demo store is not copied into the cache
-to choose it: the hook names the cache copy if there is one, else the shipped store,
+store as other commands do, except that `./store` and `~/.faildex/store` count as
+present while an ingest is between the two renames of a swap (both marked folders,
+as above), and the public demo store is not copied into the cache to choose it: the hook names the cache copy if there is one, else the shipped store,
 and reads it through an index when one exists (or as above when none does).
 
 Why count calls rather than time: the store falls behind only while agents run

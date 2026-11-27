@@ -270,18 +270,18 @@ def rebuild(store: Path, token: str | None = None) -> int:
     """Write the cached index of `store` (run in the background by a hook that found none).
 
     The index is keyed to the store as the hook named it, so the hook finds it next
-    time. Read-only like the hook itself: a store that refuses a read-only open (a
-    fresh copy no faildex command has opened yet) gets no index until one has. The one
-    exception is faildex's own public demo store: when the shipped copy cannot be read
-    as it is, its cache copy is made (which the hook itself never does) and opened the
-    usual way, under the write lock. The data comes from that copy; the index is keyed
-    to the shipped store and to the copy, each with its own fingerprint.
+    time. The store is read as the hook reads it (`hook._open_source`): read-only, and
+    a store never opened on this machine is first prepared, here waiting for the write
+    lock: faildex's own public demo store through its cache copy (then the data comes
+    from that copy, and the index is keyed to the store and to the copy, each with its
+    own fingerprint), any other folder that looks like a Relate store where it is, and
+    anything else not at all.
 
     `token` is the one the starting hook wrote into the lock; the lock is removed, under
     the guard, only if it still holds that token.
     """
-    from faildex.hook import _open_read_only
-    from faildex.store import is_public, open_store, public_store
+    from faildex.hook import _open_read_only, _to_prepare
+    from faildex.store import open_store
 
     store = Path(store)
     try:
@@ -290,9 +290,9 @@ def rebuild(store: Path, token: str | None = None) -> int:
         try:
             db = _open_read_only(store)
         except Exception:
-            if not is_public(store):
+            source = _to_prepare(store)
+            if source is None:
                 raise
-            source = public_store()
             before[source] = fingerprint(source)
             db = open_store(source)
         try:

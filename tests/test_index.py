@@ -278,8 +278,9 @@ def test_a_bad_index_falls_back_to_the_store(tmp_path, spoil, monkeypatch):
     assert hook.respond(payload, store) == expected
 
 
-def test_without_an_index_a_store_that_cannot_be_read_gives_silence_and_stays_unwritten(tmp_path):
-    """A fresh copy refuses a read-only open; the hook must not do the writable first open."""
+def test_without_an_index_a_never_opened_store_is_prepared_where_it_is(tmp_path):
+    """A fresh copy refuses a read-only open; since the 5th fix the hook prepares it, as
+    `main` did (the per-machine files only), and warns. A missing store stays silent."""
     store = tmp_path / "store"
     store.mkdir()
     for part in STORE_PARTS:  # only the committed files, as in a fresh clone
@@ -288,10 +289,12 @@ def test_without_an_index_a_store_that_cannot_be_read_gives_silence_and_stays_un
             shutil.copytree(src, store / part)
         elif src.is_file():
             shutil.copy2(src, store / part)
-    before = sorted(str(p.relative_to(store)) for p in store.rglob("*"))
-    assert hook.respond(_bash("git status"), store) == ""
-    assert sorted(str(p.relative_to(store)) for p in store.rglob("*")) == before
+    committed = {p: p.read_bytes() for p in store.rglob("*") if p.is_file()}
+    assert "git status" in hook.respond(_bash("git status"), store)
+    assert (store / "wal").is_dir()
+    assert {p: p.read_bytes() for p in committed} == committed  # committed files untouched
     assert hook.respond(_bash("git status"), tmp_path / "missing") == ""
+    assert not (tmp_path / "missing").exists()
 
 
 def test_the_index_path_does_not_load_relate(public_store):
@@ -332,7 +335,7 @@ def test_a_hook_without_an_index_has_one_built_once(tmp_path, monkeypatch):
     assert not index.cached(store).exists() and not lock.exists()
 
 
-def test_the_background_rebuild_never_opens_a_store_for_writing(tmp_path):
+def test_the_background_rebuild_prepares_a_never_opened_store_as_the_hook_does(tmp_path):
     store = tmp_path / "store"
     store.mkdir()
     for part in STORE_PARTS:
@@ -341,8 +344,7 @@ def test_the_background_rebuild_never_opens_a_store_for_writing(tmp_path):
             shutil.copytree(src, store / part)
         elif src.is_file():
             shutil.copy2(src, store / part)
-    before = sorted(str(p.relative_to(store)) for p in store.rglob("*"))
-    with pytest.raises(Exception):  # noqa: B017 - Relate refuses the read-only open
-        index.rebuild(store)
-    assert sorted(str(p.relative_to(store)) for p in store.rglob("*")) == before
-    assert not index.cached(store).exists()
+    manifest = (store / "manifest.json").read_bytes()
+    assert index.rebuild(store) == 0
+    assert (store / "manifest.json").read_bytes() == manifest  # same fingerprint
+    assert index.load(store) is not None  # keyed to the store as the hook names it
